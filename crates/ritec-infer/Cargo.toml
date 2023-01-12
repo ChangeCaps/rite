@@ -1,0 +1,11 @@
+[package]
+name = "ritec-infer"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+ritec-error = { version = "0.1.0", path = "../ritec-error" }
+ritec-ir = { version = "0.1.0", path = "../ritec-ir" }
+ritec-span = { version = "0.1.0", path = "../ritec-span" }

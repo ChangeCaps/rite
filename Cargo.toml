@@ -1,0 +1,20 @@
+[package]
+name = "rite"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[workspace]
+members = ["crates/*"]
+
+[dependencies]
+ritec-arena = { version = "0.1.0", path = "crates/ritec-arena" }
+ritec-ast = { version = "0.1.0", path = "crates/ritec-ast" }
+ritec-error = { version = "0.1.0", path = "crates/ritec-error" }
+ritec-ir = { version = "0.1.0", path = "crates/ritec-ir" }
+ritec-lower = { version = "0.1.0", path = "crates/ritec-lower" }
+ritec-parser = { version = "0.1.0", path = "crates/ritec-parser" }
+ritec-span = { version = "0.1.0", path = "crates/ritec-span" }
+
+clap = { version = "4.0", features = ["derive"] }
