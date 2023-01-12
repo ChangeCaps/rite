@@ -1,17 +1,33 @@
-use crate::{InferError, InferenceTable, Type, TypeApplication, TypeVariable};
+use crate::{
+    Constraint, InferError, InferType, InferenceTable, Normalize, TypeApplication, TypeProjection,
+    TypeVariable,
+};
 
-pub struct UnifyResult {}
+#[derive(Clone, Debug, PartialEq)]
+pub struct UnifyResult {
+    pub constraints: Vec<Constraint>,
+}
 
 pub struct Unifier<'a> {
     table: &'a mut InferenceTable,
+    constraints: Vec<Constraint>,
 }
 
 impl<'a> Unifier<'a> {
     pub fn new(table: &'a mut InferenceTable) -> Self {
-        Self { table }
+        Self {
+            table,
+            constraints: Vec::new(),
+        }
     }
 
-    pub fn unify(&mut self, a: &Type, b: &Type) -> Result<(), InferError> {
+    pub fn finish(self) -> UnifyResult {
+        UnifyResult {
+            constraints: self.constraints,
+        }
+    }
+
+    pub fn unify(&mut self, a: &InferType, b: &InferType) -> Result<(), InferError> {
         if let Some(ty) = self.table.normalize(a) {
             return self.unify(&ty, b);
         } else if let Some(ty) = self.table.normalize(b) {
@@ -19,11 +35,13 @@ impl<'a> Unifier<'a> {
         }
 
         match (a, b) {
-            (Type::Var(a), Type::Var(b)) => self.unify_var_var(a, b),
-            (Type::Var(a), Type::Apply(b)) | (Type::Apply(b), Type::Var(a)) => {
-                self.unify_var_apply(a, b)
-            }
-            (Type::Apply(_), Type::Apply(_)) => todo!(),
+            (InferType::Proj(a), InferType::Proj(b)) => self.unify_proj_proj(a, b),
+            (InferType::Proj(a), b) | (b, InferType::Proj(a)) => self.unify_proj_ty(a, b),
+
+            (InferType::Var(a), InferType::Var(b)) => self.unify_var_var(a, b),
+            (InferType::Var(a), b) | (b, InferType::Var(a)) => self.unify_var_ty(a, b),
+
+            (InferType::Apply(a), InferType::Apply(b)) => self.unify_apply_apply(a, b),
         }
     }
 
@@ -32,21 +50,36 @@ impl<'a> Unifier<'a> {
             return Ok(());
         }
 
-        self.table.substite(*a, Type::Var(*b));
+        self.table.substite(*a, InferType::Var(*b));
 
         Ok(())
     }
 
-    pub fn unify_var_apply(
+    pub fn unify_proj_proj(
         &mut self,
-        a: &TypeVariable,
-        b: &TypeApplication,
+        a: &TypeProjection,
+        b: &TypeProjection,
     ) -> Result<(), InferError> {
-        if b.arguments.iter().any(|arg| arg == &Type::Var(*a)) {
-            return Err(InferError::OccursCheck(a.clone(), b.clone()));
-        }
+        let var = InferType::Var(self.table.next_variable());
+        self.unify_proj_ty(a, &var)?;
+        self.unify_proj_ty(b, &var)?;
 
-        self.table.substite(*a, Type::Apply(b.clone()));
+        Ok(())
+    }
+
+    pub fn unify_proj_ty(&mut self, a: &TypeProjection, b: &InferType) -> Result<(), InferError> {
+        let noramlize = Normalize {
+            projection: a.clone(),
+            expected: b.clone(),
+        };
+
+        self.constraints.push(Constraint::Normalize(noramlize));
+
+        Ok(())
+    }
+
+    pub fn unify_var_ty(&mut self, a: &TypeVariable, b: &InferType) -> Result<(), InferError> {
+        self.table.substite(a.clone(), b.clone());
 
         Ok(())
     }

@@ -161,6 +161,11 @@ impl<T> Arena<T> {
 
         None
     }
+
+    #[inline]
+    pub fn values(&self) -> impl Iterator<Item = &T> {
+        self.arena.iter().filter_map(|v| v.as_ref())
+    }
 }
 
 impl<T> Default for Arena<T> {

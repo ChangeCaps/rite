@@ -4,8 +4,8 @@ use crate::{Expr, Type};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct LetStmt {
-    pub name: Ident,
+    pub ident: Ident,
     pub ty: Option<Type>,
-    pub value: Option<Expr>,
+    pub init: Option<Expr>,
     pub span: Span,
 }

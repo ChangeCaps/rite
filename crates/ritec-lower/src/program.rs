@@ -2,7 +2,7 @@ use ritec_ast as ast;
 
 use ritec_ir::{Body, Function, FunctionArgument, FunctionId, Local, ModuleId, Program, Type};
 
-use crate::{LowerError, TypeLowerer};
+use crate::{BodyInferer, BodyLowerer, InferLocal, LowerError, TypeLowerer};
 
 pub struct ProgramLowerer<'a> {
     pub program: &'a mut Program,
@@ -17,7 +17,7 @@ impl<'a> ProgramLowerer<'a> {
         }
     }
 
-    pub fn type_lowerer(&mut self, generics: &ast::Generics) -> TypeLowerer<'_> {
+    pub fn type_lowerer(&self, generics: &ast::Generics) -> TypeLowerer<'_> {
         TypeLowerer::new(self.program, generics, self.module)
     }
 
@@ -40,6 +40,7 @@ impl<'a> ProgramLowerer<'a> {
         let mut body = Body::new();
 
         let type_lowerer = self.type_lowerer(&function.generics);
+        let mut body_inferer = BodyInferer::new(&self.program);
 
         let mut arguments = Vec::with_capacity(function.arguments.len());
         for argument in function.arguments.iter() {
@@ -51,6 +52,12 @@ impl<'a> ProgramLowerer<'a> {
                 ty: ty.clone(),
             };
 
+            let infer_local = InferLocal {
+                ident: ident.clone(),
+                ty: body_inferer.infer_type(&argument.ty)?,
+            };
+            body_inferer.locals.push(infer_local);
+
             let local = body.locals.push(local);
             let argument = FunctionArgument { ident, ty, local };
             arguments.push(argument);
@@ -61,6 +68,12 @@ impl<'a> ProgramLowerer<'a> {
         } else {
             Type::VOID
         };
+
+        body_inferer.infer_block(&function.body)?;
+        let mut body_lowerer =
+            BodyLowerer::new(&self.program, body_inferer.solver.finish(), &mut body);
+
+        body_lowerer.lower_block(&function.body)?;
 
         let function = Function {
             ident: function.ident.clone(),

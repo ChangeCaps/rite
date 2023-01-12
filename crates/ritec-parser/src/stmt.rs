@@ -30,9 +30,9 @@ impl Parse for ast::LetStmt {
         // parse the `;` symbol
         parser.expect(&SymbolKind::Semicolon)?;
         Ok(ast::LetStmt {
-            name,
+            ident: name,
             ty,
-            value,
+            init: value,
             span: span | parser.span(),
         })
     }

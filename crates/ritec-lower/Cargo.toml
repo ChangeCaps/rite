@@ -8,5 +8,6 @@ edition = "2021"
 [dependencies]
 ritec-ast = { version = "0.1.0", path = "../ritec-ast" }
 ritec-error = { version = "0.1.0", path = "../ritec-error" }
+ritec-infer = { version = "0.1.0", path = "../ritec-infer" }
 ritec-ir = { version = "0.1.0", path = "../ritec-ir" }
 ritec-span = { version = "0.1.0", path = "../ritec-span" }

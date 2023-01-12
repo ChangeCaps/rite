@@ -1,4 +1,5 @@
 use ritec_ast::Path;
+use ritec_infer::InferError;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum LowerError {
@@ -7,4 +8,12 @@ pub enum LowerError {
     InvalidInferred,
     /// No type was defined for the given path.
     UndefinedType(Path),
+    InvalidPath(Path),
+    Infer(InferError),
+}
+
+impl From<InferError> for LowerError {
+    fn from(err: InferError) -> Self {
+        Self::Infer(err)
+    }
 }
