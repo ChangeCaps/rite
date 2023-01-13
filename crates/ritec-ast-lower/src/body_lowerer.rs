@@ -35,19 +35,14 @@ impl<'a> BodyLowerer<'a> {
     }
 
     pub fn lower_stmt(&mut self, stmt: &ast::Stmt) -> Result<hir::StmtId, Diagnostic> {
-        let kind = match stmt {
+        let stmt = match stmt {
             ast::Stmt::Let(stmt) => self.lower_let_stmt(stmt)?,
-        };
-
-        let stmt = hir::Stmt {
-            id: self.body.next_universe_id(),
-            kind,
         };
 
         Ok(self.body.stmts.push(stmt))
     }
 
-    pub fn lower_let_stmt(&mut self, stmt: &ast::LetStmt) -> Result<hir::StmtKind, Diagnostic> {
+    pub fn lower_let_stmt(&mut self, stmt: &ast::LetStmt) -> Result<hir::Stmt, Diagnostic> {
         let ty = if let Some(ty) = &stmt.ty {
             self.lower_type(ty)?
         } else {
@@ -55,9 +50,9 @@ impl<'a> BodyLowerer<'a> {
         };
 
         let local = hir::Local {
-            id: self.body.next_universe_id(),
             ident: stmt.ident.clone(),
             ty,
+            id: self.body.next_universe_id(),
         };
 
         let init = if let Some(ref init) = stmt.init {
@@ -67,55 +62,52 @@ impl<'a> BodyLowerer<'a> {
         };
 
         let let_stmt = hir::LetStmt {
-            id: self.body.next_universe_id(),
             local: self.body.locals.push(local),
             init,
+            id: self.body.next_universe_id(),
             span: stmt.span,
         };
 
-        Ok(hir::StmtKind::Let(let_stmt))
+        Ok(hir::Stmt::Let(let_stmt))
     }
 
     pub fn lower_expr(&mut self, expr: &ast::Expr) -> Result<hir::ExprId, Diagnostic> {
-        let kind = match expr {
+        let expr = match expr {
             ast::Expr::Path(expr) => self.lower_path_expr(expr)?,
             ast::Expr::Unary(expr) => self.lower_unary_expr(expr)?,
-        };
-
-        let expr = hir::Expr {
-            id: self.body.next_universe_id(),
-            kind,
         };
 
         Ok(self.body.exprs.push(expr))
     }
 
-    pub fn lower_unary_expr(&mut self, expr: &ast::UnaryExpr) -> Result<hir::ExprKind, Diagnostic> {
+    pub fn lower_unary_expr(&mut self, expr: &ast::UnaryExpr) -> Result<hir::Expr, Diagnostic> {
         match expr.operator {
             ast::UnaryOp::Ref => self.lower_ref_expr(expr),
             ast::UnaryOp::Deref => self.lower_deref_expr(expr),
         }
     }
 
-    pub fn lower_ref_expr(&mut self, expr: &ast::UnaryExpr) -> Result<hir::ExprKind, Diagnostic> {
+    pub fn lower_ref_expr(&mut self, expr: &ast::UnaryExpr) -> Result<hir::Expr, Diagnostic> {
         let ref_expr = hir::RefExpr {
             operand: self.lower_expr(&expr.operand)?,
+            id: self.body.next_universe_id(),
             span: expr.span,
         };
 
-        Ok(hir::ExprKind::Ref(ref_expr))
+        Ok(hir::Expr::Ref(ref_expr))
     }
 
-    pub fn lower_deref_expr(&mut self, expr: &ast::UnaryExpr) -> Result<hir::ExprKind, Diagnostic> {
+    pub fn lower_deref_expr(&mut self, expr: &ast::UnaryExpr) -> Result<hir::Expr, Diagnostic> {
         let deref_expr = hir::DerefExpr {
             operand: self.lower_expr(&expr.operand)?,
+            id: self.body.next_universe_id(),
             span: expr.span,
         };
 
-        Ok(hir::ExprKind::Deref(deref_expr))
+        Ok(hir::Expr::Deref(deref_expr))
     }
 
-    pub fn lower_path_expr(&mut self, expr: &ast::PathExpr) -> Result<hir::ExprKind, Diagnostic> {
+    pub fn lower_path_expr(&mut self, expr: &ast::PathExpr) -> Result<hir::Expr, Diagnostic> {
         if let Some(ident) = expr.path.get_ident() {
             if let Some(local) = self.find_local(ident) {
                 let local_expr = hir::LocalExpr {
@@ -124,7 +116,7 @@ impl<'a> BodyLowerer<'a> {
                     span: expr.span(),
                 };
 
-                return Ok(hir::ExprKind::Local(local_expr));
+                return Ok(hir::Expr::Local(local_expr));
             }
         }
 
