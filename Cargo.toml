@@ -14,7 +14,8 @@ ritec-ast-lower = { version = "0.1.0", path = "crates/ritec-ast-lower" }
 ritec-core = { version = "0.1.0", path = "crates/ritec-core" }
 ritec-error = { version = "0.1.0", path = "crates/ritec-error" }
 ritec-hir = { version = "0.1.0", path = "crates/ritec-hir" }
-ritec-ir = { version = "0.1.0", path = "crates/ritec-ir" }
+ritec-hir-lower = { version = "0.1.0", path = "crates/ritec-hir-lower" }
+ritec-mir = { version = "0.1.0", path = "crates/ritec-mir" }
 ritec-parser = { version = "0.1.0", path = "crates/ritec-parser" }
 
 clap = { version = "4.0", features = ["derive"] }

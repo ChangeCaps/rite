@@ -60,7 +60,7 @@ impl<'a> Unifier<'a> {
         a: &TypeProjection,
         b: &TypeProjection,
     ) -> Result<(), InferError> {
-        let var = InferType::Var(self.table.next_variable());
+        let var = InferType::Var(self.table.new_variable());
         self.unify_proj_ty(a, &var)?;
         self.unify_proj_ty(b, &var)?;
 

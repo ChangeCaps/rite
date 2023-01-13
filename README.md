@@ -9,7 +9,7 @@ The first step of any compilation is creating an [`AST (abstract syntax tree)`](
 this is done by first converting the input into a [`TokenStream`](crates/ritec-parser), this is done by the [`Lexer`](crates/ritec-parser).
 Thereafter the [`TokenStream`](crates/ritec-parser) is parsed into an [`AST`](crates/ritec-ast).
 
-## Lowering to HIR (high level intermediary representation)
+## Lowering to [`HIR`](crates/ritec-hir) (high-level intermediary representation)
 After parsing, the [`AST`](crates/ritec-ast) is lowered into [`HIR`](crates/ritec-hir).
 
 ### Type registration
@@ -18,7 +18,7 @@ After parsing, the [`AST`](crates/ritec-ast) is lowered into [`HIR`](crates/rite
 ### Function registration
 ### Function completion
 
-## Lowering to IR
+## Lowering to [`MIR`](crates/ritec-mir) (mid-level intermediary representation)
 
 ### Type inference
 

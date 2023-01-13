@@ -1,14 +1,8 @@
-use ritec_ir::IntType;
+use ritec_mir::IntType;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct TypeVariable {
-    pub depth: usize,
-}
-
-impl TypeVariable {
-    pub fn new(depth: usize) -> Self {
-        Self { depth }
-    }
+    pub index: usize,
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -40,11 +40,16 @@ impl Display for BoolType {
 pub struct IntType {
     pub signed: bool,
     pub size: Option<IntSize>,
+    pub span: Span,
 }
 
 impl IntType {
     pub const fn new(signed: bool, size: Option<IntSize>) -> Self {
-        Self { signed, size }
+        Self {
+            signed,
+            size,
+            span: Span::DUMMY,
+        }
     }
 
     pub const fn byte_size(&self) -> Option<usize> {
@@ -114,11 +119,15 @@ impl Display for IntType {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct FloatType {
     pub size: FloatSize,
+    pub span: Span,
 }
 
 impl FloatType {
     pub const fn new(size: FloatSize) -> Self {
-        Self { size }
+        Self {
+            size,
+            span: Span::DUMMY,
+        }
     }
 
     pub const fn byte_size(&self) -> usize {
@@ -143,12 +152,14 @@ impl Display for FloatType {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PointerType {
     pub pointee: Box<Type>,
+    pub span: Span,
 }
 
 impl PointerType {
     pub fn new(pointee: impl Into<Box<Type>>) -> Self {
         Self {
             pointee: pointee.into(),
+            span: Span::DUMMY,
         }
     }
 
@@ -166,33 +177,37 @@ impl Display for PointerType {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct ArrayType {
     pub element: Box<Type>,
-    pub length: usize,
+    pub size: usize,
+    pub span: Span,
 }
 
 impl ArrayType {
     pub fn new(element: impl Into<Box<Type>>, length: usize) -> Self {
         Self {
             element: element.into(),
-            length,
+            size: length,
+            span: Span::DUMMY,
         }
     }
 }
 
 impl Display for ArrayType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "[{}; {}]", self.element, self.length)
+        write!(f, "[{}; {}]", self.element, self.size)
     }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SliceType {
     pub element: Box<Type>,
+    pub span: Span,
 }
 
 impl SliceType {
     pub fn new(element: impl Into<Box<Type>>) -> Self {
         Self {
             element: element.into(),
+            span: Span::DUMMY,
         }
     }
 }
@@ -207,6 +222,7 @@ impl Display for SliceType {
 pub struct FunctionType {
     pub arguments: Vec<Type>,
     pub return_type: Box<Type>,
+    pub span: Span,
 }
 
 impl FunctionType {
@@ -214,6 +230,7 @@ impl FunctionType {
         Self {
             arguments: arguments.into(),
             return_type: return_type.into(),
+            span: Span::DUMMY,
         }
     }
 }
@@ -234,12 +251,14 @@ impl Display for FunctionType {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TupleType {
     pub fields: Vec<Type>,
+    pub span: Span,
 }
 
 impl TupleType {
     pub fn new(fields: impl Into<Vec<Type>>) -> Self {
         Self {
             fields: fields.into(),
+            span: Span::DUMMY,
         }
     }
 }
@@ -248,6 +267,18 @@ impl Display for TupleType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let fields: Vec<_> = self.fields.iter().map(Type::to_string).collect();
         write!(f, "({})", fields.join(", "))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct GenericType {
+    pub generic: Generic,
+    pub span: Span,
+}
+
+impl Display for GenericType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.generic)
     }
 }
 
@@ -262,7 +293,7 @@ pub enum Type {
     Slice(SliceType),
     Function(FunctionType),
     Tuple(TupleType),
-    Generic(Generic),
+    Generic(GenericType),
 }
 
 impl Type {
@@ -318,10 +349,7 @@ impl Type {
     }
 
     pub fn function(arguments: impl Into<Vec<Type>>, return_type: impl Into<Box<Type>>) -> Self {
-        Self::Function(FunctionType {
-            arguments: arguments.into(),
-            return_type: return_type.into(),
-        })
+        Self::Function(FunctionType::new(arguments, return_type))
     }
 
     pub fn tuple(fields: impl Into<Vec<Type>>) -> Self {
@@ -397,6 +425,12 @@ impl From<FunctionType> for Type {
 impl From<TupleType> for Type {
     fn from(ty: TupleType) -> Self {
         Self::Tuple(ty)
+    }
+}
+
+impl From<GenericType> for Type {
+    fn from(ty: GenericType) -> Self {
+        Self::Generic(ty)
     }
 }
 

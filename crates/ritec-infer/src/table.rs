@@ -16,8 +16,11 @@ impl InferenceTable {
         }
     }
 
-    pub fn next_variable(&mut self) -> TypeVariable {
-        let variable = TypeVariable::new(self.next_variable);
+    pub fn new_variable(&mut self) -> TypeVariable {
+        let variable = TypeVariable {
+            index: self.next_variable,
+        };
+
         self.next_variable += 1;
 
         variable

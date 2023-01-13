@@ -1,8 +1,9 @@
 mod emitter;
 
+pub use emitter::*;
+
 use std::panic::Location;
 
-pub use emitter::*;
 use ritec_core::Span;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

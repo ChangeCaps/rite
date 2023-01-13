@@ -3,7 +3,7 @@ use ritec_core::{Arena, Generic};
 use ritec_error::{Diagnostic, Emitter};
 use ritec_hir as hir;
 
-use crate::{LowerError, TypeLowerer};
+use crate::{Error, TypeLowerer};
 
 pub struct FunctionRegisterer<'a> {
     pub program: &'a mut hir::Program,
@@ -13,7 +13,7 @@ pub struct FunctionRegisterer<'a> {
 }
 
 impl<'a> FunctionRegisterer<'a> {
-    pub fn register(&mut self, items: &ast::Items) -> Result<(), LowerError> {
+    pub fn register(&mut self, items: &ast::Items) -> Result<(), Error> {
         let mut has_failed = false;
 
         for item in items.iter() {
@@ -24,7 +24,7 @@ impl<'a> FunctionRegisterer<'a> {
         }
 
         if has_failed {
-            Err(LowerError::FunctionRegistration)
+            Err(Error::FunctionRegistration)
         } else {
             Ok(())
         }

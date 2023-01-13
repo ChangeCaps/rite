@@ -3,7 +3,7 @@ use ritec_core::Arena;
 use ritec_error::Emitter;
 use ritec_hir as hir;
 
-use crate::{FunctionCompleter, FunctionRegisterer, LowerError};
+use crate::{Error, FunctionCompleter, FunctionRegisterer};
 
 pub struct ProgramLowerer<'a> {
     pub program: &'a mut hir::Program,
@@ -15,7 +15,7 @@ impl<'a> ProgramLowerer<'a> {
         Self { program, emitter }
     }
 
-    pub fn lower(&mut self, items: &ast::Items) -> Result<(), LowerError> {
+    pub fn lower(&mut self, items: &ast::Items) -> Result<(), Error> {
         let root_module = self.program.root_module;
 
         let mut blocks = Arena::new();

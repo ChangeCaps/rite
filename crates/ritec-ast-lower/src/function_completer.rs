@@ -3,7 +3,7 @@ use ritec_core::Arena;
 use ritec_error::{Diagnostic, Emitter};
 use ritec_hir as hir;
 
-use crate::{BodyLowerer, LowerError, TypeLowerer};
+use crate::{BodyLowerer, Error, TypeLowerer};
 
 pub struct FunctionCompleter<'a> {
     pub program: &'a mut hir::Program,
@@ -12,7 +12,7 @@ pub struct FunctionCompleter<'a> {
 }
 
 impl<'a> FunctionCompleter<'a> {
-    pub fn complete(&mut self) -> Result<(), LowerError> {
+    pub fn complete(&mut self) -> Result<(), Error> {
         let mut has_failed = false;
 
         let keys: Vec<_> = self.program.functions.keys().collect();
@@ -24,7 +24,7 @@ impl<'a> FunctionCompleter<'a> {
         }
 
         if has_failed {
-            Err(LowerError::FunctionCompletion)
+            Err(Error::FunctionCompletion)
         } else {
             Ok(())
         }

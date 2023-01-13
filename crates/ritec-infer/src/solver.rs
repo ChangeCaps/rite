@@ -1,4 +1,4 @@
-use ritec_ir::Program;
+use ritec_mir::Program;
 
 use crate::{Constraint, InferError, InferType, InferenceTable, Solution, TypeVariable, Unify};
 
@@ -22,7 +22,7 @@ impl<'a> Solver<'a> {
     }
 
     pub fn next_variable(&mut self) -> TypeVariable {
-        self.table.next_variable()
+        self.table.new_variable()
     }
 
     pub fn finish(self) -> InferenceTable {
