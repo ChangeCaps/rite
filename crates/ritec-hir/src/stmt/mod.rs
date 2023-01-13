@@ -2,7 +2,7 @@ mod let_stmt;
 
 pub use let_stmt::*;
 
-use ritec_core::Span;
+use ritec_core::{Id, Span};
 
 use crate::UniverseId;
 
@@ -18,6 +18,8 @@ impl StmtKind {
         }
     }
 }
+
+pub type StmtId = Id<Stmt>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Stmt {

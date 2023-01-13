@@ -1,4 +1,5 @@
 use std::{
+    cmp::Ordering,
     fmt::{self, Debug, Display},
     hash::{Hash, Hasher},
     ops::Deref,
@@ -53,6 +54,18 @@ impl PartialEq for Ident {
 }
 
 impl Eq for Ident {}
+
+impl PartialOrd for Ident {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        self.value.partial_cmp(&other.value)
+    }
+}
+
+impl Ord for Ident {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.value.cmp(&other.value)
+    }
+}
 
 impl Hash for Ident {
     fn hash<H: Hasher>(&self, state: &mut H) {

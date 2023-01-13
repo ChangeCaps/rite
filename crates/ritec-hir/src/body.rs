@@ -1,15 +1,20 @@
-use std::ops::{Index, IndexMut};
+use std::{
+    fmt::{self, Debug},
+    ops::{Index, IndexMut},
+};
 
 use ritec_core::Arena;
 
-use crate::{Expr, ExprId, Local, LocalId};
+use crate::{Expr, ExprId, Local, LocalId, Stmt};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct UniverseId {
     pub index: usize,
 }
 
 impl UniverseId {
+    pub const ZERO: Self = Self { index: 0 };
+
     pub fn increment(&mut self) -> Self {
         let id = *self;
         self.index += 1;
@@ -17,14 +22,30 @@ impl UniverseId {
     }
 }
 
+impl Debug for UniverseId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Universe[{}]", self.index)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Body {
-    pub local: Arena<Local>,
+    pub locals: Arena<Local>,
     pub exprs: Arena<Expr>,
+    pub stmts: Arena<Stmt>,
     pub next_universe_id: UniverseId,
 }
 
 impl Body {
+    pub const fn new() -> Self {
+        Self {
+            locals: Arena::new(),
+            exprs: Arena::new(),
+            stmts: Arena::new(),
+            next_universe_id: UniverseId::ZERO,
+        }
+    }
+
     pub fn next_universe_id(&mut self) -> UniverseId {
         self.next_universe_id.increment()
     }
@@ -34,13 +55,13 @@ impl Index<LocalId> for Body {
     type Output = Local;
 
     fn index(&self, index: LocalId) -> &Self::Output {
-        &self.local[index]
+        &self.locals[index]
     }
 }
 
 impl IndexMut<LocalId> for Body {
     fn index_mut(&mut self, index: LocalId) -> &mut Self::Output {
-        &mut self.local[index]
+        &mut self.locals[index]
     }
 }
 

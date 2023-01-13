@@ -167,7 +167,7 @@ impl<T> Arena<T> {
     }
 
     #[inline]
-    pub fn keys(&self) -> impl Iterator<Item = Id<T>> + '_ {
+    pub fn keys(&self) -> impl DoubleEndedIterator<Item = Id<T>> + '_ {
         self.arena.iter().enumerate().filter_map(|(i, v)| {
             if v.is_some() {
                 Some(Id::from_raw_index(i))
@@ -178,17 +178,17 @@ impl<T> Arena<T> {
     }
 
     #[inline]
-    pub fn values(&self) -> impl Iterator<Item = &T> {
+    pub fn values(&self) -> impl DoubleEndedIterator<Item = &T> {
         self.arena.iter().filter_map(|v| v.as_ref())
     }
 
     #[inline]
-    pub fn values_mut(&mut self) -> impl Iterator<Item = &mut T> {
+    pub fn values_mut(&mut self) -> impl DoubleEndedIterator<Item = &mut T> {
         self.arena.iter_mut().filter_map(|v| v.as_mut())
     }
 
     #[inline]
-    pub fn iter(&self) -> impl Iterator<Item = (Id<T>, &T)> {
+    pub fn iter(&self) -> impl DoubleEndedIterator<Item = (Id<T>, &T)> {
         self.arena
             .iter()
             .enumerate()
@@ -196,7 +196,7 @@ impl<T> Arena<T> {
     }
 
     #[inline]
-    pub fn iter_mut(&mut self) -> impl Iterator<Item = (Id<T>, &mut T)> {
+    pub fn iter_mut(&mut self) -> impl DoubleEndedIterator<Item = (Id<T>, &mut T)> {
         self.arena
             .iter_mut()
             .enumerate()

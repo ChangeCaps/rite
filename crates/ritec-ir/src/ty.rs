@@ -1,8 +1,6 @@
 use std::fmt::{self, Display};
 
-use ritec_core::{FloatSize, IntSize, Span};
-
-use crate::Generic;
+use ritec_core::{FloatSize, Generic, IntSize, Span};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct VoidType {

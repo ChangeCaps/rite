@@ -21,3 +21,13 @@ pub struct Items {
     pub items: Vec<Item>,
     pub span: Span,
 }
+
+impl Items {
+    pub fn new(items: Vec<Item>, span: Span) -> Self {
+        Self { items, span }
+    }
+
+    pub fn iter(&self) -> impl Iterator<Item = &Item> {
+        self.items.iter()
+    }
+}

@@ -1,7 +1,9 @@
 use std::{fs, path::PathBuf};
 
 use clap::Parser;
+use ritec_ast_lower::ProgramLowerer;
 use ritec_core::{SourceFile, SourceMap};
+use ritec_hir::Program;
 use ritec_parser::{ParseBuffer, TokenStream};
 
 #[derive(Parser)]
@@ -25,5 +27,10 @@ fn main() {
     let mut parser = ParseBuffer::new(&tokens);
     let items: ritec_ast::Items = parser.parse().unwrap();
 
-    println!("{:#?}", items);
+    let mut program = Program::new();
+    let mut emitter = Vec::new();
+    let mut program_lowerer = ProgramLowerer::new(&mut program, &mut emitter);
+    program_lowerer.lower(&items).unwrap();
+
+    println!("{:#?}", program);
 }

@@ -1,4 +1,4 @@
-fn main(x: bool) -> void {
+fn main<T>(x: T) -> void {
 	let y = x;
-	let z = y;
+	let z: T = y;
 }

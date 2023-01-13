@@ -1,6 +1,6 @@
 use ritec_core::{Id, Ident, Span};
 
-use crate::{Body, FunctionType, LocalId, Type};
+use crate::{Body, FunctionType, Generics, LocalId, ModuleId, Type};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FunctionArgument {
@@ -15,9 +15,12 @@ pub type FunctionId = Id<Function>;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Function {
     pub ident: Ident,
+    pub module: ModuleId,
+    pub generics: Generics,
     pub arguments: Vec<FunctionArgument>,
     pub return_type: Type,
     pub body: Body,
+    pub span: Span,
 }
 
 impl Function {

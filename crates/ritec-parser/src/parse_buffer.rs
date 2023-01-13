@@ -50,8 +50,6 @@ impl<'a> ParseBuffer<'a> {
                 break;
             }
 
-            eprintln!("{:?}", self.peek());
-
             result.push(self.parse()?);
 
             if self.is_empty() {

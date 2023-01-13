@@ -1,6 +1,6 @@
 use std::fmt::{self, Display};
 
-use ritec_core::{FloatSize, IntSize, Span};
+use ritec_core::{FloatSize, Generic, IntSize, Span};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct InferredType {
@@ -80,6 +80,12 @@ pub struct PointerType {
     pub span: Span,
 }
 
+impl PointerType {
+    pub fn is_inferred(&self) -> bool {
+        self.pointee.is_inferred()
+    }
+}
+
 impl Display for PointerType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "*{}", self.pointee)
@@ -91,6 +97,12 @@ pub struct ArrayType {
     pub element: Box<Type>,
     pub size: usize,
     pub span: Span,
+}
+
+impl ArrayType {
+    pub fn is_inferred(&self) -> bool {
+        self.element.is_inferred()
+    }
 }
 
 impl Display for ArrayType {
@@ -105,6 +117,12 @@ pub struct SliceType {
     pub span: Span,
 }
 
+impl SliceType {
+    pub fn is_inferred(&self) -> bool {
+        self.element.is_inferred()
+    }
+}
+
 impl Display for SliceType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "[{}]", self.element)
@@ -116,6 +134,12 @@ pub struct FunctionType {
     pub arguments: Vec<Type>,
     pub return_type: Box<Type>,
     pub span: Span,
+}
+
+impl FunctionType {
+    pub fn is_inferred(&self) -> bool {
+        self.arguments.iter().any(|arg| arg.is_inferred()) || self.return_type.is_inferred()
+    }
 }
 
 impl Display for FunctionType {
@@ -137,10 +161,28 @@ pub struct TupleType {
     pub span: Span,
 }
 
+impl TupleType {
+    pub fn is_inferred(&self) -> bool {
+        self.fields.iter().any(|field| field.is_inferred())
+    }
+}
+
 impl Display for TupleType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let fields: Vec<_> = self.fields.iter().map(Type::to_string).collect();
         write!(f, "({})", fields.join(", "))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct GenericType {
+    pub generic: Generic,
+    pub span: Span,
+}
+
+impl Display for GenericType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.generic)
     }
 }
 
@@ -156,6 +198,7 @@ pub enum Type {
     Slice(SliceType),
     Function(FunctionType),
     Tuple(TupleType),
+    Generic(GenericType),
 }
 
 impl Type {
@@ -171,11 +214,36 @@ impl Type {
             Type::Slice(t) => t.span,
             Type::Function(t) => t.span,
             Type::Tuple(t) => t.span,
+            Type::Generic(t) => t.span,
         }
     }
 
     pub const fn is_void(&self) -> bool {
         matches!(self, Type::Void(_))
+    }
+
+    pub const fn inferred(span: Span) -> Self {
+        Type::Inferred(InferredType { span })
+    }
+
+    pub const fn void(span: Span) -> Self {
+        Type::Void(VoidType { span })
+    }
+
+    pub const fn bool(span: Span) -> Self {
+        Type::Bool(BoolType { span })
+    }
+
+    pub fn is_inferred(&self) -> bool {
+        match self {
+            Type::Inferred(_) => true,
+            Type::Pointer(t) => t.is_inferred(),
+            Type::Array(t) => t.is_inferred(),
+            Type::Slice(t) => t.is_inferred(),
+            Type::Function(t) => t.is_inferred(),
+            Type::Tuple(t) => t.is_inferred(),
+            _ => false,
+        }
     }
 }
 
@@ -192,6 +260,7 @@ impl Display for Type {
             Type::Slice(t) => write!(f, "{}", t),
             Type::Function(t) => write!(f, "{}", t),
             Type::Tuple(t) => write!(f, "{}", t),
+            Type::Generic(t) => write!(f, "{}", t),
         }
     }
 }
