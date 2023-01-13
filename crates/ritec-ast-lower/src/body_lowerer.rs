@@ -79,7 +79,7 @@ impl<'a> BodyLowerer<'a> {
     pub fn lower_expr(&mut self, expr: &ast::Expr) -> Result<hir::ExprId, Diagnostic> {
         let kind = match expr {
             ast::Expr::Path(expr) => self.lower_path_expr(expr)?,
-            ast::Expr::Unary(_) => todo!(),
+            ast::Expr::Unary(expr) => self.lower_unary_expr(expr)?,
         };
 
         let expr = hir::Expr {
@@ -88,6 +88,31 @@ impl<'a> BodyLowerer<'a> {
         };
 
         Ok(self.body.exprs.push(expr))
+    }
+
+    pub fn lower_unary_expr(&mut self, expr: &ast::UnaryExpr) -> Result<hir::ExprKind, Diagnostic> {
+        match expr.operator {
+            ast::UnaryOp::Ref => self.lower_ref_expr(expr),
+            ast::UnaryOp::Deref => self.lower_deref_expr(expr),
+        }
+    }
+
+    pub fn lower_ref_expr(&mut self, expr: &ast::UnaryExpr) -> Result<hir::ExprKind, Diagnostic> {
+        let ref_expr = hir::RefExpr {
+            operand: self.lower_expr(&expr.operand)?,
+            span: expr.span,
+        };
+
+        Ok(hir::ExprKind::Ref(ref_expr))
+    }
+
+    pub fn lower_deref_expr(&mut self, expr: &ast::UnaryExpr) -> Result<hir::ExprKind, Diagnostic> {
+        let deref_expr = hir::DerefExpr {
+            operand: self.lower_expr(&expr.operand)?,
+            span: expr.span,
+        };
+
+        Ok(hir::ExprKind::Deref(deref_expr))
     }
 
     pub fn lower_path_expr(&mut self, expr: &ast::PathExpr) -> Result<hir::ExprKind, Diagnostic> {

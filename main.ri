@@ -1,4 +1,4 @@
 fn main<T>(x: T) -> void {
 	let y = x;
-	let z: T = y;
+	let z = &y;
 }
