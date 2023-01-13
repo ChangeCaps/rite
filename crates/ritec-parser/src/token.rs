@@ -1,7 +1,7 @@
 use core::fmt;
 use std::{fmt::Display, ops::Index, str::FromStr, sync::Arc};
 
-use ritec_span::{FileId, Ident, Span};
+use ritec_core::{FileId, Ident, Span};
 
 use crate::{Delimiter, Keyword, Lexer, LexerError, Symbol};
 

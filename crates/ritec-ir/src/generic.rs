@@ -7,7 +7,7 @@ use std::{
     vec::IntoIter,
 };
 
-use ritec_span::Ident;
+use ritec_core::Ident;
 
 #[derive(Clone, Debug)]
 pub struct Generic {

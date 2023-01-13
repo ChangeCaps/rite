@@ -1,13 +1,17 @@
 use std::fmt::{self, Display};
 
+use ritec_core::{FloatSize, IntSize, Span};
+
 use crate::Generic;
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct VoidType {}
+pub struct VoidType {
+    pub span: Span,
+}
 
 impl VoidType {
-    pub const fn new() -> Self {
-        Self {}
+    pub const fn new(span: Span) -> Self {
+        Self { span }
     }
 }
 
@@ -18,58 +22,19 @@ impl Display for VoidType {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct BoolType {}
+pub struct BoolType {
+    pub span: Span,
+}
 
 impl BoolType {
-    pub const fn new() -> Self {
-        Self {}
+    pub const fn new(span: Span) -> Self {
+        Self { span }
     }
 }
 
 impl Display for BoolType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "bool")
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum IntSize {
-    I8 = 1,
-    I16 = 2,
-    I32 = 4,
-    I64 = 8,
-    I128 = 16,
-}
-
-impl IntSize {
-    pub const fn from_byte_size(byte_size: usize) -> Option<Self> {
-        match byte_size {
-            1 => Some(IntSize::I8),
-            2 => Some(IntSize::I16),
-            4 => Some(IntSize::I32),
-            8 => Some(IntSize::I64),
-            16 => Some(IntSize::I128),
-            _ => None,
-        }
-    }
-
-    pub const fn from_bit_width(bit_width: usize) -> Option<Self> {
-        match bit_width {
-            8 => Some(IntSize::I8),
-            16 => Some(IntSize::I16),
-            32 => Some(IntSize::I32),
-            64 => Some(IntSize::I64),
-            128 => Some(IntSize::I128),
-            _ => None,
-        }
-    }
-
-    pub const fn byte_size(self) -> usize {
-        self as usize
-    }
-
-    pub const fn bit_width(self) -> usize {
-        self.byte_size() * 8
     }
 }
 
@@ -145,41 +110,6 @@ impl Display for IntType {
         }
 
         Ok(())
-    }
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub enum FloatSize {
-    F16 = 2,
-    F32 = 4,
-    F64 = 8,
-}
-
-impl FloatSize {
-    pub const fn from_byte_size(byte_size: usize) -> Option<Self> {
-        match byte_size {
-            2 => Some(FloatSize::F16),
-            4 => Some(FloatSize::F32),
-            8 => Some(FloatSize::F64),
-            _ => None,
-        }
-    }
-
-    pub const fn from_bit_width(bit_width: usize) -> Option<Self> {
-        match bit_width {
-            16 => Some(FloatSize::F16),
-            32 => Some(FloatSize::F32),
-            64 => Some(FloatSize::F64),
-            _ => None,
-        }
-    }
-
-    pub const fn byte_size(self) -> usize {
-        self as usize
-    }
-
-    pub const fn bit_width(self) -> usize {
-        self.byte_size() * 8
     }
 }
 
@@ -338,9 +268,9 @@ pub enum Type {
 }
 
 impl Type {
-    pub const VOID: Self = Self::Void(VoidType::new());
+    pub const VOID: Self = Self::void(Span::DUMMY);
 
-    pub const BOOL: Self = Self::Bool(BoolType::new());
+    pub const BOOL: Self = Self::bool(Span::DUMMY);
 
     pub const I8: Self = Self::Int(IntType::I8);
     pub const I16: Self = Self::Int(IntType::I16);
@@ -360,6 +290,14 @@ impl Type {
     pub const F16: Self = Self::Float(FloatType::F16);
     pub const F32: Self = Self::Float(FloatType::F32);
     pub const F64: Self = Self::Float(FloatType::F64);
+
+    pub const fn void(span: Span) -> Self {
+        Self::Void(VoidType::new(span))
+    }
+
+    pub const fn bool(span: Span) -> Self {
+        Self::Bool(BoolType::new(span))
+    }
 
     pub const fn is_void(&self) -> bool {
         matches!(self, Type::Void(_))

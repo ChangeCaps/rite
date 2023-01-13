@@ -1,4 +1,4 @@
-use ritec_span::{FileId, Ident, Span};
+use ritec_core::{FileId, Ident, Span};
 
 use crate::{Delimiter, Group, Keyword, KeywordKind, Symbol, SymbolKind, TokenStream, TokenTree};
 

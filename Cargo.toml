@@ -9,12 +9,11 @@ edition = "2021"
 members = ["crates/*"]
 
 [dependencies]
-ritec-arena = { version = "0.1.0", path = "crates/ritec-arena" }
 ritec-ast = { version = "0.1.0", path = "crates/ritec-ast" }
+ritec-core = { version = "0.1.0", path = "crates/ritec-core" }
 ritec-error = { version = "0.1.0", path = "crates/ritec-error" }
 ritec-ir = { version = "0.1.0", path = "crates/ritec-ir" }
-ritec-lower = { version = "0.1.0", path = "crates/ritec-lower" }
+ritec-ast-lower = { version = "0.1.0", path = "crates/ritec-ast-lower" }
 ritec-parser = { version = "0.1.0", path = "crates/ritec-parser" }
-ritec-span = { version = "0.1.0", path = "crates/ritec-span" }
 
 clap = { version = "4.0", features = ["derive"] }

@@ -10,7 +10,7 @@ mod parse_buffer;
 mod path;
 mod stmt;
 mod symbol;
-mod token_tree;
+mod token;
 mod ty;
 
 pub use delimiter::*;
@@ -19,4 +19,4 @@ pub use lexer::*;
 pub use parse::*;
 pub use parse_buffer::*;
 pub use symbol::*;
-pub use token_tree::*;
+pub use token::*;

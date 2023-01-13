@@ -1,5 +1,7 @@
 use std::fmt::{self, Display};
 
+use crate::{ParseStream, Peek, TokenTree};
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Delimiter {
     Paren,
@@ -49,6 +51,19 @@ impl Delimiter {
             Delimiter::Brace => Some('}'),
             Delimiter::Bracket => Some(']'),
             Delimiter::None => None,
+        }
+    }
+}
+
+impl Peek for Delimiter {
+    fn peek(&self, parser: ParseStream) -> bool {
+        let Some(token) = parser.peek() else {
+            return false;   
+        };
+
+        match token {
+            TokenTree::Group(group) => group.delimiter() == *self,
+            _ => false,
         }
     }
 }

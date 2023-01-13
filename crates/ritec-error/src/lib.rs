@@ -3,7 +3,7 @@ mod emitter;
 use std::panic::Location;
 
 pub use emitter::*;
-use ritec_span::Span;
+use ritec_core::Span;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum DiagnosticLevel {

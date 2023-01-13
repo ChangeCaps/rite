@@ -3,7 +3,7 @@ use std::{
     ops::Deref,
 };
 
-use ritec_span::Span;
+use ritec_core::Span;
 
 use crate::{ParseStream, Peek};
 

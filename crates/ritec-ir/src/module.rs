@@ -1,7 +1,6 @@
 use std::collections::BTreeMap;
 
-use ritec_arena::Id;
-use ritec_span::Ident;
+use ritec_core::{Id, Ident};
 
 use crate::FunctionId;
 

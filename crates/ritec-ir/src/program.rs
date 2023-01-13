@@ -1,6 +1,6 @@
 use std::ops::{Index, IndexMut};
 
-use ritec_arena::Arena;
+use ritec_core::Arena;
 
 use crate::{Function, FunctionId, Module, ModuleId};
 

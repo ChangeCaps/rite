@@ -1,5 +1,5 @@
 use std::{
-    fmt::{self, Display},
+    fmt::{self, Debug, Display},
     hash::{Hash, Hasher},
     ops::Deref,
     sync::Arc,
@@ -7,7 +7,7 @@ use std::{
 
 use crate::Span;
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub struct Ident {
     value: Arc<str>,
     span: Span,
@@ -57,6 +57,12 @@ impl Eq for Ident {}
 impl Hash for Ident {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.value.hash(state);
+    }
+}
+
+impl Debug for Ident {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{} > {:?}", self.value, self.span())
     }
 }
 

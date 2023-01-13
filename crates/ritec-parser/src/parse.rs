@@ -1,5 +1,5 @@
+use ritec_core::Ident;
 use ritec_error::Diagnostic;
-use ritec_span::Ident;
 
 use crate::ParseBuffer;
 

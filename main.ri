@@ -1,3 +1,4 @@
 fn main(x: bool) -> void {
 	let y = x;
+	let z = y;
 }

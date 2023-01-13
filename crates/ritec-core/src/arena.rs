@@ -21,6 +21,13 @@ impl<T> Id<T> {
     pub const fn as_raw_index(self) -> usize {
         self.index
     }
+
+    pub const fn cast<U>(self) -> Id<U> {
+        Id {
+            index: self.index,
+            marker: PhantomData,
+        }
+    }
 }
 
 impl<T> Clone for Id<T> {
@@ -36,10 +43,7 @@ impl<T> Copy for Id<T> {}
 
 impl<T> Debug for Id<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let struct_name = format!("Id<{}>", std::any::type_name::<T>());
-        f.debug_struct(&struct_name)
-            .field("index", &self.index)
-            .finish()
+        write!(f, "{}[{}]", std::any::type_name::<T>(), self.index)
     }
 }
 
@@ -69,7 +73,7 @@ impl<T> Hash for Id<T> {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Arena<T> {
     arena: Vec<Option<T>>,
     free: Vec<usize>,
@@ -163,8 +167,40 @@ impl<T> Arena<T> {
     }
 
     #[inline]
+    pub fn keys(&self) -> impl Iterator<Item = Id<T>> + '_ {
+        self.arena.iter().enumerate().filter_map(|(i, v)| {
+            if v.is_some() {
+                Some(Id::from_raw_index(i))
+            } else {
+                None
+            }
+        })
+    }
+
+    #[inline]
     pub fn values(&self) -> impl Iterator<Item = &T> {
         self.arena.iter().filter_map(|v| v.as_ref())
+    }
+
+    #[inline]
+    pub fn values_mut(&mut self) -> impl Iterator<Item = &mut T> {
+        self.arena.iter_mut().filter_map(|v| v.as_mut())
+    }
+
+    #[inline]
+    pub fn iter(&self) -> impl Iterator<Item = (Id<T>, &T)> {
+        self.arena
+            .iter()
+            .enumerate()
+            .filter_map(|(i, v)| v.as_ref().map(|v| (Id::from_raw_index(i), v)))
+    }
+
+    #[inline]
+    pub fn iter_mut(&mut self) -> impl Iterator<Item = (Id<T>, &mut T)> {
+        self.arena
+            .iter_mut()
+            .enumerate()
+            .filter_map(|(i, v)| v.as_mut().map(|v| (Id::from_raw_index(i), v)))
     }
 }
 
@@ -189,6 +225,14 @@ impl<T> Index<Id<T>> for Arena<T> {
 impl<T> IndexMut<Id<T>> for Arena<T> {
     fn index_mut(&mut self, index: Id<T>) -> &mut Self::Output {
         self.arena[index.index].as_mut().expect("invalid id")
+    }
+}
+
+impl<T: Debug> Debug for Arena<T> {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_map()
+            .entries(self.iter().map(|(id, v)| (id, v)))
+            .finish()
     }
 }
 

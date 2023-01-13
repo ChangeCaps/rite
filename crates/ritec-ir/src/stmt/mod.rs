@@ -4,8 +4,7 @@ mod let_stmt;
 pub use block::*;
 pub use let_stmt::*;
 
-use ritec_arena::Id;
-use ritec_span::Span;
+use ritec_core::{Id, Span};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum StmtKind {

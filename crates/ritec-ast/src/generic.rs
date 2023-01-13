@@ -1,4 +1,4 @@
-use ritec_span::{Ident, Span};
+use ritec_core::{Ident, Span};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct GenericParameter {

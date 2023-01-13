@@ -29,6 +29,10 @@ impl<'a> Solver<'a> {
         self.table
     }
 
+    pub fn get_substitution(&self, var: &TypeVariable) -> Option<InferType> {
+        self.table.get_substitution(var)
+    }
+
     fn unify(&mut self, a: &InferType, b: &InferType) -> Result<Solution, InferError> {
         let result = self.table.unify(a, b)?;
         self.constraints.extend(result.constraints);

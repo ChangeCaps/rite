@@ -1,7 +1,9 @@
-use core::fmt;
-use std::{fmt::Display, ops::Deref};
+use std::{
+    fmt::{self, Display},
+    ops::Deref,
+};
 
-use ritec_span::Span;
+use ritec_core::Span;
 
 use crate::{ParseStream, Peek};
 

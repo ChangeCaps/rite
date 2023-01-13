@@ -1,6 +1,6 @@
 use std::ops::Deref;
 
-use ritec_arena::{Arena, Id};
+use crate::{Arena, Id};
 
 pub type FileId = Id<SourceFile>;
 

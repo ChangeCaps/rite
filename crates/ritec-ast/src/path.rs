@@ -1,6 +1,6 @@
 use std::hash::{Hash, Hasher};
 
-use ritec_span::{Ident, Span};
+use ritec_core::{Ident, Span};
 
 use crate::Type;
 

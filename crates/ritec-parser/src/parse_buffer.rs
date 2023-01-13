@@ -1,7 +1,7 @@
 use std::fmt::Display;
 
+use ritec_core::{Ident, Span};
 use ritec_error::Diagnostic;
-use ritec_span::{Ident, Span};
 
 use crate::{
     Delimiter, Keyword, Parse, ParseResult, ParseStream, Symbol, SymbolKind, TokenStream, TokenTree,

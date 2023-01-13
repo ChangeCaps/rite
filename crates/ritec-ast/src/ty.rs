@@ -1,6 +1,6 @@
 use std::hash::{Hash, Hasher};
 
-use ritec_span::Span;
+use ritec_core::Span;
 
 use crate::Path;
 
@@ -133,6 +133,13 @@ impl Type {
         Self {
             kind: kind.into(),
             span,
+        }
+    }
+
+    pub const fn inferred() -> Self {
+        Self {
+            kind: TypeKind::Inferred,
+            span: Span::DUMMY,
         }
     }
 }

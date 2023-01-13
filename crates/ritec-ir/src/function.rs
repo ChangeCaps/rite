@@ -1,5 +1,4 @@
-use ritec_arena::Id;
-use ritec_span::Ident;
+use ritec_core::{Id, Ident};
 
 use crate::{Body, FunctionType, Generics, LocalId, Type};
 
@@ -12,6 +11,8 @@ pub struct FunctionArgument {
     /// The local variable that represents the argument.
     pub local: LocalId,
 }
+
+pub type FunctionId = Id<Function>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Function {
@@ -33,5 +34,3 @@ impl Function {
         FunctionType::new(arguments, self.return_type.clone())
     }
 }
-
-pub type FunctionId = Id<Function>;

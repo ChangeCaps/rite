@@ -1,7 +1,7 @@
 mod function;
 
 pub use function::*;
-use ritec_span::Span;
+use ritec_core::Span;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Item {

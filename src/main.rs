@@ -1,10 +1,8 @@
 use std::{fs, path::PathBuf};
 
 use clap::Parser;
-use ritec_ir::Program;
-use ritec_lower::ProgramLowerer;
+use ritec_core::{SourceFile, SourceMap};
 use ritec_parser::{ParseBuffer, TokenStream};
-use ritec_span::{SourceFile, SourceMap};
 
 #[derive(Parser)]
 pub struct Args {
@@ -25,11 +23,7 @@ fn main() {
 
     let tokens = TokenStream::lex(&source, Some(file)).unwrap();
     let mut parser = ParseBuffer::new(&tokens);
-    let stmt: ritec_ast::Items = parser.parse().unwrap();
+    let items: ritec_ast::Items = parser.parse().unwrap();
 
-    let mut program = Program::new();
-    let mut lowerer = ProgramLowerer::new(&mut program);
-    lowerer.lower_items(&stmt).unwrap();
-
-    println!("{:#?}", program);
+    println!("{:#?}", items);
 }

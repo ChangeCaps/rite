@@ -35,6 +35,10 @@ impl InferenceTable {
         self.variables.insert(variable, ty);
     }
 
+    pub fn get_substitution(&self, var: &TypeVariable) -> Option<InferType> {
+        self.variables.get(var).cloned()
+    }
+
     pub fn unify(&mut self, a: &InferType, b: &InferType) -> Result<UnifyResult, InferError> {
         let mut unifier = Unifier::new(self);
 
