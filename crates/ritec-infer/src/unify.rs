@@ -1,3 +1,5 @@
+use ritec_core::trace;
+
 use crate::{
     Constraint, InferError, InferType, InferenceTable, Normalize, TypeApplication, TypeProjection,
     TypeVariable,
@@ -33,6 +35,8 @@ impl<'a> Unifier<'a> {
         } else if let Some(ty) = self.table.normalize(b) {
             return self.unify(a, &ty);
         }
+
+        trace!("unify: {:?} = {:?}", a, b);
 
         match (a, b) {
             (InferType::Proj(a), InferType::Proj(b)) => self.unify_proj_proj(a, b),

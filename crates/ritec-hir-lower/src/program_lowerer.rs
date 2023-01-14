@@ -1,6 +1,6 @@
 use ritec_error::{Diagnostic, Emitter};
 use ritec_hir as hir;
-use ritec_infer::{InferType, Solver};
+use ritec_infer::Solver;
 use ritec_mir as mir;
 
 use crate::{BodyLowerer, Error};
@@ -31,33 +31,28 @@ impl<'a> ProgramLowerer<'a> {
         }
     }
 
-    pub fn lower_void_type(&self, ty: &hir::VoidType) -> mir::VoidType {
-        mir::VoidType { span: ty.span }
+    pub fn lower_void_type(&self, _: &hir::VoidType) -> mir::VoidType {
+        mir::VoidType
     }
 
-    pub fn lower_bool_type(&self, ty: &hir::BoolType) -> mir::BoolType {
-        mir::BoolType { span: ty.span }
+    pub fn lower_bool_type(&self, _: &hir::BoolType) -> mir::BoolType {
+        mir::BoolType
     }
 
     pub fn lower_int_type(&self, ty: &hir::IntType) -> mir::IntType {
         mir::IntType {
             signed: ty.signed,
             size: ty.size,
-            span: ty.span,
         }
     }
 
     pub fn lower_float_type(&self, ty: &hir::FloatType) -> mir::FloatType {
-        mir::FloatType {
-            size: ty.size,
-            span: ty.span,
-        }
+        mir::FloatType { size: ty.size }
     }
 
     pub fn lower_pointer_type(&self, ty: &hir::PointerType) -> mir::PointerType {
         mir::PointerType {
             pointee: Box::new(self.lower_type(&ty.pointee)),
-            span: ty.span,
         }
     }
 
@@ -65,14 +60,12 @@ impl<'a> ProgramLowerer<'a> {
         mir::ArrayType {
             element: Box::new(self.lower_type(&ty.element)),
             size: ty.size,
-            span: ty.span,
         }
     }
 
     pub fn lower_slice_type(&self, ty: &hir::SliceType) -> mir::SliceType {
         mir::SliceType {
             element: Box::new(self.lower_type(&ty.element)),
-            span: ty.span,
         }
     }
 
@@ -85,7 +78,6 @@ impl<'a> ProgramLowerer<'a> {
         mir::FunctionType {
             arguments,
             return_type: Box::new(self.lower_type(&ty.return_type)),
-            span: ty.span,
         }
     }
 
@@ -95,16 +87,12 @@ impl<'a> ProgramLowerer<'a> {
             fields.push(self.lower_type(field));
         }
 
-        mir::TupleType {
-            fields,
-            span: ty.span,
-        }
+        mir::TupleType { fields }
     }
 
     pub fn lower_generic_type(&self, ty: &hir::GenericType) -> mir::GenericType {
         mir::GenericType {
             generic: ty.generic.clone(),
-            span: ty.span,
         }
     }
 
@@ -157,12 +145,15 @@ impl<'a> ProgramLowerer<'a> {
 
         let mut body = mir::Body::new();
 
-        let mut body_lowerer = BodyLowerer {
-            body: &mut body,
-            solver: Solver::new(&self.program),
-            types: Default::default(),
-        };
-        body_lowerer.lower(&function.body)?;
+        let mut body_lowerer = BodyLowerer::new(
+            &function.body,
+            &mut body,
+            &function.return_type,
+            Solver::new(&self.program),
+        );
+
+        body_lowerer.infer()?;
+        body_lowerer.lower()?;
 
         let function = mir::Function {
             ident: function.ident.clone(),
@@ -175,21 +166,5 @@ impl<'a> ProgramLowerer<'a> {
         self.program.functions.insert(id.cast(), function);
 
         Ok(())
-    }
-
-    pub fn infer_type(&self, ty: &hir::Type) -> InferType {
-        match ty {
-            hir::Type::Inferred(_) => todo!(),
-            hir::Type::Void(_) => todo!(),
-            hir::Type::Bool(_) => todo!(),
-            hir::Type::Int(_) => todo!(),
-            hir::Type::Float(_) => todo!(),
-            hir::Type::Pointer(_) => todo!(),
-            hir::Type::Array(_) => todo!(),
-            hir::Type::Slice(_) => todo!(),
-            hir::Type::Function(_) => todo!(),
-            hir::Type::Tuple(_) => todo!(),
-            hir::Type::Generic(_) => todo!(),
-        }
     }
 }

@@ -19,3 +19,5 @@ ritec-mir = { version = "0.1.0", path = "crates/ritec-mir" }
 ritec-parser = { version = "0.1.0", path = "crates/ritec-parser" }
 
 clap = { version = "4.0", features = ["derive"] }
+tracing = "0.1"
+tracing-subscriber = "0.3"

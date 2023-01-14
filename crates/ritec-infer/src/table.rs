@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+use ritec_core::trace;
+
 use crate::{InferError, InferType, TypeVariable, Unifier, UnifyResult};
 
 #[derive(Clone, Debug, PartialEq)]
@@ -34,8 +36,10 @@ impl InferenceTable {
         self.variables.get(var).cloned()
     }
 
-    pub fn substite(&mut self, variable: TypeVariable, ty: InferType) {
-        self.variables.insert(variable, ty);
+    pub fn substite(&mut self, var: TypeVariable, ty: InferType) {
+        trace!("substite: {:?} -> {:?}", var, ty);
+
+        self.variables.insert(var, ty);
     }
 
     pub fn get_substitution(&self, var: &TypeVariable) -> Option<InferType> {

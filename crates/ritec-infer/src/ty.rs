@@ -1,29 +1,67 @@
-use ritec_mir::IntType;
+use std::fmt::{self, Debug};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+use ritec_core::{Generic, Span};
+use ritec_mir::{FloatType, IntType};
+
+#[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TypeVariable {
     pub index: usize,
 }
 
-#[derive(Clone, Debug, PartialEq)]
+impl Debug for TypeVariable {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "T{}", self.index)
+    }
+}
+
+#[derive(Clone, PartialEq)]
 pub enum ItemId {
     Void,
     Bool,
     Int(IntType),
+    Float(FloatType),
+    Pointer,
+    Array(usize),
+    Slice,
+    Function,
+    Tuple,
+    Generic(Generic),
 }
 
-#[derive(Clone, Debug, PartialEq)]
+impl Debug for ItemId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Void => write!(f, "void"),
+            Self::Bool => write!(f, "bool"),
+            Self::Int(ty) => write!(f, "{}", ty),
+            Self::Float(ty) => write!(f, "{}", ty),
+            Self::Pointer => write!(f, "*"),
+            Self::Array(size) => write!(f, "[{}]", size),
+            Self::Slice => write!(f, "[]"),
+            Self::Function => write!(f, "fn"),
+            Self::Tuple => write!(f, "()"),
+            Self::Generic(generic) => write!(f, "{}", generic),
+        }
+    }
+}
+
+#[derive(Clone, PartialEq)]
 pub struct TypeApplication {
     pub item: ItemId,
     pub arguments: Vec<InferType>,
+    pub span: Span,
 }
 
-impl TypeApplication {
-    pub fn new(item: ItemId) -> Self {
-        Self {
-            item,
-            arguments: Vec::new(),
-        }
+impl Debug for TypeApplication {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let arguments = self
+            .arguments
+            .iter()
+            .map(|ty| format!("{:?}", ty))
+            .collect::<Vec<_>>()
+            .join(", ");
+
+        write!(f, "{:?}<{}>", self.item, arguments)
     }
 }
 
@@ -31,11 +69,23 @@ impl TypeApplication {
 #[derive(Clone, Debug, PartialEq)]
 pub struct TypeProjection {}
 
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, PartialEq)]
 pub enum InferType {
     Var(TypeVariable),
     Apply(TypeApplication),
     Proj(TypeProjection),
+}
+
+impl InferType {
+    pub fn apply(item: ItemId, arguments: impl Into<Vec<InferType>>, span: Span) -> Self {
+        let apply = TypeApplication {
+            item,
+            arguments: arguments.into(),
+            span,
+        };
+
+        Self::Apply(apply)
+    }
 }
 
 impl From<TypeVariable> for InferType {
@@ -53,5 +103,15 @@ impl From<TypeApplication> for InferType {
 impl From<TypeProjection> for InferType {
     fn from(value: TypeProjection) -> Self {
         Self::Proj(value)
+    }
+}
+
+impl Debug for InferType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Var(var) => write!(f, "{:?}", var),
+            Self::Apply(apply) => write!(f, "{:?}", apply),
+            Self::Proj(proj) => write!(f, "{:?}", proj),
+        }
     }
 }

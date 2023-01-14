@@ -124,14 +124,19 @@ impl<T> Arena<T> {
         }
     }
 
+    /// Removes the item at the arena without freeing the id.
+    #[inline]
+    pub fn take(&mut self, id: Id<T>) -> Option<T> {
+        self.arena.get_mut(id.as_raw_index())?.take()
+    }
+
     /// Remove an item from the arena, this will free the id for reuse.
     #[inline]
     pub fn remove(&mut self, id: Id<T>) -> Option<T> {
-        let index = id.as_raw_index();
-        let item = self.arena.get_mut(index)?.take();
+        let item = self.take(id);
 
         if item.is_some() {
-            self.free.push(index);
+            self.free.push(id.as_raw_index());
         }
 
         item
@@ -201,6 +206,12 @@ impl<T> Arena<T> {
             .iter_mut()
             .enumerate()
             .filter_map(|(i, v)| v.as_mut().map(|v| (Id::from_raw_index(i), v)))
+    }
+
+    #[inline]
+    pub fn clear(&mut self) {
+        self.arena.clear();
+        self.free.clear();
     }
 }
 

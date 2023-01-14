@@ -1,22 +1,23 @@
-use std::ops::{Index, IndexMut};
+use std::{
+    fmt::Display,
+    ops::{Index, IndexMut},
+};
 
 use ritec_core::Arena;
 
-use crate::{Expr, ExprId, Local, LocalId, Stmt, StmtId};
+use crate::{Block, BlockId, Local, LocalId};
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Body {
     pub locals: Arena<Local>,
-    pub exprs: Arena<Expr>,
-    pub stmts: Arena<Stmt>,
+    pub blocks: Arena<Block>,
 }
 
 impl Body {
     pub const fn new() -> Self {
         Self {
             locals: Arena::new(),
-            exprs: Arena::new(),
-            stmts: Arena::new(),
+            blocks: Arena::new(),
         }
     }
 }
@@ -35,30 +36,31 @@ impl IndexMut<LocalId> for Body {
     }
 }
 
-impl Index<ExprId> for Body {
-    type Output = Expr;
+impl Index<BlockId> for Body {
+    type Output = Block;
 
-    fn index(&self, index: ExprId) -> &Self::Output {
-        &self.exprs[index]
+    fn index(&self, index: BlockId) -> &Self::Output {
+        &self.blocks[index]
     }
 }
 
-impl IndexMut<ExprId> for Body {
-    fn index_mut(&mut self, index: ExprId) -> &mut Self::Output {
-        &mut self.exprs[index]
+impl IndexMut<BlockId> for Body {
+    fn index_mut(&mut self, index: BlockId) -> &mut Self::Output {
+        &mut self.blocks[index]
     }
 }
 
-impl Index<StmtId> for Body {
-    type Output = Stmt;
+impl Display for Body {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for (id, local) in self.locals.iter() {
+            writeln!(f, "\tlet _{}: {}", id.as_raw_index(), local)?;
+        }
 
-    fn index(&self, index: StmtId) -> &Self::Output {
-        &self.stmts[index]
-    }
-}
+        for (id, block) in self.blocks.iter() {
+            writeln!(f)?;
+            write!(f, "\tbb{}: {}", id.as_raw_index(), block)?;
+        }
 
-impl IndexMut<StmtId> for Body {
-    fn index_mut(&mut self, index: StmtId) -> &mut Self::Output {
-        &mut self.stmts[index]
+        Ok(())
     }
 }

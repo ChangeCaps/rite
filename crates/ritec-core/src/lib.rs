@@ -13,3 +13,5 @@ pub use ident::*;
 pub use integer::*;
 pub use source_map::*;
 pub use span::*;
+
+pub use tracing::{debug, error, info, trace, warn};

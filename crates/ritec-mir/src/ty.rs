@@ -3,15 +3,7 @@ use std::fmt::{self, Display};
 use ritec_core::{FloatSize, Generic, IntSize, Span};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct VoidType {
-    pub span: Span,
-}
-
-impl VoidType {
-    pub const fn new(span: Span) -> Self {
-        Self { span }
-    }
-}
+pub struct VoidType;
 
 impl Display for VoidType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -20,15 +12,7 @@ impl Display for VoidType {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct BoolType {
-    pub span: Span,
-}
-
-impl BoolType {
-    pub const fn new(span: Span) -> Self {
-        Self { span }
-    }
-}
+pub struct BoolType;
 
 impl Display for BoolType {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -40,16 +24,11 @@ impl Display for BoolType {
 pub struct IntType {
     pub signed: bool,
     pub size: Option<IntSize>,
-    pub span: Span,
 }
 
 impl IntType {
     pub const fn new(signed: bool, size: Option<IntSize>) -> Self {
-        Self {
-            signed,
-            size,
-            span: Span::DUMMY,
-        }
+        Self { signed, size }
     }
 
     pub const fn byte_size(&self) -> Option<usize> {
@@ -119,15 +98,11 @@ impl Display for IntType {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct FloatType {
     pub size: FloatSize,
-    pub span: Span,
 }
 
 impl FloatType {
     pub const fn new(size: FloatSize) -> Self {
-        Self {
-            size,
-            span: Span::DUMMY,
-        }
+        Self { size }
     }
 
     pub const fn byte_size(&self) -> usize {
@@ -152,14 +127,12 @@ impl Display for FloatType {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct PointerType {
     pub pointee: Box<Type>,
-    pub span: Span,
 }
 
 impl PointerType {
     pub fn new(pointee: impl Into<Box<Type>>) -> Self {
         Self {
             pointee: pointee.into(),
-            span: Span::DUMMY,
         }
     }
 
@@ -178,7 +151,6 @@ impl Display for PointerType {
 pub struct ArrayType {
     pub element: Box<Type>,
     pub size: usize,
-    pub span: Span,
 }
 
 impl ArrayType {
@@ -186,7 +158,6 @@ impl ArrayType {
         Self {
             element: element.into(),
             size: length,
-            span: Span::DUMMY,
         }
     }
 }
@@ -200,14 +171,12 @@ impl Display for ArrayType {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct SliceType {
     pub element: Box<Type>,
-    pub span: Span,
 }
 
 impl SliceType {
     pub fn new(element: impl Into<Box<Type>>) -> Self {
         Self {
             element: element.into(),
-            span: Span::DUMMY,
         }
     }
 }
@@ -222,7 +191,6 @@ impl Display for SliceType {
 pub struct FunctionType {
     pub arguments: Vec<Type>,
     pub return_type: Box<Type>,
-    pub span: Span,
 }
 
 impl FunctionType {
@@ -230,7 +198,6 @@ impl FunctionType {
         Self {
             arguments: arguments.into(),
             return_type: return_type.into(),
-            span: Span::DUMMY,
         }
     }
 }
@@ -251,14 +218,12 @@ impl Display for FunctionType {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct TupleType {
     pub fields: Vec<Type>,
-    pub span: Span,
 }
 
 impl TupleType {
     pub fn new(fields: impl Into<Vec<Type>>) -> Self {
         Self {
             fields: fields.into(),
-            span: Span::DUMMY,
         }
     }
 }
@@ -273,7 +238,6 @@ impl Display for TupleType {
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct GenericType {
     pub generic: Generic,
-    pub span: Span,
 }
 
 impl Display for GenericType {
@@ -297,9 +261,9 @@ pub enum Type {
 }
 
 impl Type {
-    pub const VOID: Self = Self::void(Span::DUMMY);
+    pub const VOID: Self = Self::Void(VoidType);
 
-    pub const BOOL: Self = Self::bool(Span::DUMMY);
+    pub const BOOL: Self = Self::Bool(BoolType);
 
     pub const I8: Self = Self::Int(IntType::I8);
     pub const I16: Self = Self::Int(IntType::I16);
@@ -319,14 +283,6 @@ impl Type {
     pub const F16: Self = Self::Float(FloatType::F16);
     pub const F32: Self = Self::Float(FloatType::F32);
     pub const F64: Self = Self::Float(FloatType::F64);
-
-    pub const fn void(span: Span) -> Self {
-        Self::Void(VoidType::new(span))
-    }
-
-    pub const fn bool(span: Span) -> Self {
-        Self::Bool(BoolType::new(span))
-    }
 
     pub const fn is_void(&self) -> bool {
         matches!(self, Type::Void(_))

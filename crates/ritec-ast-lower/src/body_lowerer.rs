@@ -37,6 +37,7 @@ impl<'a> BodyLowerer<'a> {
     pub fn lower_stmt(&mut self, stmt: &ast::Stmt) -> Result<hir::StmtId, Diagnostic> {
         let stmt = match stmt {
             ast::Stmt::Let(stmt) => self.lower_let_stmt(stmt)?,
+            ast::Stmt::Expr(stmt) => self.lower_expr_stmt(stmt)?,
         };
 
         Ok(self.body.stmts.push(stmt))
@@ -71,13 +72,46 @@ impl<'a> BodyLowerer<'a> {
         Ok(hir::Stmt::Let(let_stmt))
     }
 
+    pub fn lower_expr_stmt(&mut self, stmt: &ast::ExprStmt) -> Result<hir::Stmt, Diagnostic> {
+        let expr = self.lower_expr(&stmt.expr)?;
+
+        let expr_stmt = hir::ExprStmt {
+            expr,
+            id: self.body.next_universe_id(),
+            span: stmt.span,
+        };
+
+        Ok(hir::Stmt::Expr(expr_stmt))
+    }
+
     pub fn lower_expr(&mut self, expr: &ast::Expr) -> Result<hir::ExprId, Diagnostic> {
         let expr = match expr {
             ast::Expr::Path(expr) => self.lower_path_expr(expr)?,
             ast::Expr::Unary(expr) => self.lower_unary_expr(expr)?,
+            ast::Expr::Assign(expr) => self.lower_assign_expr(expr)?,
+            ast::Expr::Return(expr) => self.lower_return_expr(expr)?,
         };
 
         Ok(self.body.exprs.push(expr))
+    }
+
+    pub fn lower_path_expr(&mut self, expr: &ast::PathExpr) -> Result<hir::Expr, Diagnostic> {
+        if let Some(ident) = expr.path.get_ident() {
+            if let Some(local) = self.find_local(ident) {
+                let local_expr = hir::LocalExpr {
+                    id: self.body.next_universe_id(),
+                    local,
+                    span: expr.span,
+                };
+
+                return Ok(hir::Expr::Local(local_expr));
+            }
+        }
+
+        let err = Diagnostic::error("expected a local variable")
+            .with_message_span("variable not found", expr.span);
+
+        Err(err)
     }
 
     pub fn lower_unary_expr(&mut self, expr: &ast::UnaryExpr) -> Result<hir::Expr, Diagnostic> {
@@ -107,23 +141,31 @@ impl<'a> BodyLowerer<'a> {
         Ok(hir::Expr::Deref(deref_expr))
     }
 
-    pub fn lower_path_expr(&mut self, expr: &ast::PathExpr) -> Result<hir::Expr, Diagnostic> {
-        if let Some(ident) = expr.path.get_ident() {
-            if let Some(local) = self.find_local(ident) {
-                let local_expr = hir::LocalExpr {
-                    id: self.body.next_universe_id(),
-                    local,
-                    span: expr.span(),
-                };
+    pub fn lower_assign_expr(&mut self, expr: &ast::AssignExpr) -> Result<hir::Expr, Diagnostic> {
+        let assign_expr = hir::AssignExpr {
+            lhs: self.lower_expr(&expr.lhs)?,
+            rhs: self.lower_expr(&expr.rhs)?,
+            id: self.body.next_universe_id(),
+            span: expr.span,
+        };
 
-                return Ok(hir::Expr::Local(local_expr));
-            }
-        }
+        Ok(hir::Expr::Assign(assign_expr))
+    }
 
-        let err = Diagnostic::error("expected a local variable")
-            .with_message_span("variable not found", expr.span());
+    pub fn lower_return_expr(&mut self, expr: &ast::ReturnExpr) -> Result<hir::Expr, Diagnostic> {
+        let value = if let Some(expr) = &expr.value {
+            Some(self.lower_expr(expr)?)
+        } else {
+            None
+        };
 
-        Err(err)
+        let return_expr = hir::ReturnExpr {
+            value,
+            id: self.body.next_universe_id(),
+            span: expr.span,
+        };
+
+        Ok(hir::Expr::Return(return_expr))
     }
 
     pub fn find_local(&self, ident: &Ident) -> Option<hir::LocalId> {

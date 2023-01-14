@@ -1,4 +1,10 @@
-fn main<T>(x: T) -> void {
-	let y = x;
-	let z = &y;
+fn foo(y: i32, z: i32) -> i32 {
+	
+}
+
+fn main(x: i32) -> i32 {
+	let y = &x;
+	*y = x;
+
+	return *y;
 }

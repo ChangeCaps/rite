@@ -65,6 +65,7 @@ keyword! {
     "super" => Super,
     "let" => Let,
     "fn" => Fn,
+    "return" => Return,
 }
 
 impl Display for KeywordKind {

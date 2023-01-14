@@ -30,6 +30,10 @@ impl TokenStream {
         self.tokens.get(index)
     }
 
+    pub fn last(&self) -> Option<&TokenTree> {
+        self.tokens.last()
+    }
+
     pub fn lex(source: &str, file: Option<FileId>) -> Result<Self, LexerError> {
         let mut lexer = Lexer::new(source, file);
         lexer.lex_all()

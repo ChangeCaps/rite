@@ -94,7 +94,7 @@ impl<'a> ParseBuffer<'a> {
         if self.index < self.stream.len() {
             self.stream[self.index].span().shrink_to_lo()
         } else {
-            self.stream[self.index - 1].span().shrink_to_hi()
+            self.stream.last().unwrap().span().shrink_to_hi()
         }
     }
 
@@ -168,6 +168,7 @@ impl<'a> ParseBuffer<'a> {
         }
     }
 
+    #[track_caller]
     pub fn expected<T: Display>(&self, expected: T) -> Diagnostic {
         match self.peek() {
             Some(token) => Diagnostic::error(format!("expected `{}`", expected))

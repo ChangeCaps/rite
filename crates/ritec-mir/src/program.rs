@@ -1,4 +1,7 @@
-use std::ops::{Index, IndexMut};
+use std::{
+    fmt::Display,
+    ops::{Index, IndexMut},
+};
 
 use ritec_core::Arena;
 
@@ -28,5 +31,15 @@ impl Index<FunctionId> for Program {
 impl IndexMut<FunctionId> for Program {
     fn index_mut(&mut self, index: FunctionId) -> &mut Self::Output {
         &mut self.functions[index]
+    }
+}
+
+impl Display for Program {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        for function in self.functions.values() {
+            writeln!(f, "{}", function)?;
+        }
+
+        Ok(())
     }
 }
