@@ -53,7 +53,13 @@ impl IndexMut<BlockId> for Body {
 impl Display for Body {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for (id, local) in self.locals.iter() {
-            writeln!(f, "\tlet _{}: {}", id.as_raw_index(), local)?;
+            writeln!(
+                f,
+                "\tlet _{}: {}; {}",
+                id.as_raw_index(),
+                local.ty,
+                local.comment()
+            )?;
         }
 
         for (id, block) in self.blocks.iter() {

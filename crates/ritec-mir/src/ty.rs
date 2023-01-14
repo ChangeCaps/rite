@@ -1,24 +1,6 @@
 use std::fmt::{self, Display};
 
-use ritec_core::{FloatSize, Generic, IntSize, Span};
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct VoidType;
-
-impl Display for VoidType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "void")
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct BoolType;
-
-impl Display for BoolType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "bool")
-    }
-}
+use ritec_core::{FloatSize, Generic, IntSize};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct IntType {
@@ -236,20 +218,9 @@ impl Display for TupleType {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct GenericType {
-    pub generic: Generic,
-}
-
-impl Display for GenericType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.generic)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Type {
-    Void(VoidType),
-    Bool(BoolType),
+    Void,
+    Bool,
     Int(IntType),
     Float(FloatType),
     Pointer(PointerType),
@@ -257,14 +228,10 @@ pub enum Type {
     Slice(SliceType),
     Function(FunctionType),
     Tuple(TupleType),
-    Generic(GenericType),
+    Generic(Generic),
 }
 
 impl Type {
-    pub const VOID: Self = Self::Void(VoidType);
-
-    pub const BOOL: Self = Self::Bool(BoolType);
-
     pub const I8: Self = Self::Int(IntType::I8);
     pub const I16: Self = Self::Int(IntType::I16);
     pub const I32: Self = Self::Int(IntType::I32);
@@ -285,7 +252,7 @@ impl Type {
     pub const F64: Self = Self::Float(FloatType::F64);
 
     pub const fn is_void(&self) -> bool {
-        matches!(self, Type::Void(_))
+        matches!(self, Type::Void)
     }
 
     pub const fn is_pointer(&self) -> bool {
@@ -316,8 +283,8 @@ impl Type {
 impl Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Type::Void(ty) => ty.fmt(f),
-            Type::Bool(ty) => ty.fmt(f),
+            Type::Void => write!(f, "void"),
+            Type::Bool => write!(f, "bool"),
             Type::Int(ty) => ty.fmt(f),
             Type::Float(ty) => ty.fmt(f),
             Type::Pointer(ty) => ty.fmt(f),
@@ -327,18 +294,6 @@ impl Display for Type {
             Type::Tuple(ty) => ty.fmt(f),
             Type::Generic(ty) => ty.fmt(f),
         }
-    }
-}
-
-impl From<VoidType> for Type {
-    fn from(ty: VoidType) -> Self {
-        Self::Void(ty)
-    }
-}
-
-impl From<BoolType> for Type {
-    fn from(ty: BoolType) -> Self {
-        Self::Bool(ty)
     }
 }
 
@@ -384,8 +339,8 @@ impl From<TupleType> for Type {
     }
 }
 
-impl From<GenericType> for Type {
-    fn from(ty: GenericType) -> Self {
+impl From<Generic> for Type {
+    fn from(ty: Generic) -> Self {
         Self::Generic(ty)
     }
 }
@@ -396,8 +351,8 @@ mod tests {
 
     #[test]
     fn display() {
-        assert_eq!(Type::VOID.to_string(), "void");
-        assert_eq!(Type::BOOL.to_string(), "bool");
+        assert_eq!(Type::Void.to_string(), "void");
+        assert_eq!(Type::Bool.to_string(), "bool");
 
         assert_eq!(Type::I8.to_string(), "i8");
         assert_eq!(Type::I16.to_string(), "i16");

@@ -122,12 +122,7 @@ impl<'a> TypeLowerer<'a> {
     pub fn lower_path_type(&self, ty: &ast::PathType) -> Result<hir::Type, Diagnostic> {
         if let Some(ident) = ty.path.get_ident() {
             if let Some(generic) = self.generics.get_ident(ident) {
-                let generic_type = hir::GenericType {
-                    generic: generic.clone(),
-                    span: ty.span,
-                };
-
-                return Ok(hir::Type::Generic(generic_type));
+                return Ok(hir::Type::Generic(generic.clone()));
             }
 
             todo!()

@@ -5,6 +5,17 @@ use std::{
     ops::{Index, IndexMut},
 };
 
+const ID_REPLACEMENTS: &[(&str, &str)] = &[
+    ("ritec_hir::module::Module", "hir::Module"),
+    ("ritec_hir::function::Function", "hir::Function"),
+    ("ritec_hir::local::Local", "hir::Local"),
+    ("ritec_hir::expr::Expr", "hir::Expr"),
+    ("ritec_hir::stmt::Stmt", "hir::Stmt"),
+    ("ritec_mir::local::Local", "mir::Local"),
+    ("ritec_mir_build::thir::expr::Expr", "thir::Expr"),
+    ("ritec_mir_build::thir::stmt::Stmt", "thir::Stmt"),
+];
+
 pub struct Id<T> {
     index: usize,
     marker: PhantomData<fn() -> T>,
@@ -28,6 +39,16 @@ impl<T> Id<T> {
             marker: PhantomData,
         }
     }
+
+    pub fn name(&self) -> String {
+        let mut name = String::from(std::any::type_name::<T>());
+
+        for (from, to) in ID_REPLACEMENTS {
+            name = name.replace(from, to);
+        }
+
+        format!("{}[{}]", name, self.index)
+    }
 }
 
 impl<T> Clone for Id<T> {
@@ -43,7 +64,7 @@ impl<T> Copy for Id<T> {}
 
 impl<T> Debug for Id<T> {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}[{}]", std::any::type_name::<T>(), self.index)
+        f.write_str(&self.name())
     }
 }
 

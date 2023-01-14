@@ -1,8 +1,8 @@
-use std::fmt::Display;
-
 use ritec_core::{Id, Ident};
 
 use crate::Type;
+
+pub type LocalId = Id<Local>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Local {
@@ -10,16 +10,22 @@ pub struct Local {
     pub ty: Type,
 }
 
-pub type LocalId = Id<Local>;
+impl Local {
+    pub const fn new(ty: Type) -> Self {
+        Self { ident: None, ty }
+    }
 
-impl Display for Local {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, ": {}", self.ty)?;
-
-        if let Some(ident) = &self.ident {
-            write!(f, " // {}", ident)?;
+    pub const fn with_ident(ident: Ident, ty: Type) -> Self {
+        Self {
+            ident: Some(ident),
+            ty,
         }
+    }
 
-        Ok(())
+    pub fn comment(&self) -> String {
+        match &self.ident {
+            Some(ident) => format!("// {}", ident),
+            None => String::new(),
+        }
     }
 }

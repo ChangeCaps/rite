@@ -1,7 +1,7 @@
 use ritec_core::trace;
 
 use crate::{
-    Constraint, InferError, InferType, InferenceTable, Normalize, TypeApplication, TypeProjection,
+    Constraint, Error, InferType, InferenceTable, Normalize, TypeApplication, TypeProjection,
     TypeVariable,
 };
 
@@ -29,10 +29,10 @@ impl<'a> Unifier<'a> {
         }
     }
 
-    pub fn unify(&mut self, a: &InferType, b: &InferType) -> Result<(), InferError> {
-        if let Some(ty) = self.table.normalize(a) {
+    pub fn unify(&mut self, a: &InferType, b: &InferType) -> Result<(), Error> {
+        if let Some(ty) = self.table.normalize_shallow(a) {
             return self.unify(&ty, b);
-        } else if let Some(ty) = self.table.normalize(b) {
+        } else if let Some(ty) = self.table.normalize_shallow(b) {
             return self.unify(a, &ty);
         }
 
@@ -49,7 +49,7 @@ impl<'a> Unifier<'a> {
         }
     }
 
-    pub fn unify_var_var(&mut self, a: &TypeVariable, b: &TypeVariable) -> Result<(), InferError> {
+    pub fn unify_var_var(&mut self, a: &TypeVariable, b: &TypeVariable) -> Result<(), Error> {
         if a == b {
             return Ok(());
         }
@@ -59,11 +59,7 @@ impl<'a> Unifier<'a> {
         Ok(())
     }
 
-    pub fn unify_proj_proj(
-        &mut self,
-        a: &TypeProjection,
-        b: &TypeProjection,
-    ) -> Result<(), InferError> {
+    pub fn unify_proj_proj(&mut self, a: &TypeProjection, b: &TypeProjection) -> Result<(), Error> {
         let var = InferType::Var(self.table.new_variable());
         self.unify_proj_ty(a, &var)?;
         self.unify_proj_ty(b, &var)?;
@@ -71,7 +67,7 @@ impl<'a> Unifier<'a> {
         Ok(())
     }
 
-    pub fn unify_proj_ty(&mut self, a: &TypeProjection, b: &InferType) -> Result<(), InferError> {
+    pub fn unify_proj_ty(&mut self, a: &TypeProjection, b: &InferType) -> Result<(), Error> {
         let noramlize = Normalize {
             projection: a.clone(),
             expected: b.clone(),
@@ -82,7 +78,7 @@ impl<'a> Unifier<'a> {
         Ok(())
     }
 
-    pub fn unify_var_ty(&mut self, a: &TypeVariable, b: &InferType) -> Result<(), InferError> {
+    pub fn unify_var_ty(&mut self, a: &TypeVariable, b: &InferType) -> Result<(), Error> {
         self.table.substite(a.clone(), b.clone());
 
         Ok(())
@@ -92,13 +88,13 @@ impl<'a> Unifier<'a> {
         &mut self,
         a: &TypeApplication,
         b: &TypeApplication,
-    ) -> Result<(), InferError> {
+    ) -> Result<(), Error> {
         if a.item != b.item {
-            return Err(InferError::Mismatch(a.clone(), b.clone()));
+            return Err(Error::Mismatch(a.clone(), b.clone()));
         }
 
         if a.arguments.len() != b.arguments.len() {
-            return Err(InferError::ArgumentCount(a.clone(), b.clone()));
+            return Err(Error::ArgumentCount(a.clone(), b.clone()));
         }
 
         for (a, b) in a.arguments.iter().zip(b.arguments.iter()) {

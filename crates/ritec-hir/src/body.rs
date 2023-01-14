@@ -8,11 +8,11 @@ use ritec_core::Arena;
 use crate::{Expr, ExprId, Local, LocalId, Stmt};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct UniverseId {
+pub struct HirId {
     pub index: usize,
 }
 
-impl UniverseId {
+impl HirId {
     pub const ZERO: Self = Self { index: 0 };
 
     pub fn increment(&mut self) -> Self {
@@ -22,9 +22,9 @@ impl UniverseId {
     }
 }
 
-impl Debug for UniverseId {
+impl Debug for HirId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "Universe[{}]", self.index)
+        write!(f, "Hir[{}]", self.index)
     }
 }
 
@@ -33,7 +33,7 @@ pub struct Body {
     pub locals: Arena<Local>,
     pub exprs: Arena<Expr>,
     pub stmts: Arena<Stmt>,
-    pub next_universe_id: UniverseId,
+    pub next_id: HirId,
 }
 
 impl Body {
@@ -42,12 +42,12 @@ impl Body {
             locals: Arena::new(),
             exprs: Arena::new(),
             stmts: Arena::new(),
-            next_universe_id: UniverseId::ZERO,
+            next_id: HirId::ZERO,
         }
     }
 
-    pub fn next_universe_id(&mut self) -> UniverseId {
-        self.next_universe_id.increment()
+    pub fn next_universe_id(&mut self) -> HirId {
+        self.next_id.increment()
     }
 }
 

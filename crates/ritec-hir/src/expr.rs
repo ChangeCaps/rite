@@ -1,6 +1,6 @@
 use ritec_core::{Id, Span};
 
-use crate::{LocalId, UniverseId};
+use crate::{HirId, LocalId};
 
 pub type ExprId = Id<Expr>;
 
@@ -24,7 +24,7 @@ impl Expr {
         }
     }
 
-    pub const fn id(&self) -> UniverseId {
+    pub const fn id(&self) -> HirId {
         match self {
             Expr::Local(expr) => expr.id,
             Expr::Ref(expr) => expr.id,
@@ -35,24 +35,54 @@ impl Expr {
     }
 }
 
+impl From<LocalExpr> for Expr {
+    fn from(expr: LocalExpr) -> Self {
+        Self::Local(expr)
+    }
+}
+
+impl From<RefExpr> for Expr {
+    fn from(expr: RefExpr) -> Self {
+        Self::Ref(expr)
+    }
+}
+
+impl From<DerefExpr> for Expr {
+    fn from(expr: DerefExpr) -> Self {
+        Self::Deref(expr)
+    }
+}
+
+impl From<AssignExpr> for Expr {
+    fn from(expr: AssignExpr) -> Self {
+        Self::Assign(expr)
+    }
+}
+
+impl From<ReturnExpr> for Expr {
+    fn from(expr: ReturnExpr) -> Self {
+        Self::Return(expr)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct LocalExpr {
     pub local: LocalId,
-    pub id: UniverseId,
+    pub id: HirId,
     pub span: Span,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct RefExpr {
     pub operand: ExprId,
-    pub id: UniverseId,
+    pub id: HirId,
     pub span: Span,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct DerefExpr {
     pub operand: ExprId,
-    pub id: UniverseId,
+    pub id: HirId,
     pub span: Span,
 }
 
@@ -66,13 +96,13 @@ pub enum UnaryOp {
 pub struct AssignExpr {
     pub lhs: ExprId,
     pub rhs: ExprId,
-    pub id: UniverseId,
+    pub id: HirId,
     pub span: Span,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ReturnExpr {
     pub value: Option<ExprId>,
-    pub id: UniverseId,
+    pub id: HirId,
     pub span: Span,
 }

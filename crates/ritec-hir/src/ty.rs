@@ -175,18 +175,6 @@ impl Display for TupleType {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
-pub struct GenericType {
-    pub generic: Generic,
-    pub span: Span,
-}
-
-impl Display for GenericType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.generic)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Type {
     Inferred(InferredType),
     Void(VoidType),
@@ -198,7 +186,7 @@ pub enum Type {
     Slice(SliceType),
     Function(FunctionType),
     Tuple(TupleType),
-    Generic(GenericType),
+    Generic(Generic),
 }
 
 impl Type {
@@ -214,7 +202,7 @@ impl Type {
             Type::Slice(t) => t.span,
             Type::Function(t) => t.span,
             Type::Tuple(t) => t.span,
-            Type::Generic(t) => t.span,
+            Type::Generic(t) => t.span(),
         }
     }
 

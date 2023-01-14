@@ -1,6 +1,6 @@
 use ritec_core::{Id, Span};
 
-use crate::{ExprId, LocalId, UniverseId};
+use crate::{ExprId, HirId, LocalId};
 
 pub type StmtId = Id<Stmt>;
 
@@ -18,7 +18,7 @@ impl Stmt {
         }
     }
 
-    pub const fn id(&self) -> UniverseId {
+    pub const fn id(&self) -> HirId {
         match self {
             Self::Let(stmt) => stmt.id,
             Self::Expr(stmt) => stmt.id,
@@ -26,17 +26,29 @@ impl Stmt {
     }
 }
 
+impl From<LetStmt> for Stmt {
+    fn from(stmt: LetStmt) -> Self {
+        Self::Let(stmt)
+    }
+}
+
+impl From<ExprStmt> for Stmt {
+    fn from(stmt: ExprStmt) -> Self {
+        Self::Expr(stmt)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct LetStmt {
     pub local: LocalId,
     pub init: Option<ExprId>,
-    pub id: UniverseId,
+    pub id: HirId,
     pub span: Span,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ExprStmt {
     pub expr: ExprId,
-    pub id: UniverseId,
+    pub id: HirId,
     pub span: Span,
 }

@@ -1,7 +1,7 @@
 use std::fmt::{self, Debug};
 
 use ritec_core::{Generic, Span};
-use ritec_mir::{FloatType, IntType};
+use ritec_hir as hir;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TypeVariable {
@@ -18,8 +18,8 @@ impl Debug for TypeVariable {
 pub enum ItemId {
     Void,
     Bool,
-    Int(IntType),
-    Float(FloatType),
+    Int(hir::IntType),
+    Float(hir::FloatType),
     Pointer,
     Array(usize),
     Slice,
@@ -77,6 +77,14 @@ pub enum InferType {
 }
 
 impl InferType {
+    pub const fn void(span: Span) -> Self {
+        Self::Apply(TypeApplication {
+            item: ItemId::Void,
+            arguments: Vec::new(),
+            span,
+        })
+    }
+
     pub fn apply(item: ItemId, arguments: impl Into<Vec<InferType>>, span: Span) -> Self {
         let apply = TypeApplication {
             item,

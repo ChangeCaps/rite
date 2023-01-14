@@ -6,7 +6,7 @@ use std::{
     sync::atomic::{AtomicUsize, Ordering},
 };
 
-use crate::Ident;
+use crate::{Ident, Span};
 
 #[derive(Clone, Debug)]
 pub struct Generic {
@@ -23,6 +23,10 @@ impl Generic {
             ident,
             id: ID.fetch_add(1, Ordering::SeqCst),
         }
+    }
+
+    pub const fn span(&self) -> Span {
+        self.ident.span()
     }
 }
 
