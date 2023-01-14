@@ -12,6 +12,7 @@ members = ["crates/*"]
 ritec-ast = { version = "0.1.0", path = "crates/ritec-ast" }
 ritec-ast-lower = { version = "0.1.0", path = "crates/ritec-ast-lower" }
 ritec-core = { version = "0.1.0", path = "crates/ritec-core" }
+ritec-codegen-llvm = { version = "0.1.0", path = "crates/ritec-codegen-llvm" }
 ritec-error = { version = "0.1.0", path = "crates/ritec-error" }
 ritec-hir = { version = "0.1.0", path = "crates/ritec-hir" }
 ritec-mir = { version = "0.1.0", path = "crates/ritec-mir" }

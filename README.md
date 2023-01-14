@@ -1,5 +1,5 @@
 # Rite
-Rite is a programming
+Rite is a programming language.
 
 # Compiler
 The compiler is separated into a few different steps.
