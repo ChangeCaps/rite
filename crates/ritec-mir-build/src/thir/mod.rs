@@ -6,19 +6,19 @@ pub use builder::*;
 pub use expr::*;
 pub use stmt::*;
 
+use std::ops::Index;
+
 use ritec_core::Arena;
-use ritec_hir as hir;
-use ritec_infer::Error as InferError;
-use ritec_mir::Local;
+use ritec_mir::{Local, LocalId};
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct Thir {
+pub struct Body {
     pub locals: Arena<Local>,
     pub exprs: Arena<Expr>,
     pub stmts: Arena<Stmt>,
 }
 
-impl Thir {
+impl Body {
     pub const fn new() -> Self {
         Self {
             locals: Arena::new(),
@@ -26,9 +26,28 @@ impl Thir {
             stmts: Arena::new(),
         }
     }
+}
 
-    pub fn from_hir(hir: &hir::Body) -> Result<Self, InferError> {
-        let mut builder = ThirBuilder::new(hir)?;
-        builder.build()
+impl Index<LocalId> for Body {
+    type Output = Local;
+
+    fn index(&self, index: LocalId) -> &Self::Output {
+        &self.locals[index]
+    }
+}
+
+impl Index<ExprId> for Body {
+    type Output = Expr;
+
+    fn index(&self, index: ExprId) -> &Self::Output {
+        &self.exprs[index]
+    }
+}
+
+impl Index<StmtId> for Body {
+    type Output = Stmt;
+
+    fn index(&self, index: StmtId) -> &Self::Output {
+        &self.stmts[index]
     }
 }

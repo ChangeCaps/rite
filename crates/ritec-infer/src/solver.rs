@@ -1,5 +1,6 @@
 use ritec_core::Span;
 use ritec_hir as hir;
+use ritec_mir as mir;
 
 use crate::{Constraint, Error, InferType, InferenceTable, ItemId, Solution, TypeVariable, Unify};
 
@@ -41,6 +42,10 @@ impl Solver {
 
     pub fn set_return_type(&mut self, ty: hir::Type) {
         self.return_type = self.table.infer_hir(&ty);
+    }
+
+    pub fn resolve_return_type(&self) -> Result<mir::Type, Error> {
+        self.table.resolve_mir_type(&self.return_type)
     }
 
     pub fn new_variable(&mut self) -> TypeVariable {

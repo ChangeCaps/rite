@@ -20,6 +20,8 @@ After parsing, the [`AST`](crates/ritec-ast) is lowered into [`HIR`](crates/rite
 
 ## Lowering to [`MIR`](crates/ritec-mir) (mid-level intermediary representation)
 
+### Lowering to [`THIR`](crates/ritec-mir-build) (typed high-level intermediary representation)
+
 ### Type inference
 
 ## Codegen

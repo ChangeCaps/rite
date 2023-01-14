@@ -9,14 +9,14 @@ impl InferenceTable {
             unreachable!("{:?} not registered", id);
         };
 
-        self.resolve_mir_ty(ty)
+        self.resolve_mir_type(ty)
     }
 
-    fn resolve_mir_ty(&self, ty: &InferType) -> Result<mir::Type, Error> {
+    pub fn resolve_mir_type(&self, ty: &InferType) -> Result<mir::Type, Error> {
         match ty {
             InferType::Var(var) => {
                 if let Some(ty) = self.get_substitution(var) {
-                    self.resolve_mir_ty(&ty)
+                    self.resolve_mir_type(&ty)
                 } else {
                     Err(Error::AmbiguousType(var.clone()))
                 }
@@ -24,7 +24,7 @@ impl InferenceTable {
             InferType::Apply(apply) => {
                 let mut args = Vec::new();
                 for arg in &apply.arguments {
-                    args.push(self.resolve_mir_ty(arg)?);
+                    args.push(self.resolve_mir_type(arg)?);
                 }
 
                 Ok(self.resolve_mir_apply(&apply.item, args))

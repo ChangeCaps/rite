@@ -1,9 +1,14 @@
 use ritec_hir as hir;
+use ritec_mir as mir;
 
 use crate::{InferType, InferenceTable, ItemId};
 
 impl InferenceTable {
     pub fn register_hir(&mut self, id: hir::HirId, hir: &hir::Type) -> InferType {
+        if let Some(ty) = self.get_type(id) {
+            return ty.clone();
+        }
+
         let ty = self.infer_hir(hir);
         self.register_type(id, ty.clone());
         ty
@@ -14,8 +19,18 @@ impl InferenceTable {
             hir::Type::Inferred(_) => self.new_variable().into(),
             hir::Type::Void(_) => InferType::apply(ItemId::Void, [], hir.span()),
             hir::Type::Bool(_) => InferType::apply(ItemId::Bool, [], hir.span()),
-            hir::Type::Int(ty) => InferType::apply(ItemId::Int(ty.clone()), [], ty.span),
-            hir::Type::Float(ty) => InferType::apply(ItemId::Float(ty.clone()), [], ty.span),
+            hir::Type::Int(ty) => {
+                let ty = mir::IntType {
+                    signed: ty.signed,
+                    size: ty.size,
+                };
+
+                InferType::apply(ItemId::Int(ty.clone()), [], hir.span())
+            }
+            hir::Type::Float(ty) => {
+                let ty = mir::FloatType { size: ty.size };
+                InferType::apply(ItemId::Float(ty.clone()), [], hir.span())
+            }
             hir::Type::Pointer(ty) => {
                 let pointee = self.infer_hir(&ty.pointee);
                 InferType::apply(ItemId::Pointer, [pointee], ty.span)

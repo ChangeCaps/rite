@@ -16,6 +16,15 @@ pub struct Place {
     pub proj: Vec<Projection>,
 }
 
+impl Place {
+    pub const fn local(local: LocalId) -> Self {
+        Self {
+            local,
+            proj: Vec::new(),
+        }
+    }
+}
+
 impl From<LocalId> for Place {
     fn from(local: LocalId) -> Self {
         Self {
@@ -76,23 +85,23 @@ impl Display for Operand {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
-    Operand(Operand),
+    Use(Operand),
     Address(Place),
 }
 
 impl Value {
-    pub const VOID: Self = Self::Operand(Operand::Void);
+    pub const VOID: Self = Self::Use(Operand::Void);
 
     pub fn as_operand(&self) -> Option<&Operand> {
         match self {
-            Self::Operand(operand) => Some(operand),
+            Self::Use(operand) => Some(operand),
             _ => None,
         }
     }
 
     pub fn to_operand(self) -> Option<Operand> {
         match self {
-            Self::Operand(operand) => Some(operand),
+            Self::Use(operand) => Some(operand),
             _ => None,
         }
     }
@@ -106,14 +115,20 @@ impl Value {
     }
 
     pub fn move_operand(place: impl Into<Place>) -> Self {
-        Self::Operand(Operand::Move(place.into()))
+        Self::Use(Operand::Move(place.into()))
+    }
+}
+
+impl From<Operand> for Value {
+    fn from(operand: Operand) -> Self {
+        Self::Use(operand)
     }
 }
 
 impl Display for Value {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Operand(operand) => write!(f, "{}", operand),
+            Self::Use(operand) => write!(f, "{}", operand),
             Self::Address(place) => write!(f, "&{}", place),
         }
     }
@@ -131,14 +146,20 @@ impl Display for Assign {
     }
 }
 
-pub type StmtId = Id<Stmt>;
+pub type StmtId = Id<Statement>;
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Stmt {
+pub enum Statement {
     Assign(Assign),
 }
 
-impl Display for Stmt {
+impl From<Assign> for Statement {
+    fn from(assign: Assign) -> Self {
+        Self::Assign(assign)
+    }
+}
+
+impl Display for Statement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Assign(assign) => write!(f, "{}", assign),

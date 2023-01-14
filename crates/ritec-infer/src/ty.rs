@@ -1,7 +1,7 @@
 use std::fmt::{self, Debug};
 
 use ritec_core::{Generic, Span};
-use ritec_hir as hir;
+use ritec_mir as mir;
 
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TypeVariable {
@@ -18,8 +18,8 @@ impl Debug for TypeVariable {
 pub enum ItemId {
     Void,
     Bool,
-    Int(hir::IntType),
-    Float(hir::FloatType),
+    Int(mir::IntType),
+    Float(mir::FloatType),
     Pointer,
     Array(usize),
     Slice,

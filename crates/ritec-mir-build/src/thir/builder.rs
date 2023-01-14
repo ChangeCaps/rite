@@ -1,5 +1,5 @@
 use ritec_hir as hir;
-use ritec_infer::{Error as InferError, InferenceTable, Solver};
+use ritec_infer::{Error as InferError, InferenceTable};
 use ritec_mir as mir;
 
 use crate::thir;
@@ -7,23 +7,20 @@ use crate::thir;
 #[derive(Clone, Debug, PartialEq)]
 pub struct ThirBuilder<'a> {
     pub hir: &'a hir::Body,
-    pub thir: thir::Thir,
+    pub thir: thir::Body,
     pub table: InferenceTable,
 }
 
 impl<'a> ThirBuilder<'a> {
-    pub fn new(hir: &'a hir::Body) -> Result<Self, InferError> {
-        let mut solver = Solver::new();
-        solver.solve_body(hir)?;
-
+    pub fn new(hir: &'a hir::Body, table: InferenceTable) -> Result<Self, InferError> {
         Ok(Self {
             hir,
-            thir: thir::Thir::new(),
-            table: solver.finish(),
+            thir: thir::Body::new(),
+            table,
         })
     }
 
-    pub fn build(&mut self) -> Result<thir::Thir, InferError> {
+    pub fn build(&mut self) -> Result<thir::Body, InferError> {
         for (local_id, local) in self.hir.locals.iter() {
             let local = mir::Local {
                 ident: Some(local.ident.clone()),

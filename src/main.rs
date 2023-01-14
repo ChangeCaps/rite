@@ -4,7 +4,7 @@ use clap::Parser;
 use ritec_ast_lower::ProgramLowerer as AstLowerer;
 use ritec_core::{SourceFile, SourceMap};
 use ritec_hir as hir;
-use ritec_mir_build::thir::Thir;
+use ritec_mir_build::ProgramBuilder;
 use ritec_parser::{ParseBuffer, TokenStream};
 use tracing::Level;
 
@@ -48,9 +48,14 @@ fn main() {
 
     res.unwrap();
 
-    for function in hir_program.functions.values() {
-        let thir = Thir::from_hir(&function.body).unwrap();
+    let program_builder = ProgramBuilder::new(&hir_program);
+    let res = program_builder.build();
 
-        println!("{:#?}", thir);
+    for diagnostic in emitter.iter() {
+        println!("{:?}", diagnostic);
     }
+
+    let mir = res.unwrap();
+
+    println!("{}", mir);
 }

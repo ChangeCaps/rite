@@ -3,11 +3,11 @@ use std::fmt::{self, Display};
 use crate::{BlockId, Operand};
 
 #[derive(Clone, Debug, PartialEq)]
-pub enum Term {
+pub enum Terminator {
     Return(Operand),
 }
 
-impl Term {
+impl Terminator {
     pub fn successors(&self) -> Vec<BlockId> {
         match self {
             _ => Vec::new(),
@@ -15,7 +15,7 @@ impl Term {
     }
 }
 
-impl Display for Term {
+impl Display for Terminator {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Return(operand) => write!(f, "return {}", operand),
