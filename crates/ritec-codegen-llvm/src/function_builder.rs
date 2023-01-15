@@ -67,7 +67,7 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
             arguments.push(self.build_type(argument).into());
         }
 
-        return_type.fn_type(&arguments, true)
+        return_type.fn_type(&arguments, false)
     }
 
     pub fn build_type(&self, ty: &mir::Type) -> BasicTypeEnum<'c> {

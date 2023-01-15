@@ -2,8 +2,12 @@ fn foo(x: *i32) {
 	*x = 2;
 }
 
+fn bar(f: fn(*i32), x: *i32) {
+	f(x);
+}
+
 fn main(argc: i32, argv: **i8) -> i32 {
-	foo(&argc);
+	bar(foo, &argc);
 
 	return argc;
 }

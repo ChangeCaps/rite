@@ -111,11 +111,12 @@ impl<'a> Solver<'a> {
         let return_type = InferType::Var(self.table_mut().new_variable(None));
 
         let mut arguments = Vec::new();
-        arguments.push(return_type.clone());
         for &argument in expr.arguments.iter() {
             let argument_ty = self.solve_expr(body, &body.exprs[argument])?;
             arguments.push(argument_ty);
         }
+
+        arguments.push(return_type.clone());
 
         self.unify(
             function,

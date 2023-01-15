@@ -46,11 +46,11 @@ impl InferenceTable {
             hir::Type::Function(ty) => {
                 let mut arguments = Vec::new();
 
-                arguments.push(self.infer_hir(&ty.return_type));
-
                 for argument in &ty.arguments {
                     arguments.push(self.infer_hir(&argument));
                 }
+
+                arguments.push(self.infer_hir(&ty.return_type));
 
                 InferType::apply(ItemId::Function, arguments, ty.span)
             }
