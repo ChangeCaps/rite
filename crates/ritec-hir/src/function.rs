@@ -43,3 +43,10 @@ impl Function {
         }
     }
 }
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct FunctionInstance {
+    pub function: FunctionId,
+    pub generics: Vec<Type>,
+    pub span: Span,
+}

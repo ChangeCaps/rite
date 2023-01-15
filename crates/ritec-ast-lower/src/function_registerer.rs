@@ -3,7 +3,7 @@ use ritec_core::{Arena, Generic};
 use ritec_error::{Diagnostic, Emitter};
 use ritec_hir as hir;
 
-use crate::{Error, TypeLowerer};
+use crate::{Error, Resolver};
 
 pub struct FunctionRegisterer<'a> {
     pub program: &'a mut hir::Program,
@@ -50,7 +50,7 @@ impl<'a> FunctionRegisterer<'a> {
         }
 
         let generics = hir::Generics::new(generic_params, item.generics.span);
-        let type_lowerer = TypeLowerer {
+        let resolver = Resolver {
             program: self.program,
             generics: &generics,
             module: self.module,
@@ -63,12 +63,12 @@ impl<'a> FunctionRegisterer<'a> {
             let local = hir::Local {
                 id: body.next_id(),
                 ident: argument.ident.clone(),
-                ty: type_lowerer.lower_type(&argument.ty)?,
+                ty: resolver.resolve_type(&argument.ty)?,
             };
 
             let argument = hir::FunctionArgument {
                 ident: argument.ident.clone(),
-                ty: type_lowerer.lower_type(&argument.ty)?,
+                ty: resolver.resolve_type(&argument.ty)?,
                 local: body.locals.push(local),
                 span: argument.span,
             };
@@ -84,7 +84,7 @@ impl<'a> FunctionRegisterer<'a> {
         }
 
         let return_type = if let Some(ty) = &item.return_type {
-            type_lowerer.lower_type(&ty)?
+            resolver.resolve_type(&ty)?
         } else {
             hir::Type::void(item.span)
         };

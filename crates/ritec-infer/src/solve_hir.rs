@@ -3,7 +3,7 @@ use ritec_hir as hir;
 
 use crate::{Error, InferType, ItemId, Solver, TypeVariableKind};
 
-impl Solver {
+impl<'a> Solver<'a> {
     pub fn solve_body(&mut self, body: &hir::Body) -> Result<(), Error> {
         for local in body.locals.values() {
             let ty = self.table_mut().infer_hir(&local.ty);
@@ -46,6 +46,8 @@ impl Solver {
         let ty = match expr {
             hir::Expr::Local(expr) => self.solve_local_expr(body, expr)?,
             hir::Expr::Literal(expr) => self.solve_literal_expr(body, expr)?,
+            hir::Expr::Function(expr) => self.solve_function_expr(body, expr)?,
+            hir::Expr::Call(expr) => self.solve_call_expr(body, expr)?,
             hir::Expr::Unary(expr) => self.solve_unary_expr(body, expr)?,
             hir::Expr::Binary(expr) => self.solve_binary_expr(body, expr)?,
             hir::Expr::Assign(expr) => self.solve_assign_expr(body, expr)?,
@@ -84,6 +86,43 @@ impl Solver {
                 Ok(InferType::Var(var))
             }
         }
+    }
+
+    pub fn solve_function_expr(
+        &mut self,
+        _body: &hir::Body,
+        expr: &hir::FunctionExpr,
+    ) -> Result<InferType, Error> {
+        for (i, generic) in expr.instance.generics.iter().enumerate() {
+            let ty = self.table_mut().infer_hir(&generic);
+            self.table_mut().register_generic(expr.id, i, ty);
+        }
+
+        Ok(self.register_type(expr.id, &hir::Type::Function(expr.ty.clone())))
+    }
+
+    pub fn solve_call_expr(
+        &mut self,
+        body: &hir::Body,
+        expr: &hir::CallExpr,
+    ) -> Result<InferType, Error> {
+        let function = self.solve_expr(body, &body.exprs[expr.callee])?;
+
+        let return_type = InferType::Var(self.table_mut().new_variable(None));
+
+        let mut arguments = Vec::new();
+        arguments.push(return_type.clone());
+        for &argument in expr.arguments.iter() {
+            let argument_ty = self.solve_expr(body, &body.exprs[argument])?;
+            arguments.push(argument_ty);
+        }
+
+        self.unify(
+            function,
+            InferType::apply(ItemId::Function, arguments, expr.span),
+        )?;
+
+        Ok(return_type)
     }
 
     pub fn solve_unary_expr(

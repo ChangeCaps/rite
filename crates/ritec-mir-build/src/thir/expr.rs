@@ -1,4 +1,5 @@
 use ritec_core::{BinaryOp, Id, Literal, Span, UnaryOp};
+use ritec_hir::FunctionId;
 use ritec_mir::{LocalId, Type};
 
 pub type ExprId = Id<Expr>;
@@ -7,6 +8,8 @@ pub type ExprId = Id<Expr>;
 pub enum Expr {
     Local(LocalExpr),
     Literal(LiteralExpr),
+    Function(FunctionExpr),
+    Call(CallExpr),
     Unary(UnaryExpr),
     Binary(BinaryExpr),
     Assign(AssignExpr),
@@ -18,6 +21,8 @@ impl Expr {
         match self {
             Expr::Local(expr) => &expr.ty,
             Expr::Literal(expr) => &expr.ty,
+            Expr::Function(expr) => &expr.ty,
+            Expr::Call(expr) => &expr.ty,
             Expr::Unary(expr) => &expr.ty,
             Expr::Binary(expr) => &expr.ty,
             Expr::Assign(expr) => &expr.ty,
@@ -29,6 +34,8 @@ impl Expr {
         match self {
             Expr::Local(expr) => expr.span,
             Expr::Literal(expr) => expr.span,
+            Expr::Function(expr) => expr.span,
+            Expr::Call(expr) => expr.span,
             Expr::Unary(expr) => expr.span,
             Expr::Binary(expr) => expr.span,
             Expr::Assign(expr) => expr.span,
@@ -47,6 +54,22 @@ pub struct LocalExpr {
 #[derive(Clone, Debug, PartialEq)]
 pub struct LiteralExpr {
     pub literal: Literal,
+    pub ty: Type,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct FunctionExpr {
+    pub function: FunctionId,
+    pub generics: Vec<Type>,
+    pub ty: Type,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct CallExpr {
+    pub callee: ExprId,
+    pub arguments: Vec<ExprId>,
     pub ty: Type,
     pub span: Span,
 }

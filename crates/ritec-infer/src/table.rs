@@ -9,6 +9,7 @@ use crate::{Error, InferType, TypeVariable, TypeVariableKind, Unifier, UnifyResu
 pub struct InferenceTable {
     variables: HashMap<TypeVariable, InferType>,
     identifed: HashMap<hir::HirId, InferType>,
+    generics: HashMap<(hir::HirId, usize), InferType>,
     next_variable: usize,
 }
 
@@ -17,6 +18,7 @@ impl InferenceTable {
         Self {
             variables: HashMap::new(),
             identifed: HashMap::new(),
+            generics: HashMap::new(),
             next_variable: 0,
         }
     }
@@ -38,8 +40,16 @@ impl InferenceTable {
         self.identifed.insert(id, ty);
     }
 
+    pub fn register_generic(&mut self, id: hir::HirId, generic: usize, ty: InferType) {
+        self.generics.insert((id, generic), ty);
+    }
+
     pub fn get_type(&self, id: hir::HirId) -> Option<&InferType> {
         self.identifed.get(&id)
+    }
+
+    pub fn get_generic(&self, id: hir::HirId, generic: usize) -> Option<&InferType> {
+        self.generics.get(&(id, generic))
     }
 
     pub fn normalize_shallow(&mut self, ty: &InferType) -> Option<InferType> {

@@ -3,7 +3,7 @@ use ritec_core::Arena;
 use ritec_error::{Diagnostic, Emitter};
 use ritec_hir as hir;
 
-use crate::{BodyLowerer, Error, TypeLowerer};
+use crate::{BodyLowerer, Error, Resolver};
 
 pub struct FunctionCompleter<'a> {
     pub program: &'a mut hir::Program,
@@ -32,13 +32,13 @@ impl<'a> FunctionCompleter<'a> {
 
     pub fn complete_function(&mut self, function_id: hir::FunctionId) -> Result<(), Diagnostic> {
         let mut function = self.program.functions[function_id].clone();
-        let type_lowerer = TypeLowerer {
+        let resolver = Resolver {
             program: &self.program,
             generics: &function.generics,
             module: function.module,
         };
 
-        let mut body_lowerer = BodyLowerer::new(&mut function.body, type_lowerer);
+        let mut body_lowerer = BodyLowerer::new(&mut function.body, resolver);
         body_lowerer.lower_block(&self.blocks[function_id.cast()])?;
 
         self.program.functions[function_id] = function;

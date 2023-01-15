@@ -4,9 +4,10 @@ use crate::Path;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
-    Paren(Box<Expr>),
+    Paren(ParenExpr),
     Path(PathExpr),
     Literal(LiteralExpr),
+    Call(CallExpr),
     Unary(UnaryExpr),
     Binary(BinaryExpr),
     Assign(AssignExpr),
@@ -16,15 +17,22 @@ pub enum Expr {
 impl Expr {
     pub const fn span(&self) -> Span {
         match self {
-            Expr::Paren(expr) => expr.span(),
+            Self::Paren(expr) => expr.span,
             Self::Path(expr) => expr.span,
             Self::Literal(expr) => expr.span,
+            Self::Call(expr) => expr.span,
             Self::Unary(expr) => expr.span,
             Self::Binary(expr) => expr.span,
             Self::Assign(expr) => expr.span,
             Self::Return(expr) => expr.span,
         }
     }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ParenExpr {
+    pub expr: Box<Expr>,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -36,6 +44,13 @@ pub struct PathExpr {
 #[derive(Clone, Debug, PartialEq)]
 pub struct LiteralExpr {
     pub literal: Literal,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct CallExpr {
+    pub callee: Box<Expr>,
+    pub arguments: Vec<Expr>,
     pub span: Span,
 }
 
@@ -52,12 +67,6 @@ pub struct BinaryExpr {
     pub operator: BinaryOp,
     pub rhs: Box<Expr>,
     pub span: Span,
-}
-
-impl BinaryExpr {
-    pub fn operator(&self) -> &BinaryOp {
-        &self.operator
-    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

@@ -1,8 +1,10 @@
 mod block;
 mod body;
+mod constant;
 mod function;
 mod generic;
 mod local;
+mod operand;
 mod program;
 mod statement;
 mod terminator;
@@ -11,9 +13,11 @@ mod value;
 
 pub use block::*;
 pub use body::*;
+pub use constant::*;
 pub use function::*;
 pub use generic::*;
 pub use local::*;
+pub use operand::*;
 pub use program::*;
 pub use statement::*;
 pub use terminator::*;

@@ -1,7 +1,18 @@
 use ritec_ast as ast;
-use ritec_core::{BinaryOp, UnaryOp};
+use ritec_core::{BinaryOp, BoolLiteral, Literal, UnaryOp};
 
 use crate::{Delimiter, KeywordKind, Parse, ParseResult, ParseStream, SymbolKind};
+
+impl Parse for ast::ParenExpr {
+    fn parse(parser: ParseStream) -> ParseResult<Self> {
+        let span = parser.span();
+        let mut contents = parser.delim(Delimiter::Paren)?;
+        Ok(ast::ParenExpr {
+            expr: Box::new(contents.parse()?),
+            span,
+        })
+    }
+}
 
 impl Parse for ast::PathExpr {
     fn parse(parser: ParseStream) -> ParseResult<Self> {
@@ -12,7 +23,25 @@ impl Parse for ast::PathExpr {
 
 impl Parse for ast::LiteralExpr {
     fn parse(parser: ParseStream) -> ParseResult<Self> {
-        let (literal, span) = parser.parse_spanned()?;
+        let span = parser.span();
+        let literal = if parser.is(&KeywordKind::True) {
+            parser.next();
+
+            Literal::Bool(BoolLiteral {
+                value: true,
+                span: span | parser.span(),
+            })
+        } else if parser.is(&KeywordKind::False) {
+            parser.next();
+
+            Literal::Bool(BoolLiteral {
+                value: false,
+                span: span | parser.span(),
+            })
+        } else {
+            parser.parse()?
+        };
+
         Ok(ast::LiteralExpr { literal, span })
     }
 }
@@ -79,10 +108,27 @@ fn parse_term(parser: ParseStream) -> ParseResult<ast::Expr> {
         Ok(ast::Expr::Path(parser.parse()?))
     } else if let Some(literal) = parser.try_parse::<ast::LiteralExpr>() {
         Ok(ast::Expr::Literal(literal))
-    } else if let Ok(mut contents) = parser.delim(Delimiter::Paren) {
-        Ok(ast::Expr::Paren(Box::new(contents.parse()?)))
+    } else if parser.is(&Delimiter::Paren) {
+        Ok(ast::Expr::Paren(parser.parse()?))
     } else {
         Err(parser.expected("expression"))
+    }
+}
+
+fn parse_call(parser: ParseStream) -> ParseResult<ast::Expr> {
+    let span = parser.span();
+    let callee = parse_term(parser)?;
+
+    if let Ok(mut contents) = parser.delim(Delimiter::Paren) {
+        let arguments = contents.parse_comma_separated()?;
+
+        Ok(ast::Expr::Call(ast::CallExpr {
+            callee: Box::new(callee),
+            arguments,
+            span: span | parser.span(),
+        }))
+    } else {
+        Ok(callee)
     }
 }
 
@@ -94,7 +140,7 @@ fn parse_unary(parser: ParseStream) -> ParseResult<ast::Expr> {
             span: parser.span(),
         }))
     } else {
-        parse_term(parser)
+        parse_call(parser)
     }
 }
 

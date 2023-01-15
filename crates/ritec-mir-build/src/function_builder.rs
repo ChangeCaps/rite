@@ -2,13 +2,13 @@ use ritec_mir as mir;
 
 use crate::thir;
 
-pub struct Builder<'a> {
+pub struct FunctionBuilder<'a> {
     pub thir: &'a thir::Body,
     pub mir: mir::Body,
     pub current_block: mir::BlockId,
 }
 
-impl<'a> Builder<'a> {
+impl<'a> FunctionBuilder<'a> {
     pub fn new(thir: &'a thir::Body) -> Self {
         let mut mir = mir::Body::new();
         let current_block = mir.blocks.push(mir::Block::new());
@@ -25,6 +25,10 @@ impl<'a> Builder<'a> {
 
         for stmt in self.thir.stmts.values() {
             self.build_stmt(stmt);
+        }
+
+        if !self.block().is_terminated() {
+            self.terminate(mir::Terminator::Return(mir::Operand::VOID));
         }
 
         self.mir.clone()
@@ -80,5 +84,10 @@ impl<'a> Builder<'a> {
             local: local.cast(),
             proj: vec![],
         }
+    }
+
+    pub fn push_drop(&mut self, place: impl Into<mir::Value>) {
+        let drop = mir::Statement::Drop(place.into());
+        self.push_statement(drop);
     }
 }

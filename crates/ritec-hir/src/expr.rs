@@ -1,6 +1,6 @@
 use ritec_core::{BinaryOp, Id, Literal, Span, UnaryOp};
 
-use crate::{HirId, LocalId};
+use crate::{FunctionInstance, FunctionType, HirId, LocalId};
 
 pub type ExprId = Id<Expr>;
 
@@ -8,6 +8,8 @@ pub type ExprId = Id<Expr>;
 pub enum Expr {
     Local(LocalExpr),
     Literal(LiteralExpr),
+    Function(FunctionExpr),
+    Call(CallExpr),
     Unary(UnaryExpr),
     Binary(BinaryExpr),
     Assign(AssignExpr),
@@ -19,6 +21,8 @@ impl Expr {
         match self {
             Expr::Local(expr) => expr.span,
             Expr::Literal(expr) => expr.span,
+            Expr::Function(expr) => expr.span,
+            Expr::Call(expr) => expr.span,
             Expr::Unary(expr) => expr.span,
             Expr::Binary(expr) => expr.span,
             Expr::Assign(expr) => expr.span,
@@ -30,6 +34,8 @@ impl Expr {
         match self {
             Expr::Local(expr) => expr.id,
             Expr::Literal(expr) => expr.id,
+            Expr::Function(expr) => expr.id,
+            Expr::Call(expr) => expr.id,
             Expr::Unary(expr) => expr.id,
             Expr::Binary(expr) => expr.id,
             Expr::Assign(expr) => expr.id,
@@ -44,9 +50,33 @@ impl From<LocalExpr> for Expr {
     }
 }
 
+impl From<LiteralExpr> for Expr {
+    fn from(expr: LiteralExpr) -> Self {
+        Self::Literal(expr)
+    }
+}
+
+impl From<FunctionExpr> for Expr {
+    fn from(expr: FunctionExpr) -> Self {
+        Self::Function(expr)
+    }
+}
+
+impl From<CallExpr> for Expr {
+    fn from(expr: CallExpr) -> Self {
+        Self::Call(expr)
+    }
+}
+
 impl From<UnaryExpr> for Expr {
     fn from(expr: UnaryExpr) -> Self {
         Self::Unary(expr)
+    }
+}
+
+impl From<BinaryExpr> for Expr {
+    fn from(expr: BinaryExpr) -> Self {
+        Self::Binary(expr)
     }
 }
 
@@ -72,6 +102,22 @@ pub struct LocalExpr {
 #[derive(Clone, Debug, PartialEq)]
 pub struct LiteralExpr {
     pub literal: Literal,
+    pub id: HirId,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct FunctionExpr {
+    pub instance: FunctionInstance,
+    pub ty: FunctionType,
+    pub id: HirId,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct CallExpr {
+    pub callee: ExprId,
+    pub arguments: Vec<ExprId>,
     pub id: HirId,
     pub span: Span,
 }

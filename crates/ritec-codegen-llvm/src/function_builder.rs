@@ -5,16 +5,16 @@ use inkwell::{
     builder::Builder,
     context::Context,
     types::{BasicType, BasicTypeEnum, FunctionType},
-    values::{BasicValueEnum, FunctionValue, IntValue, PointerValue},
+    values::{BasicValueEnum, CallableValue, FunctionValue, PointerValue},
     AddressSpace,
 };
-use ritec_core::{BinaryOp, FloatSize, Generic};
+use ritec_core::{FloatSize, Generic};
 use ritec_mir as mir;
 
 use crate::CodegenCx;
 
 pub struct FunctionBuilder<'a, 'c> {
-    pub cx: &'a CodegenCx<'c>,
+    pub cx: &'a mut CodegenCx<'c>,
     pub builder: Builder<'c>,
     pub function: &'a mir::Function,
     pub fn_value: Option<FunctionValue<'c>>,
@@ -24,13 +24,24 @@ pub struct FunctionBuilder<'a, 'c> {
 }
 
 impl<'a, 'c> FunctionBuilder<'a, 'c> {
-    pub fn new(cx: &'a CodegenCx<'c>, function: &'a mir::Function) -> Self {
+    pub fn new(
+        cx: &'a mut CodegenCx<'c>,
+        function: &'a mir::Function,
+        generics: &[mir::Type],
+    ) -> Self {
+        let builder = cx.context.create_builder();
+
+        let mut generic_map = HashMap::new();
+        for (generic, ty) in function.generics.iter().zip(generics) {
+            generic_map.insert(generic.clone(), ty.clone());
+        }
+
         Self {
             cx,
-            builder: cx.context.create_builder(),
+            builder,
             function,
             fn_value: None,
-            generics: HashMap::new(),
+            generics: generic_map,
             locals: HashMap::new(),
             blocks: HashMap::new(),
         }
@@ -62,7 +73,7 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
     pub fn build_type(&self, ty: &mir::Type) -> BasicTypeEnum<'c> {
         match ty {
             mir::Type::Void => self.cx().struct_type(&[], false).into(),
-            mir::Type::Bool => self.cx().bool_type().into(),
+            mir::Type::Bool => self.cx().i8_type().into(),
             mir::Type::Int(ty) => {
                 if let Some(size) = ty.size {
                     (self.cx().custom_width_int_type(size.bit_width() as u32)).into()
@@ -103,7 +114,7 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
         }
     }
 
-    pub fn build(&mut self) {
+    pub fn build(&mut self) -> FunctionValue<'c> {
         // add function
         let function_name = format!("{}", self.function.ident);
 
@@ -147,6 +158,8 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
             self.builder.position_at_end(self.blocks[&block_id]);
             self.build_block(block);
         }
+
+        fn_value
     }
 
     pub fn build_block(&mut self, block: &mir::Block) {
@@ -209,6 +222,18 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
     pub fn build_constant(&mut self, constant: &mir::Constant) -> BasicValueEnum<'c> {
         match constant {
             mir::Constant::Void => self.void_value(),
+            mir::Constant::Function(id, generics) => {
+                let mut resolved_generics = Vec::new();
+                for generic in generics {
+                    resolved_generics.push(generic.clone());
+                }
+
+                self.cx
+                    .build_function(*id, &generics)
+                    .as_global_value()
+                    .as_pointer_value()
+                    .into()
+            }
             mir::Constant::Integer(i, ty) => {
                 let ty = match ty.size {
                     Some(size) => self.cx().custom_width_int_type(size.bit_width() as u32),
@@ -229,38 +254,87 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
         match value {
             mir::Value::Use(operand) => self.build_operand(operand),
             mir::Value::Address(place) => self.build_place(place).into(),
-            mir::Value::BinaryOp(value) => self.build_binary_op_value(value),
+            mir::Value::BinaryOp(op, lhs, rhs) => self.build_binary_op(*op, lhs, rhs),
+            mir::Value::Call(callee, args) => self.build_call(callee, args),
         }
     }
 
-    pub fn build_binary_op_value(&mut self, value: &mir::BinaryOpValue) -> BasicValueEnum<'c> {
-        let lhs = self.build_operand(&value.lhs);
-        let rhs = self.build_operand(&value.rhs);
-
-        let lhs_ty = self.function.body.get_operand_type(&value.lhs);
-
-        match lhs_ty {
-            mir::Type::Int(ty) => {
-                self.build_int_binary_op(value.op, lhs.into_int_value(), rhs.into_int_value(), ty)
-            }
-            _ => unreachable!(),
-        }
-    }
-
-    pub fn build_int_binary_op(
+    pub fn build_binary_op(
         &mut self,
-        op: BinaryOp,
-        lhs: IntValue<'c>,
-        rhs: IntValue<'c>,
-        ty: mir::IntType,
+        op: mir::BinOp,
+        lhs: &mir::Operand,
+        rhs: &mir::Operand,
     ) -> BasicValueEnum<'c> {
+        let lhs = self.build_operand(&lhs);
+        let rhs = self.build_operand(&rhs);
+
         match op {
-            BinaryOp::Add => self.builder.build_int_add(lhs, rhs, "add").into(),
-            BinaryOp::Sub => self.builder.build_int_sub(lhs, rhs, "sub").into(),
-            BinaryOp::Mul => self.builder.build_int_mul(lhs, rhs, "mul").into(),
-            BinaryOp::Div if ty.signed => self.builder.build_int_signed_div(lhs, rhs, "div").into(),
-            BinaryOp::Div => self.builder.build_int_unsigned_div(lhs, rhs, "div").into(),
+            mir::BinOp::IntAdd => {
+                let lhs = lhs.into_int_value();
+                let rhs = rhs.into_int_value();
+                self.builder.build_int_add(lhs, rhs, "add").into()
+            }
+            mir::BinOp::IntSub => {
+                let lhs = lhs.into_int_value();
+                let rhs = rhs.into_int_value();
+                self.builder.build_int_sub(lhs, rhs, "sub").into()
+            }
+            mir::BinOp::IntMul => {
+                let lhs = lhs.into_int_value();
+                let rhs = rhs.into_int_value();
+                self.builder.build_int_mul(lhs, rhs, "mul").into()
+            }
+            mir::BinOp::IntDivSigned => {
+                let lhs = lhs.into_int_value();
+                let rhs = rhs.into_int_value();
+                self.builder.build_int_signed_div(lhs, rhs, "div").into()
+            }
+            mir::BinOp::IntDivUnsigned => {
+                let lhs = lhs.into_int_value();
+                let rhs = rhs.into_int_value();
+                self.builder.build_int_unsigned_div(lhs, rhs, "div").into()
+            }
+            mir::BinOp::FloatAdd => {
+                let lhs = lhs.into_float_value();
+                let rhs = rhs.into_float_value();
+                self.builder.build_float_add(lhs, rhs, "add").into()
+            }
+            mir::BinOp::FloatSub => {
+                let lhs = lhs.into_float_value();
+                let rhs = rhs.into_float_value();
+                self.builder.build_float_sub(lhs, rhs, "sub").into()
+            }
+            mir::BinOp::FloatMul => {
+                let lhs = lhs.into_float_value();
+                let rhs = rhs.into_float_value();
+                self.builder.build_float_mul(lhs, rhs, "mul").into()
+            }
+            mir::BinOp::FloatDiv => {
+                let lhs = lhs.into_float_value();
+                let rhs = rhs.into_float_value();
+                self.builder.build_float_div(lhs, rhs, "div").into()
+            }
         }
+    }
+
+    pub fn build_call(
+        &mut self,
+        callee: &mir::Operand,
+        arguments: &[mir::Operand],
+    ) -> BasicValueEnum<'c> {
+        let callee = self.build_operand(callee);
+        let mut args = Vec::new();
+        for arg in arguments {
+            args.push(self.build_operand(arg).into());
+        }
+
+        let callee: CallableValue = callee.into_pointer_value().try_into().unwrap();
+
+        self.builder
+            .build_call(callee, &args, "call")
+            .try_as_basic_value()
+            .left()
+            .unwrap()
     }
 
     pub fn build_terminator(&mut self, terminator: &mir::Terminator) {

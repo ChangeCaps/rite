@@ -2,7 +2,7 @@ use ritec_hir as hir;
 use ritec_infer::Solver;
 use ritec_mir as mir;
 
-use crate::{thir, Builder, Error};
+use crate::{thir, Error, FunctionBuilder};
 
 pub struct ProgramBuilder<'a> {
     pub hir: &'a hir::Program,
@@ -26,17 +26,17 @@ impl<'a> ProgramBuilder<'a> {
     }
 
     pub fn build_function(&mut self, function: &hir::Function) -> Result<(), Error> {
-        let mut solver = Solver::new();
+        let mut solver = Solver::new(self.hir);
         solver.set_return_type(function.return_type.clone());
         solver.solve_body(&function.body)?;
 
         let return_type = solver.resolve_return_type()?;
 
-        let mut thir_builder = thir::ThirBuilder::new(&function.body, solver.finish())?;
+        let mut thir_builder = thir::ThirBuilder::new(&self.hir, &function.body, solver.finish())?;
         let thir = thir_builder.build()?;
 
-        let builder = Builder::new(&thir);
-        let mir = builder.build();
+        let function_builder = FunctionBuilder::new(&thir);
+        let mir = function_builder.build();
 
         let mut params = Vec::new();
         for param in &function.generics.params {

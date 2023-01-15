@@ -6,14 +6,20 @@ use crate::thir;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct ThirBuilder<'a> {
+    pub program: &'a hir::Program,
     pub hir: &'a hir::Body,
     pub thir: thir::Body,
     pub table: InferenceTable,
 }
 
 impl<'a> ThirBuilder<'a> {
-    pub fn new(hir: &'a hir::Body, table: InferenceTable) -> Result<Self, InferError> {
+    pub fn new(
+        program: &'a hir::Program,
+        hir: &'a hir::Body,
+        table: InferenceTable,
+    ) -> Result<Self, InferError> {
         Ok(Self {
+            program,
             hir,
             thir: thir::Body::new(),
             table,
@@ -37,15 +43,13 @@ impl<'a> ThirBuilder<'a> {
         Ok(self.thir.clone())
     }
 
-    pub fn build_stmt(&mut self, stmt: &hir::Stmt) -> Result<(), InferError> {
+    pub fn build_stmt(&mut self, stmt: &hir::Stmt) -> Result<thir::StmtId, InferError> {
         let stmt = match stmt {
             hir::Stmt::Let(stmt) => self.build_let_stmt(stmt)?,
             hir::Stmt::Expr(stmt) => self.build_expr_stmt(stmt)?,
         };
 
-        self.thir.stmts.push(stmt);
-
-        Ok(())
+        Ok(self.thir.stmts.push(stmt))
     }
 
     pub fn build_let_stmt(&mut self, stmt: &hir::LetStmt) -> Result<thir::Stmt, InferError> {
@@ -75,6 +79,8 @@ impl<'a> ThirBuilder<'a> {
         let expr = match expr {
             hir::Expr::Local(expr) => self.build_local_expr(expr)?,
             hir::Expr::Literal(expr) => self.build_literal_expr(expr)?,
+            hir::Expr::Function(expr) => self.build_function_expr(expr)?,
+            hir::Expr::Call(expr) => self.build_call_expr(expr)?,
             hir::Expr::Unary(expr) => self.build_unary_expr(expr)?,
             hir::Expr::Binary(expr) => self.build_binary_expr(expr)?,
             hir::Expr::Assign(expr) => self.build_assign_expr(expr)?,
@@ -101,6 +107,45 @@ impl<'a> ThirBuilder<'a> {
             ty: self.table.resolve_mir(expr.id)?,
             span: expr.span,
         }))
+    }
+
+    pub fn build_function_expr(
+        &mut self,
+        expr: &hir::FunctionExpr,
+    ) -> Result<thir::Expr, InferError> {
+        let mut generics = Vec::new();
+
+        for i in 0..expr.instance.generics.len() {
+            let ty = self.table.get_generic(expr.id, i).unwrap();
+            generics.push(self.table.resolve_mir_type(ty)?);
+        }
+
+        let expr = thir::FunctionExpr {
+            function: expr.instance.function,
+            generics,
+            ty: self.table.resolve_mir(expr.id)?,
+            span: expr.span,
+        };
+
+        Ok(thir::Expr::Function(expr))
+    }
+
+    pub fn build_call_expr(&mut self, expr: &hir::CallExpr) -> Result<thir::Expr, InferError> {
+        let callee = self.build_expr(&self.hir.exprs[expr.callee])?;
+
+        let mut arguments = Vec::new();
+        for &argument in expr.arguments.iter() {
+            arguments.push(self.build_expr(&self.hir.exprs[argument])?);
+        }
+
+        let expr = thir::CallExpr {
+            callee,
+            arguments,
+            ty: self.table.resolve_mir(expr.id)?,
+            span: expr.span,
+        };
+
+        Ok(thir::Expr::Call(expr))
     }
 
     pub fn build_unary_expr(&mut self, expr: &hir::UnaryExpr) -> Result<thir::Expr, InferError> {

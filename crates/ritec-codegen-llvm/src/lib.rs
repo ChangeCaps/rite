@@ -15,10 +15,14 @@ pub struct LLVMCodegen;
 impl LLVMCodegen {
     pub fn compile(program: &mir::Program) {
         let context = Context::create();
-        let cx = CodegenCx::new(&context, program);
+        let mut cx = CodegenCx::new(&context, program);
 
-        for function in program.functions.values() {
-            cx.build_function(function);
+        for (id, function) in program.functions.iter() {
+            if !function.generics.is_empty() {
+                continue;
+            }
+
+            cx.build_function(id, &[]);
         }
 
         cx.module.print_to_stderr();

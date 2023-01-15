@@ -1,6 +1,6 @@
-use crate::{thir, Builder};
+use crate::{thir, FunctionBuilder};
 
-impl<'a> Builder<'a> {
+impl<'a> FunctionBuilder<'a> {
     pub fn build_stmt(&mut self, stmt: &thir::Stmt) {
         match stmt {
             thir::Stmt::Let(stmt) => self.build_let_stmt(stmt),
@@ -16,6 +16,10 @@ impl<'a> Builder<'a> {
     }
 
     pub fn build_expr_stmt(&mut self, stmt: &thir::ExprStmt) {
-        self.as_value(&self.thir.exprs[stmt.expr]);
+        let value = self.as_value(&self.thir.exprs[stmt.expr]);
+
+        if !matches!(self.thir[stmt.expr], thir::Expr::Return(_)) {
+            self.push_drop(value);
+        }
     }
 }

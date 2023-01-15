@@ -1,9 +1,9 @@
 use ritec_core::Literal;
 use ritec_mir as mir;
 
-use crate::{thir, Builder};
+use crate::{thir, FunctionBuilder};
 
-impl<'a> Builder<'a> {
+impl<'a> FunctionBuilder<'a> {
     pub fn as_operand(&mut self, expr: &thir::Expr) -> mir::Operand {
         match expr {
             thir::Expr::Literal(expr) => match &expr.literal {
@@ -26,7 +26,12 @@ impl<'a> Builder<'a> {
                     mir::Operand::Constant(mir::Constant::Float(lit.value, ty.clone()))
                 }
             },
+            thir::Expr::Function(expr) => mir::Operand::Constant(mir::Constant::Function(
+                expr.function.cast(),
+                expr.generics.clone(),
+            )),
             thir::Expr::Local(_)
+            | thir::Expr::Call(_)
             | thir::Expr::Unary(_)
             | thir::Expr::Binary(_)
             | thir::Expr::Assign(_)

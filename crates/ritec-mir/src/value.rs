@@ -1,27 +1,26 @@
 use std::fmt::{self, Display};
 
-use ritec_core::BinaryOp;
-
 use crate::{Constant, Operand, Place};
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct BinaryOpValue {
-    pub op: BinaryOp,
-    pub lhs: Operand,
-    pub rhs: Operand,
-}
-
-impl Display for BinaryOpValue {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{} {} {}", self.lhs, self.op, self.rhs)
-    }
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum BinOp {
+    IntAdd,
+    IntSub,
+    IntMul,
+    IntDivSigned,
+    IntDivUnsigned,
+    FloatAdd,
+    FloatSub,
+    FloatMul,
+    FloatDiv,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     Use(Operand),
     Address(Place),
-    BinaryOp(BinaryOpValue),
+    BinaryOp(BinOp, Operand, Operand),
+    Call(Operand, Vec<Operand>),
 }
 
 impl Value {
@@ -65,7 +64,11 @@ impl Display for Value {
         match self {
             Self::Use(operand) => write!(f, "{}", operand),
             Self::Address(place) => write!(f, "&{}", place),
-            Self::BinaryOp(value) => write!(f, "{}", value),
+            Self::BinaryOp(op, lhs, rhs) => write!(f, "{:?}({}, {})", op, lhs, rhs),
+            Self::Call(callee, args) => {
+                let args = args.iter().map(Operand::to_string).collect::<Vec<_>>();
+                write!(f, "{}({})", callee, args.join(", "))
+            }
         }
     }
 }

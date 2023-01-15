@@ -5,7 +5,7 @@ use std::{
 
 use ritec_core::Arena;
 
-use crate::{Block, BlockId, Local, LocalId, Operand, Place, Projection, Type, Value};
+use crate::{Block, BlockId, Local, LocalId};
 
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Body {
@@ -19,34 +19,6 @@ impl Body {
             locals: Arena::new(),
             blocks: Arena::new(),
         }
-    }
-
-    pub fn get_value_type(&self, value: &Value) -> Type {
-        match value {
-            Value::Use(operand) => self.get_operand_type(operand),
-            Value::Address(place) => Type::pointer(self.get_place_type(place)),
-            Value::BinaryOp(value) => match value.op {
-                _ => self.get_operand_type(&value.lhs),
-            },
-        }
-    }
-
-    pub fn get_operand_type(&self, operand: &Operand) -> Type {
-        match operand {
-            Operand::Copy(place) => self.get_place_type(place),
-            Operand::Move(place) => self.get_place_type(place),
-            Operand::Constant(constant) => constant.ty(),
-        }
-    }
-
-    pub fn get_place_type(&self, place: &Place) -> Type {
-        let mut ty = self.locals[place.local].ty.clone();
-
-        for proj in place.proj.iter() {
-            ty = proj.apply_type(ty);
-        }
-
-        ty
     }
 }
 

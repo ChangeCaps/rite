@@ -1,9 +1,9 @@
 use ritec_core::UnaryOp;
 use ritec_mir as mir;
 
-use crate::{thir, Builder};
+use crate::{thir, FunctionBuilder};
 
-impl<'a> Builder<'a> {
+impl<'a> FunctionBuilder<'a> {
     pub fn as_place(&mut self, expr: &thir::Expr) -> mir::Place {
         match expr {
             thir::Expr::Local(expr) => mir::Place {
@@ -26,6 +26,8 @@ impl<'a> Builder<'a> {
                 temp
             }
             thir::Expr::Literal(_)
+            | thir::Expr::Function(_)
+            | thir::Expr::Call(_)
             | thir::Expr::Unary(_)
             | thir::Expr::Binary(_)
             | thir::Expr::Return(_) => {

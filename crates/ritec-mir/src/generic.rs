@@ -18,6 +18,14 @@ impl Generics {
         }
     }
 
+    pub fn len(&self) -> usize {
+        self.generics.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.generics.is_empty()
+    }
+
     pub fn get(&self, ident: &Ident) -> Option<&Generic> {
         self.generics.iter().find(|g| g.ident == *ident)
     }

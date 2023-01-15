@@ -5,7 +5,8 @@ use ritec_mir as mir;
 use crate::{Constraint, Error, InferType, InferenceTable, ItemId, Solution, TypeVariable, Unify};
 
 #[allow(dead_code)]
-pub struct Solver {
+pub struct Solver<'a> {
+    program: &'a hir::Program,
     table: InferenceTable,
     constraints: Vec<Constraint>,
     stack: Vec<Constraint>,
@@ -13,9 +14,10 @@ pub struct Solver {
     overflow_depth: usize,
 }
 
-impl Solver {
-    pub fn new() -> Self {
+impl<'a> Solver<'a> {
+    pub fn new(program: &'a hir::Program) -> Self {
         Self {
+            program: program,
             table: InferenceTable::new(),
             constraints: Vec::new(),
             stack: Vec::new(),

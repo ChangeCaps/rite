@@ -24,6 +24,10 @@ impl Block {
         self.terminator.is_some()
     }
 
+    pub fn terminate(&mut self, terminator: Terminator) {
+        self.terminator = Some(terminator);
+    }
+
     pub fn push(&mut self, stmt: Statement) {
         self.statements.push(stmt);
     }

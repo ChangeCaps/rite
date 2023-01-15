@@ -2,6 +2,8 @@ use std::fmt::{self, Display};
 
 use ritec_core::{FloatSize, Generic, IntSize, Span};
 
+use crate::GenericMap;
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct InferredType {
     pub span: Span,
@@ -84,6 +86,10 @@ impl PointerType {
     pub fn is_inferred(&self) -> bool {
         self.pointee.is_inferred()
     }
+
+    pub fn specialize(&mut self, generics: &GenericMap<'_>) {
+        self.pointee.specialize(generics);
+    }
 }
 
 impl Display for PointerType {
@@ -103,6 +109,10 @@ impl ArrayType {
     pub fn is_inferred(&self) -> bool {
         self.element.is_inferred()
     }
+
+    pub fn specialize(&mut self, generics: &GenericMap<'_>) {
+        self.element.specialize(generics);
+    }
 }
 
 impl Display for ArrayType {
@@ -120,6 +130,10 @@ pub struct SliceType {
 impl SliceType {
     pub fn is_inferred(&self) -> bool {
         self.element.is_inferred()
+    }
+
+    pub fn specialize(&mut self, generics: &GenericMap<'_>) {
+        self.element.specialize(generics);
     }
 }
 
@@ -139,6 +153,14 @@ pub struct FunctionType {
 impl FunctionType {
     pub fn is_inferred(&self) -> bool {
         self.arguments.iter().any(|arg| arg.is_inferred()) || self.return_type.is_inferred()
+    }
+
+    pub fn specialize(&mut self, generics: &GenericMap<'_>) {
+        for arg in &mut self.arguments {
+            arg.specialize(generics);
+        }
+
+        self.return_type.specialize(generics);
     }
 }
 
@@ -164,6 +186,12 @@ pub struct TupleType {
 impl TupleType {
     pub fn is_inferred(&self) -> bool {
         self.fields.iter().any(|field| field.is_inferred())
+    }
+
+    pub fn specialize(&mut self, generics: &GenericMap<'_>) {
+        for field in &mut self.fields {
+            field.specialize(generics);
+        }
     }
 }
 
@@ -231,6 +259,18 @@ impl Type {
             Type::Function(t) => t.is_inferred(),
             Type::Tuple(t) => t.is_inferred(),
             _ => false,
+        }
+    }
+
+    pub fn specialize(&mut self, generics: &GenericMap<'_>) {
+        match self {
+            Type::Pointer(t) => t.specialize(generics),
+            Type::Array(t) => t.specialize(generics),
+            Type::Slice(t) => t.specialize(generics),
+            Type::Function(t) => t.specialize(generics),
+            Type::Tuple(t) => t.specialize(generics),
+            Type::Generic(generic) => *self = generics[generic].clone(),
+            Type::Inferred(_) | Type::Void(_) | Type::Bool(_) | Type::Int(_) | Type::Float(_) => {}
         }
     }
 }
