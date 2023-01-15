@@ -1,6 +1,6 @@
 use std::fmt::Display;
 
-use ritec_core::{Ident, Span};
+use ritec_core::{Ident, Literal, Span};
 use ritec_error::Diagnostic;
 
 use crate::{
@@ -152,8 +152,11 @@ impl<'a> ParseBuffer<'a> {
     }
 
     pub fn delim(&mut self, delimiter: Delimiter) -> ParseResult<ParseBuffer<'a>> {
-        let c = delimiter.open_char().unwrap();
+        if !self.is(&delimiter) {
+            return Err(self.expected(&delimiter));
+        }
 
+        let c = delimiter.open_char().unwrap();
         let token = self.next().ok_or_else(|| {
             Diagnostic::error(format!("expected `{}`", c))
                 .with_message_span("found end of file", self.span())
@@ -164,6 +167,23 @@ impl<'a> ParseBuffer<'a> {
                 Ok(ParseBuffer::new(group.stream()))
             }
             _ => Err(Diagnostic::error(format!("expected `{}`", c))
+                .with_message_span(format!("found `{}`", token), token.span())),
+        }
+    }
+
+    pub fn literal(&mut self) -> ParseResult<Literal> {
+        if !matches!(self.peek(), Some(TokenTree::Literal(_))) {
+            return Err(self.expected("literal"));
+        }
+
+        let token = self.next().ok_or_else(|| {
+            Diagnostic::error("expected literal")
+                .with_message_span("found end of file", self.span())
+        })?;
+
+        match token {
+            TokenTree::Literal(literal) => Ok(literal.clone()),
+            _ => Err(Diagnostic::error("expected literal")
                 .with_message_span(format!("found `{}`", token), token.span())),
         }
     }

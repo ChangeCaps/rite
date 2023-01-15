@@ -1,13 +1,23 @@
-use core::fmt;
-use std::fmt::Display;
+use std::fmt::{self, Display};
 
 use ritec_core::Id;
 
-use crate::LocalId;
+use crate::{FloatType, IntType, LocalId, Type, Value};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Projection {
     Deref,
+}
+
+impl Projection {
+    pub fn apply_type(&self, ty: Type) -> Type {
+        match self {
+            Projection::Deref => match ty {
+                Type::Pointer(ty) => *ty.pointee,
+                _ => panic!("cannot deref non-pointer type"),
+            },
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -49,10 +59,37 @@ impl Display for Place {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub enum Constant {
+    Void,
+    Integer(i64, IntType),
+    Float(f64, FloatType),
+}
+
+impl Constant {
+    pub fn ty(&self) -> Type {
+        match self {
+            Self::Void => Type::Void,
+            Self::Integer(_, ty) => Type::Int(ty.clone()),
+            Self::Float(_, ty) => Type::Float(ty.clone()),
+        }
+    }
+}
+
+impl Display for Constant {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Void => write!(f, "void"),
+            Self::Integer(c, ty) => write!(f, "{}: {}", c, ty),
+            Self::Float(c, ty) => write!(f, "{}: {}", c, ty),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Operand {
     Copy(Place),
     Move(Place),
-    Void,
+    Constant(Constant),
 }
 
 impl Operand {
@@ -60,7 +97,7 @@ impl Operand {
         match self {
             Operand::Copy(place) => Some(place),
             Operand::Move(place) => Some(place),
-            Operand::Void => None,
+            Operand::Constant(_) => None,
         }
     }
 
@@ -68,7 +105,7 @@ impl Operand {
         match self {
             Operand::Copy(place) => Some(place.clone()),
             Operand::Move(place) => Some(place.clone()),
-            Operand::Void => None,
+            Operand::Constant(_) => None,
         }
     }
 }
@@ -78,58 +115,7 @@ impl Display for Operand {
         match self {
             Self::Copy(place) => write!(f, "copy {}", place),
             Self::Move(place) => write!(f, "{}", place),
-            Self::Void => write!(f, "void"),
-        }
-    }
-}
-
-#[derive(Clone, Debug, PartialEq)]
-pub enum Value {
-    Use(Operand),
-    Address(Place),
-}
-
-impl Value {
-    pub const VOID: Self = Self::Use(Operand::Void);
-
-    pub fn as_operand(&self) -> Option<&Operand> {
-        match self {
-            Self::Use(operand) => Some(operand),
-            _ => None,
-        }
-    }
-
-    pub fn to_operand(self) -> Option<Operand> {
-        match self {
-            Self::Use(operand) => Some(operand),
-            _ => None,
-        }
-    }
-
-    pub fn as_place(&self) -> Option<&Place> {
-        self.as_operand()?.as_place()
-    }
-
-    pub fn to_place(self) -> Option<Place> {
-        self.to_operand()?.to_place()
-    }
-
-    pub fn move_operand(place: impl Into<Place>) -> Self {
-        Self::Use(Operand::Move(place.into()))
-    }
-}
-
-impl From<Operand> for Value {
-    fn from(operand: Operand) -> Self {
-        Self::Use(operand)
-    }
-}
-
-impl Display for Value {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            Self::Use(operand) => write!(f, "{}", operand),
-            Self::Address(place) => write!(f, "&{}", place),
+            Self::Constant(constant) => write!(f, "{}", constant),
         }
     }
 }
@@ -151,6 +137,7 @@ pub type StmtId = Id<Statement>;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Statement {
     Assign(Assign),
+    Drop(Value),
 }
 
 impl From<Assign> for Statement {
@@ -163,6 +150,7 @@ impl Display for Statement {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Assign(assign) => write!(f, "{}", assign),
+            Self::Drop(value) => write!(f, "drop {}", value),
         }
     }
 }

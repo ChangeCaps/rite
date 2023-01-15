@@ -7,6 +7,7 @@ mod program;
 mod statement;
 mod terminator;
 mod ty;
+mod value;
 
 pub use block::*;
 pub use body::*;
@@ -17,3 +18,4 @@ pub use program::*;
 pub use statement::*;
 pub use terminator::*;
 pub use ty::*;
+pub use value::*;

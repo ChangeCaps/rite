@@ -1,4 +1,5 @@
 use ritec_ast as ast;
+use ritec_core::{BinaryOp, UnaryOp};
 
 use crate::{Delimiter, KeywordKind, Parse, ParseResult, ParseStream, SymbolKind};
 
@@ -9,14 +10,21 @@ impl Parse for ast::PathExpr {
     }
 }
 
-impl Parse for ast::UnaryOp {
+impl Parse for ast::LiteralExpr {
+    fn parse(parser: ParseStream) -> ParseResult<Self> {
+        let (literal, span) = parser.parse_spanned()?;
+        Ok(ast::LiteralExpr { literal, span })
+    }
+}
+
+impl Parse for UnaryOp {
     fn parse(parser: ParseStream) -> ParseResult<Self> {
         if parser.is(&SymbolKind::Amp) {
             parser.next();
-            Ok(ast::UnaryOp::Ref)
+            Ok(UnaryOp::Ref)
         } else if parser.is(&SymbolKind::Star) {
             parser.next();
-            Ok(ast::UnaryOp::Deref)
+            Ok(UnaryOp::Deref)
         } else {
             Err(parser.expected("unary operator"))
         }
@@ -31,6 +39,26 @@ impl Parse for ast::UnaryExpr {
             operand: Box::new(parser.parse()?),
             span: span | parser.span(),
         })
+    }
+}
+
+impl Parse for BinaryOp {
+    fn parse(parser: ParseStream) -> ParseResult<Self> {
+        if parser.is(&SymbolKind::Plus) {
+            parser.next();
+            Ok(BinaryOp::Add)
+        } else if parser.is(&SymbolKind::Minus) {
+            parser.next();
+            Ok(BinaryOp::Sub)
+        } else if parser.is(&SymbolKind::Star) {
+            parser.next();
+            Ok(BinaryOp::Mul)
+        } else if parser.is(&SymbolKind::FSlash) {
+            parser.next();
+            Ok(BinaryOp::Div)
+        } else {
+            Err(parser.expected("binary operator"))
+        }
     }
 }
 
@@ -49,15 +77,17 @@ impl Parse for ast::ReturnExpr {
 fn parse_term(parser: ParseStream) -> ParseResult<ast::Expr> {
     if parser.peek_ident().is_some() || parser.is(&SymbolKind::Colon) {
         Ok(ast::Expr::Path(parser.parse()?))
+    } else if let Some(literal) = parser.try_parse::<ast::LiteralExpr>() {
+        Ok(ast::Expr::Literal(literal))
     } else if let Ok(mut contents) = parser.delim(Delimiter::Paren) {
-        contents.parse()
+        Ok(ast::Expr::Paren(Box::new(contents.parse()?)))
     } else {
         Err(parser.expected("expression"))
     }
 }
 
 fn parse_unary(parser: ParseStream) -> ParseResult<ast::Expr> {
-    if let Some(operator) = parser.try_parse::<ast::UnaryOp>() {
+    if let Some(operator) = parser.try_parse::<UnaryOp>() {
         Ok(ast::Expr::Unary(ast::UnaryExpr {
             operator,
             operand: Box::new(parse_unary(parser)?),
@@ -68,9 +98,42 @@ fn parse_unary(parser: ParseStream) -> ParseResult<ast::Expr> {
     }
 }
 
+fn parse_binary(parser: ParseStream) -> ParseResult<ast::Expr> {
+    let lhs = parse_unary(parser)?;
+
+    if let Some(operator) = parser.try_parse::<BinaryOp>() {
+        let rhs = parse_binary(parser)?;
+
+        if let ast::Expr::Binary(ref rhs) = rhs {
+            if rhs.operator.precedence() < operator.precedence() {
+                return Ok(ast::Expr::Binary(ast::BinaryExpr {
+                    lhs: Box::new(ast::Expr::Binary(ast::BinaryExpr {
+                        lhs: Box::new(lhs),
+                        operator,
+                        rhs: rhs.lhs.clone(),
+                        span: parser.span(),
+                    })),
+                    operator: rhs.operator,
+                    rhs: rhs.rhs.clone(),
+                    span: parser.span(),
+                }));
+            }
+        }
+
+        Ok(ast::Expr::Binary(ast::BinaryExpr {
+            operator,
+            lhs: Box::new(lhs),
+            rhs: Box::new(rhs),
+            span: parser.span(),
+        }))
+    } else {
+        Ok(lhs)
+    }
+}
+
 fn parse_assign(parser: ParseStream) -> ParseResult<ast::Expr> {
     let span = parser.span();
-    let expr = parse_unary(parser)?;
+    let expr = parse_binary(parser)?;
 
     if parser.is(&SymbolKind::Equal) {
         parser.next();

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 use ritec_core::trace;
 use ritec_hir as hir;
 
-use crate::{Error, InferType, TypeVariable, Unifier, UnifyResult};
+use crate::{Error, InferType, TypeVariable, TypeVariableKind, Unifier, UnifyResult};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct InferenceTable {
@@ -22,9 +22,10 @@ impl InferenceTable {
     }
 
     /// Creates a new [`TypeVariable`].
-    pub fn new_variable(&mut self) -> TypeVariable {
+    pub fn new_variable(&mut self, kind: Option<TypeVariableKind>) -> TypeVariable {
         let variable = TypeVariable {
             index: self.next_variable,
+            kind,
         };
 
         self.next_variable += 1;

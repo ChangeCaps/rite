@@ -54,13 +54,20 @@ impl<'a> Unifier<'a> {
             return Ok(());
         }
 
+        if !a.can_unify_with(&b) {
+            return Err(Error::Mismatch(
+                InferType::Var(a.clone()),
+                InferType::Var(b.clone()),
+            ));
+        }
+
         self.table.substite(*a, InferType::Var(*b));
 
         Ok(())
     }
 
     pub fn unify_proj_proj(&mut self, a: &TypeProjection, b: &TypeProjection) -> Result<(), Error> {
-        let var = InferType::Var(self.table.new_variable());
+        let var = InferType::Var(self.table.new_variable(None));
         self.unify_proj_ty(a, &var)?;
         self.unify_proj_ty(b, &var)?;
 
@@ -90,7 +97,10 @@ impl<'a> Unifier<'a> {
         b: &TypeApplication,
     ) -> Result<(), Error> {
         if a.item != b.item {
-            return Err(Error::Mismatch(a.clone(), b.clone()));
+            return Err(Error::Mismatch(
+                InferType::Apply(a.clone()),
+                InferType::Apply(b.clone()),
+            ));
         }
 
         if a.arguments.len() != b.arguments.len() {

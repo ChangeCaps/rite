@@ -53,7 +53,7 @@ impl<'a> BodyLowerer<'a> {
         let local = hir::Local {
             ident: stmt.ident.clone(),
             ty,
-            id: self.body.next_universe_id(),
+            id: self.body.next_id(),
         };
 
         let init = if let Some(ref init) = stmt.init {
@@ -65,7 +65,7 @@ impl<'a> BodyLowerer<'a> {
         let let_stmt = hir::LetStmt {
             local: self.body.locals.push(local),
             init,
-            id: self.body.next_universe_id(),
+            id: self.body.next_id(),
             span: stmt.span,
         };
 
@@ -77,7 +77,7 @@ impl<'a> BodyLowerer<'a> {
 
         let expr_stmt = hir::ExprStmt {
             expr,
-            id: self.body.next_universe_id(),
+            id: self.body.next_id(),
             span: stmt.span,
         };
 
@@ -86,8 +86,11 @@ impl<'a> BodyLowerer<'a> {
 
     pub fn lower_expr(&mut self, expr: &ast::Expr) -> Result<hir::ExprId, Diagnostic> {
         let expr = match expr {
+            ast::Expr::Paren(expr) => return self.lower_expr(expr),
             ast::Expr::Path(expr) => self.lower_path_expr(expr)?,
+            ast::Expr::Literal(expr) => self.lower_literal_expr(expr)?,
             ast::Expr::Unary(expr) => self.lower_unary_expr(expr)?,
+            ast::Expr::Binary(expr) => self.lower_binary_expr(expr)?,
             ast::Expr::Assign(expr) => self.lower_assign_expr(expr)?,
             ast::Expr::Return(expr) => self.lower_return_expr(expr)?,
         };
@@ -99,8 +102,8 @@ impl<'a> BodyLowerer<'a> {
         if let Some(ident) = expr.path.get_ident() {
             if let Some(local) = self.find_local(ident) {
                 let local_expr = hir::LocalExpr {
-                    id: self.body.next_universe_id(),
                     local,
+                    id: self.body.next_id(),
                     span: expr.span,
                 };
 
@@ -114,38 +117,44 @@ impl<'a> BodyLowerer<'a> {
         Err(err)
     }
 
+    pub fn lower_literal_expr(&mut self, expr: &ast::LiteralExpr) -> Result<hir::Expr, Diagnostic> {
+        let literal_expr = hir::LiteralExpr {
+            literal: expr.literal.clone(),
+            id: self.body.next_id(),
+            span: expr.span,
+        };
+
+        Ok(hir::Expr::Literal(literal_expr))
+    }
+
     pub fn lower_unary_expr(&mut self, expr: &ast::UnaryExpr) -> Result<hir::Expr, Diagnostic> {
-        match expr.operator {
-            ast::UnaryOp::Ref => self.lower_ref_expr(expr),
-            ast::UnaryOp::Deref => self.lower_deref_expr(expr),
-        }
-    }
-
-    pub fn lower_ref_expr(&mut self, expr: &ast::UnaryExpr) -> Result<hir::Expr, Diagnostic> {
-        let ref_expr = hir::RefExpr {
+        let unary_expr = hir::UnaryExpr {
+            operator: expr.operator,
             operand: self.lower_expr(&expr.operand)?,
-            id: self.body.next_universe_id(),
+            id: self.body.next_id(),
             span: expr.span,
         };
 
-        Ok(hir::Expr::Ref(ref_expr))
+        Ok(hir::Expr::Unary(unary_expr))
     }
 
-    pub fn lower_deref_expr(&mut self, expr: &ast::UnaryExpr) -> Result<hir::Expr, Diagnostic> {
-        let deref_expr = hir::DerefExpr {
-            operand: self.lower_expr(&expr.operand)?,
-            id: self.body.next_universe_id(),
+    pub fn lower_binary_expr(&mut self, expr: &ast::BinaryExpr) -> Result<hir::Expr, Diagnostic> {
+        let binary_expr = hir::BinaryExpr {
+            operator: expr.operator,
+            lhs: self.lower_expr(&expr.lhs)?,
+            rhs: self.lower_expr(&expr.rhs)?,
+            id: self.body.next_id(),
             span: expr.span,
         };
 
-        Ok(hir::Expr::Deref(deref_expr))
+        Ok(hir::Expr::Binary(binary_expr))
     }
 
     pub fn lower_assign_expr(&mut self, expr: &ast::AssignExpr) -> Result<hir::Expr, Diagnostic> {
         let assign_expr = hir::AssignExpr {
             lhs: self.lower_expr(&expr.lhs)?,
             rhs: self.lower_expr(&expr.rhs)?,
-            id: self.body.next_universe_id(),
+            id: self.body.next_id(),
             span: expr.span,
         };
 
@@ -161,7 +170,7 @@ impl<'a> BodyLowerer<'a> {
 
         let return_expr = hir::ReturnExpr {
             value,
-            id: self.body.next_universe_id(),
+            id: self.body.next_id(),
             span: expr.span,
         };
 

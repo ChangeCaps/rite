@@ -46,7 +46,7 @@ impl Body {
         }
     }
 
-    pub fn next_universe_id(&mut self) -> HirId {
+    pub fn next_id(&mut self) -> HirId {
         self.next_id.increment()
     }
 }

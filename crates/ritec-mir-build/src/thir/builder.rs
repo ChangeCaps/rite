@@ -74,8 +74,9 @@ impl<'a> ThirBuilder<'a> {
     pub fn build_expr(&mut self, expr: &hir::Expr) -> Result<thir::ExprId, InferError> {
         let expr = match expr {
             hir::Expr::Local(expr) => self.build_local_expr(expr)?,
-            hir::Expr::Ref(expr) => self.build_ref_expr(expr)?,
-            hir::Expr::Deref(expr) => self.build_deref_expr(expr)?,
+            hir::Expr::Literal(expr) => self.build_literal_expr(expr)?,
+            hir::Expr::Unary(expr) => self.build_unary_expr(expr)?,
+            hir::Expr::Binary(expr) => self.build_binary_expr(expr)?,
             hir::Expr::Assign(expr) => self.build_assign_expr(expr)?,
             hir::Expr::Return(expr) => self.build_return_expr(expr)?,
         };
@@ -91,24 +92,38 @@ impl<'a> ThirBuilder<'a> {
         }))
     }
 
-    pub fn build_ref_expr(&mut self, expr: &hir::RefExpr) -> Result<thir::Expr, InferError> {
-        let operand = self.build_expr(&self.hir.exprs[expr.operand])?;
-
-        Ok(thir::Expr::Ref(thir::RefExpr {
-            operand,
+    pub fn build_literal_expr(
+        &mut self,
+        expr: &hir::LiteralExpr,
+    ) -> Result<thir::Expr, InferError> {
+        Ok(thir::Expr::Literal(thir::LiteralExpr {
+            literal: expr.literal.clone(),
             ty: self.table.resolve_mir(expr.id)?,
             span: expr.span,
         }))
     }
 
-    pub fn build_deref_expr(&mut self, expr: &hir::DerefExpr) -> Result<thir::Expr, InferError> {
-        let operand = self.build_expr(&self.hir.exprs[expr.operand])?;
-
-        Ok(thir::Expr::Deref(thir::DerefExpr {
-            operand,
+    pub fn build_unary_expr(&mut self, expr: &hir::UnaryExpr) -> Result<thir::Expr, InferError> {
+        let expr = thir::UnaryExpr {
+            operator: expr.operator,
+            operand: self.build_expr(&self.hir.exprs[expr.operand])?,
             ty: self.table.resolve_mir(expr.id)?,
             span: expr.span,
-        }))
+        };
+
+        Ok(thir::Expr::Unary(expr))
+    }
+
+    pub fn build_binary_expr(&mut self, expr: &hir::BinaryExpr) -> Result<thir::Expr, InferError> {
+        let expr = thir::BinaryExpr {
+            operator: expr.operator,
+            lhs: self.build_expr(&self.hir.exprs[expr.lhs])?,
+            rhs: self.build_expr(&self.hir.exprs[expr.rhs])?,
+            ty: self.table.resolve_mir(expr.id)?,
+            span: expr.span,
+        };
+
+        Ok(thir::Expr::Binary(expr))
     }
 
     pub fn build_assign_expr(&mut self, expr: &hir::AssignExpr) -> Result<thir::Expr, InferError> {

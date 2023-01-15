@@ -49,7 +49,7 @@ impl Solver {
     }
 
     pub fn new_variable(&mut self) -> TypeVariable {
-        self.table.new_variable()
+        self.table.new_variable(None)
     }
 
     pub fn get_substitution(&self, var: &TypeVariable) -> Option<InferType> {

@@ -16,7 +16,7 @@ impl InferenceTable {
 
     pub fn infer_hir(&mut self, hir: &hir::Type) -> InferType {
         match hir {
-            hir::Type::Inferred(_) => self.new_variable().into(),
+            hir::Type::Inferred(_) => self.new_variable(None).into(),
             hir::Type::Void(_) => InferType::apply(ItemId::Void, [], hir.span()),
             hir::Type::Bool(_) => InferType::apply(ItemId::Bool, [], hir.span()),
             hir::Type::Int(ty) => {

@@ -1,4 +1,4 @@
-use ritec_core::{Id, Span};
+use ritec_core::{BinaryOp, Id, Literal, Span, UnaryOp};
 
 use crate::{HirId, LocalId};
 
@@ -7,8 +7,9 @@ pub type ExprId = Id<Expr>;
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     Local(LocalExpr),
-    Ref(RefExpr),
-    Deref(DerefExpr),
+    Literal(LiteralExpr),
+    Unary(UnaryExpr),
+    Binary(BinaryExpr),
     Assign(AssignExpr),
     Return(ReturnExpr),
 }
@@ -17,8 +18,9 @@ impl Expr {
     pub const fn span(&self) -> Span {
         match self {
             Expr::Local(expr) => expr.span,
-            Expr::Ref(expr) => expr.span,
-            Expr::Deref(expr) => expr.span,
+            Expr::Literal(expr) => expr.span,
+            Expr::Unary(expr) => expr.span,
+            Expr::Binary(expr) => expr.span,
             Expr::Assign(expr) => expr.span,
             Expr::Return(expr) => expr.span,
         }
@@ -27,8 +29,9 @@ impl Expr {
     pub const fn id(&self) -> HirId {
         match self {
             Expr::Local(expr) => expr.id,
-            Expr::Ref(expr) => expr.id,
-            Expr::Deref(expr) => expr.id,
+            Expr::Literal(expr) => expr.id,
+            Expr::Unary(expr) => expr.id,
+            Expr::Binary(expr) => expr.id,
             Expr::Assign(expr) => expr.id,
             Expr::Return(expr) => expr.id,
         }
@@ -41,15 +44,9 @@ impl From<LocalExpr> for Expr {
     }
 }
 
-impl From<RefExpr> for Expr {
-    fn from(expr: RefExpr) -> Self {
-        Self::Ref(expr)
-    }
-}
-
-impl From<DerefExpr> for Expr {
-    fn from(expr: DerefExpr) -> Self {
-        Self::Deref(expr)
+impl From<UnaryExpr> for Expr {
+    fn from(expr: UnaryExpr) -> Self {
+        Self::Unary(expr)
     }
 }
 
@@ -73,23 +70,27 @@ pub struct LocalExpr {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct RefExpr {
+pub struct LiteralExpr {
+    pub literal: Literal,
+    pub id: HirId,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct UnaryExpr {
+    pub operator: UnaryOp,
     pub operand: ExprId,
     pub id: HirId,
     pub span: Span,
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct DerefExpr {
-    pub operand: ExprId,
+pub struct BinaryExpr {
+    pub operator: BinaryOp,
+    pub lhs: ExprId,
+    pub rhs: ExprId,
     pub id: HirId,
     pub span: Span,
-}
-
-#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum UnaryOp {
-    Neg,
-    Not,
 }
 
 #[derive(Clone, Debug, PartialEq)]

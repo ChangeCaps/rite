@@ -1,3 +1,4 @@
+use ritec_core::UnaryOp;
 use ritec_mir as mir;
 
 use crate::{thir, Builder};
@@ -9,7 +10,7 @@ impl<'a> Builder<'a> {
                 local: expr.local,
                 proj: vec![],
             },
-            thir::Expr::Deref(expr) => {
+            thir::Expr::Unary(expr) if expr.operator == UnaryOp::Deref => {
                 let mut place = self.as_place(&self.thir[expr.operand]);
                 place.proj.push(mir::Projection::Deref);
                 place
@@ -24,7 +25,10 @@ impl<'a> Builder<'a> {
 
                 temp
             }
-            thir::Expr::Ref(_) | thir::Expr::Return(_) => {
+            thir::Expr::Literal(_)
+            | thir::Expr::Unary(_)
+            | thir::Expr::Binary(_)
+            | thir::Expr::Return(_) => {
                 let value = self.as_value(expr);
                 let temp = self.push_temp(expr.ty().clone());
                 self.push_assign(temp.clone(), value);

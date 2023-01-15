@@ -61,7 +61,7 @@ impl<'a> FunctionRegisterer<'a> {
         let mut arguments = Vec::new();
         for argument in &item.arguments {
             let local = hir::Local {
-                id: body.next_universe_id(),
+                id: body.next_id(),
                 ident: argument.ident.clone(),
                 ty: type_lowerer.lower_type(&argument.ty)?,
             };

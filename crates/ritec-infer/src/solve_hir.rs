@@ -1,6 +1,7 @@
+use ritec_core::{BinaryOp, Literal, UnaryOp};
 use ritec_hir as hir;
 
-use crate::{Error, InferType, ItemId, Solver};
+use crate::{Error, InferType, ItemId, Solver, TypeVariableKind};
 
 impl Solver {
     pub fn solve_body(&mut self, body: &hir::Body) -> Result<(), Error> {
@@ -42,13 +43,18 @@ impl Solver {
     }
 
     pub fn solve_expr(&mut self, body: &hir::Body, expr: &hir::Expr) -> Result<InferType, Error> {
-        match expr {
-            hir::Expr::Local(expr) => self.solve_local_expr(body, expr),
-            hir::Expr::Ref(expr) => self.solve_ref_expr(body, expr),
-            hir::Expr::Deref(expr) => self.solve_deref_expr(body, expr),
-            hir::Expr::Assign(expr) => self.solve_assign_expr(body, expr),
-            hir::Expr::Return(expr) => self.solve_return_expr(body, expr),
-        }
+        let ty = match expr {
+            hir::Expr::Local(expr) => self.solve_local_expr(body, expr)?,
+            hir::Expr::Literal(expr) => self.solve_literal_expr(body, expr)?,
+            hir::Expr::Unary(expr) => self.solve_unary_expr(body, expr)?,
+            hir::Expr::Binary(expr) => self.solve_binary_expr(body, expr)?,
+            hir::Expr::Assign(expr) => self.solve_assign_expr(body, expr)?,
+            hir::Expr::Return(expr) => self.solve_return_expr(body, expr)?,
+        };
+
+        self.table_mut().register_type(expr.id(), ty.clone());
+
+        Ok(ty)
     }
 
     pub fn solve_local_expr(
@@ -62,14 +68,44 @@ impl Solver {
         Ok(ty)
     }
 
+    pub fn solve_literal_expr(
+        &mut self,
+        _body: &hir::Body,
+        expr: &hir::LiteralExpr,
+    ) -> Result<InferType, Error> {
+        match expr.literal {
+            Literal::Bool(_) => Ok(InferType::apply(ItemId::Bool, vec![], expr.span)),
+            Literal::Int(_) => {
+                let var = (self.table_mut()).new_variable(Some(TypeVariableKind::Integer));
+                Ok(InferType::Var(var))
+            }
+            Literal::Float(_) => {
+                let var = self.table_mut().new_variable(Some(TypeVariableKind::Float));
+                Ok(InferType::Var(var))
+            }
+        }
+    }
+
+    pub fn solve_unary_expr(
+        &mut self,
+        body: &hir::Body,
+        expr: &hir::UnaryExpr,
+    ) -> Result<InferType, Error> {
+        match expr.operator {
+            UnaryOp::Ref => self.solve_ref_expr(body, expr),
+            UnaryOp::Deref => self.solve_deref_expr(body, expr),
+        }
+    }
+
     pub fn solve_ref_expr(
         &mut self,
         body: &hir::Body,
-        expr: &hir::RefExpr,
+        expr: &hir::UnaryExpr,
     ) -> Result<InferType, Error> {
+        assert_eq!(expr.operator, UnaryOp::Ref);
+
         let ty = self.solve_expr(body, &body.exprs[expr.operand])?;
         let pointer_type = InferType::apply(ItemId::Pointer, vec![ty], expr.span);
-        (self.table_mut()).register_type(expr.id, pointer_type.clone());
 
         Ok(pointer_type)
     }
@@ -78,11 +114,12 @@ impl Solver {
     pub fn solve_deref_expr(
         &mut self,
         body: &hir::Body,
-        expr: &hir::DerefExpr,
+        expr: &hir::UnaryExpr,
     ) -> Result<InferType, Error> {
+        assert_eq!(expr.operator, UnaryOp::Deref);
+
         let pointer = self.solve_expr(body, &body.exprs[expr.operand])?;
         let pointee = InferType::from(self.new_variable());
-        self.table_mut().register_type(expr.id, pointee.clone());
 
         self.unify(
             pointer,
@@ -92,6 +129,22 @@ impl Solver {
         Ok(pointee)
     }
 
+    pub fn solve_binary_expr(
+        &mut self,
+        body: &hir::Body,
+        expr: &hir::BinaryExpr,
+    ) -> Result<InferType, Error> {
+        let lhs = self.solve_expr(body, &body.exprs[expr.lhs])?;
+        let rhs = self.solve_expr(body, &body.exprs[expr.rhs])?;
+        self.unify(lhs.clone(), rhs.clone())?;
+
+        let ty = match expr.operator {
+            BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div => lhs,
+        };
+
+        Ok(ty)
+    }
+
     pub fn solve_assign_expr(
         &mut self,
         body: &hir::Body,
@@ -99,8 +152,6 @@ impl Solver {
     ) -> Result<InferType, Error> {
         let lhs = self.solve_expr(body, &body.exprs[expr.lhs])?;
         let rhs = self.solve_expr(body, &body.exprs[expr.rhs])?;
-
-        self.table_mut().register_type(expr.id, lhs.clone());
         self.unify(lhs.clone(), rhs)?;
 
         Ok(lhs)
@@ -117,7 +168,6 @@ impl Solver {
             InferType::void(expr.span)
         };
 
-        self.table_mut().register_type(expr.id, ty.clone());
         self.unify(ty.clone(), self.return_type().clone())?;
         Ok(InferType::void(expr.span))
     }

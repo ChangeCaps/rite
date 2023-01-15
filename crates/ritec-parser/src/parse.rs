@@ -1,4 +1,4 @@
-use ritec_core::Ident;
+use ritec_core::{Ident, Literal};
 use ritec_error::Diagnostic;
 
 use crate::ParseBuffer;
@@ -13,5 +13,11 @@ pub trait Parse: Sized {
 impl Parse for Ident {
     fn parse(parser: ParseStream) -> ParseResult<Self> {
         parser.ident()
+    }
+}
+
+impl Parse for Literal {
+    fn parse(parser: ParseStream) -> ParseResult<Self> {
+        parser.literal()
     }
 }

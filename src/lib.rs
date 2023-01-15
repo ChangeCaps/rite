@@ -43,6 +43,8 @@ impl Compiler {
 
         let mir = res.unwrap();
 
+        println!("MIR: {}", mir);
+
         LLVMCodegen::compile(&mir);
     }
 }

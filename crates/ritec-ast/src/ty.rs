@@ -1,4 +1,7 @@
-use std::hash::Hash;
+use std::{
+    fmt::{self, Display},
+    hash::Hash,
+};
 
 use ritec_core::{FloatSize, IntSize, Span};
 
@@ -26,10 +29,34 @@ pub struct IntType {
     pub span: Span,
 }
 
+impl Display for IntType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.signed {
+            write!(f, "i")?;
+        } else {
+            write!(f, "u")?;
+        }
+
+        if let Some(size) = self.size {
+            write!(f, "{}", size.bit_width())?;
+        } else {
+            write!(f, "size")?;
+        }
+
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct FloatType {
     pub size: FloatSize,
     pub span: Span,
+}
+
+impl Display for FloatType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "f{}", self.size.bit_width())
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

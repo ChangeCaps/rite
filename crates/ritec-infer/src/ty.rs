@@ -3,14 +3,37 @@ use std::fmt::{self, Debug};
 use ritec_core::{Generic, Span};
 use ritec_mir as mir;
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum TypeVariableKind {
+    Integer,
+    Float,
+}
+
 #[derive(Clone, Copy, PartialEq, Eq, Hash)]
 pub struct TypeVariable {
     pub index: usize,
+    pub kind: Option<TypeVariableKind>,
+}
+
+impl TypeVariable {
+    pub fn can_unify_with(&self, other: &Self) -> bool {
+        if let (Some(kind), Some(other_kind)) = (self.kind, other.kind) {
+            kind == other_kind
+        } else {
+            true
+        }
+    }
 }
 
 impl Debug for TypeVariable {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "T{}", self.index)
+        write!(f, "T{}", self.index)?;
+
+        if let Some(kind) = self.kind {
+            write!(f, ": {:?}", kind)?;
+        }
+
+        Ok(())
     }
 }
 

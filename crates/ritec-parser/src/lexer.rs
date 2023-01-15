@@ -1,4 +1,4 @@
-use ritec_core::{FileId, Ident, Span};
+use ritec_core::{FileId, FloatLiteral, Ident, IntLiteral, IntPrefix, Literal, Span};
 
 use crate::{Delimiter, Group, Keyword, KeywordKind, Symbol, SymbolKind, TokenStream, TokenTree};
 
@@ -122,6 +122,78 @@ impl<'a> Lexer<'a> {
         Ident::new(string, span | self.span())
     }
 
+    pub fn lex_integer(&mut self, radix: u32) -> u64 {
+        let mut value = 0u64;
+
+        while let Some(c) = self.peek() {
+            if let Some(digit) = c.to_digit(radix) {
+                self.next();
+
+                value = value * radix as u64 + digit as u64;
+            } else {
+                break;
+            }
+        }
+
+        value
+    }
+
+    pub fn lex_number(&mut self) -> Literal {
+        let span = self.span();
+        let mut prefix = IntPrefix::Dec;
+
+        // lex integer prefix
+        if self.peek() == Some('0') {
+            if self.peek_nth(1) == Some('x') {
+                self.take(2);
+                prefix = IntPrefix::Hex;
+            } else if self.peek_nth(1) == Some('o') {
+                self.take(2);
+                prefix = IntPrefix::Oct;
+            } else if self.peek_nth(1) == Some('b') {
+                self.take(2);
+                prefix = IntPrefix::Bin;
+            }
+        }
+
+        // lex the integral part
+        let integer = self.lex_integer(prefix.radix());
+
+        // if the next character is a dot, then we have a floating point number
+        if self.peek() == Some('.') {
+            self.next();
+
+            let mut fraction = 0.0;
+            let mut divisor = 1.0;
+
+            while let Some(c) = self.peek() {
+                if let Some(digit) = c.to_digit(prefix.radix()) {
+                    self.next();
+
+                    divisor *= prefix.radix() as f64;
+                    fraction += digit as f64 / divisor;
+                } else {
+                    break;
+                }
+            }
+
+            let lit = FloatLiteral {
+                value: integer as f64 + fraction,
+                span: span | self.span(),
+            };
+
+            Literal::Float(lit)
+        } else {
+            let lit = IntLiteral {
+                prefix,
+                value: integer,
+                span,
+            };
+
+            Literal::Int(lit)
+        }
+    }
+
     fn lex(&mut self) -> Result<TokenTree, LexerError> {
         let span = self.span();
         let c = self.peek().unwrap();
@@ -183,6 +255,11 @@ impl<'a> Lexer<'a> {
             } else {
                 return Ok(TokenTree::Ident(ident));
             }
+        }
+
+        // if we're a number, lex it
+        if c.is_digit(10) {
+            return Ok(TokenTree::Literal(self.lex_number()));
         }
 
         // if we're a symbol, lex it

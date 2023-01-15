@@ -1,12 +1,12 @@
 use core::fmt;
 use std::{fmt::Display, ops::Index, str::FromStr, sync::Arc};
 
-use ritec_core::{FileId, Ident, Span};
+use ritec_core::{FileId, Ident, Literal, Span};
 
 use crate::{Delimiter, Keyword, Lexer, LexerError, Symbol};
 
 /// An immutable list of tokens, that is cheap to clone.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct TokenStream {
     tokens: Arc<[TokenTree]>,
 }
@@ -69,7 +69,7 @@ impl Display for TokenStream {
 }
 
 /// A group of tokens, surrounded by delimiters.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq)]
 pub struct Group {
     delimiter: Delimiter,
     stream: TokenStream,
@@ -117,11 +117,12 @@ impl Display for Group {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[derive(Clone, Debug, PartialEq)]
 pub enum TokenTree {
     Ident(Ident),
     Symbol(Symbol),
     Keyword(Keyword),
+    Literal(Literal),
     Group(Group),
 }
 
@@ -131,6 +132,7 @@ impl TokenTree {
             TokenTree::Ident(ident) => ident.span(),
             TokenTree::Symbol(symbol) => symbol.span(),
             TokenTree::Keyword(keyword) => keyword.span(),
+            TokenTree::Literal(literal) => literal.span(),
             TokenTree::Group(group) => group.span(),
         }
     }
@@ -142,6 +144,7 @@ impl Display for TokenTree {
             TokenTree::Ident(ident) => write!(f, "{}", ident),
             TokenTree::Symbol(symbol) => write!(f, "{}", symbol),
             TokenTree::Keyword(keyword) => write!(f, "{}", keyword),
+            TokenTree::Literal(literal) => write!(f, "{}", literal),
             TokenTree::Group(group) => write!(f, "{}", group),
         }
     }
