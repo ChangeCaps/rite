@@ -1,13 +1,13 @@
 mod context;
 mod function_builder;
 
-use std::fs;
-
 pub use context::*;
 pub use function_builder::*;
 
-use inkwell::{context::Context, targets::FileType};
+use inkwell::context::Context;
 use ritec_mir as mir;
+
+type MainFn = unsafe extern "C" fn(i32, *const *const i8) -> i32;
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub struct LLVMCodegen;
@@ -24,14 +24,14 @@ impl LLVMCodegen {
         cx.module.print_to_stderr();
         cx.module.verify().unwrap();
 
-        let triple = cx.target_machine.get_triple();
-        println!("triple: {}", triple);
+        let main_address = cx.execution_engine.get_function_address("main").unwrap();
 
-        let buffer = cx
-            .target_machine
-            .write_to_memory_buffer(&cx.module, FileType::Object)
-            .unwrap();
+        let main = unsafe { std::mem::transmute::<_, MainFn>(main_address) };
 
-        fs::write("main.o", buffer.as_slice()).unwrap();
+        let args = std::env::args().collect::<Vec<_>>();
+        let args = args.iter().map(|arg| arg.as_ptr()).collect::<Vec<_>>();
+
+        let result = unsafe { main(args.len() as i32, args.as_ptr() as _) };
+        println!("Result: {}", result);
     }
 }

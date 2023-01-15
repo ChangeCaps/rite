@@ -1,53 +1,39 @@
 use std::{collections::HashMap, ops::Deref};
 
 use inkwell::{
-    context::Context,
-    module::Module,
-    targets::{CodeModel, InitializationConfig, RelocMode, Target, TargetData, TargetMachine},
-    values::FunctionValue,
-    OptimizationLevel,
+    context::Context, execution_engine::ExecutionEngine, module::Module, targets::TargetData,
+    values::FunctionValue, OptimizationLevel,
 };
 use ritec_mir as mir;
 
 use crate::FunctionBuilder;
 
-pub struct CodegenCx<'a> {
-    pub context: &'a Context,
-    pub module: Module<'a>,
-    pub target_machine: TargetMachine,
-    pub program: &'a mir::Program,
-    pub functions: HashMap<mir::FunctionId, FunctionValue<'a>>,
+pub struct CodegenCx<'c> {
+    pub context: &'c Context,
+    pub module: Module<'c>,
+    pub execution_engine: ExecutionEngine<'c>,
+    pub program: &'c mir::Program,
+    pub functions: HashMap<mir::FunctionId, FunctionValue<'c>>,
 }
 
-impl<'a> CodegenCx<'a> {
-    pub fn new(context: &'a Context, program: &'a mir::Program) -> Self {
-        let config = InitializationConfig::default();
-        Target::initialize_x86(&config);
-        let target_triple = TargetMachine::get_default_triple();
-        let target = Target::from_triple(&target_triple).unwrap();
-
-        let target_machine = target
-            .create_target_machine(
-                &target_triple,
-                "x86-64",
-                "+avx2",
-                OptimizationLevel::None,
-                RelocMode::Default,
-                CodeModel::Default,
-            )
+impl<'c> CodegenCx<'c> {
+    pub fn new(context: &'c Context, program: &'c mir::Program) -> Self {
+        let module = context.create_module("main");
+        let execution_engine = module
+            .create_jit_execution_engine(OptimizationLevel::None)
             .unwrap();
 
         Self {
             context,
+            module,
+            execution_engine,
             program,
-            module: context.create_module("main"),
-            target_machine,
             functions: HashMap::new(),
         }
     }
 
-    pub fn target_data(&self) -> TargetData {
-        self.target_machine.get_target_data()
+    pub fn target_data(&self) -> &TargetData {
+        self.execution_engine.get_target_data()
     }
 
     pub fn build_function(&self, function: &mir::Function) {

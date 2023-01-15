@@ -56,7 +56,7 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
             arguments.push(self.build_type(argument).into());
         }
 
-        return_type.fn_type(&arguments, false)
+        return_type.fn_type(&arguments, true)
     }
 
     pub fn build_type(&self, ty: &mir::Type) -> BasicTypeEnum<'c> {
@@ -104,15 +104,18 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
     }
 
     pub fn build(&mut self) {
+        // add function
         let function_name = format!("{}", self.function.ident);
 
         let fn_type = self.build_function_type(&self.function.ty());
         let fn_value = self.cx.module.add_function(&function_name, fn_type, None);
         self.fn_value = Some(fn_value);
 
+        // create entry block
         let block = self.cx.append_basic_block(fn_value, "entry");
         self.builder.position_at_end(block);
 
+        // allocate locals on the stack
         for (local_id, local) in self.function.body.locals.iter() {
             let ty = self.build_type(&local.ty);
             let name = format!("_{}", local_id.as_raw_index());
@@ -120,16 +123,26 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
             self.locals.insert(local_id, value);
         }
 
+        // store arguments in locals
+        for (i, argument) in self.function.arguments.iter().enumerate() {
+            let local = self.locals[&argument.local];
+            let value = fn_value.get_nth_param(i as u32).unwrap();
+            self.builder.build_store(local, value);
+        }
+
+        // allocate blocks
         for block_id in self.function.body.blocks.keys() {
             let name = format!("bb{}", block_id.as_raw_index());
             let block = self.cx().append_basic_block(fn_value, &name);
             self.blocks.insert(block_id, block);
         }
 
+        // jump to the first block
         let first_block = self.function.body.blocks.keys().next().unwrap();
         let first_block = self.blocks[&first_block];
         self.builder.build_unconditional_branch(first_block);
 
+        // build blocks
         for (block_id, block) in self.function.body.blocks.iter() {
             self.builder.position_at_end(self.blocks[&block_id]);
             self.build_block(block);
