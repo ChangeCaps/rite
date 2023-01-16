@@ -1,5 +1,5 @@
 use ritec_ast as ast;
-use ritec_core::{BinaryOp, BoolLiteral, Literal, UnaryOp};
+use ritec_core::{BinOp, BoolLiteral, Literal, UnaryOp};
 
 use crate::{Delimiter, KeywordKind, Parse, ParseResult, ParseStream, SymbolKind};
 
@@ -71,23 +71,38 @@ impl Parse for ast::UnaryExpr {
     }
 }
 
-impl Parse for BinaryOp {
+impl Parse for BinOp {
     fn parse(parser: ParseStream) -> ParseResult<Self> {
         if parser.is(&SymbolKind::Plus) {
             parser.next();
-            Ok(BinaryOp::Add)
+            Ok(BinOp::Add)
         } else if parser.is(&SymbolKind::Minus) {
             parser.next();
-            Ok(BinaryOp::Sub)
+            Ok(BinOp::Sub)
         } else if parser.is(&SymbolKind::Star) {
             parser.next();
-            Ok(BinaryOp::Mul)
+            Ok(BinOp::Mul)
         } else if parser.is(&SymbolKind::FSlash) {
             parser.next();
-            Ok(BinaryOp::Div)
+            Ok(BinOp::Div)
         } else if parser.is(&SymbolKind::EqualEqual) {
             parser.next();
-            Ok(BinaryOp::Eq)
+            Ok(BinOp::Eq)
+        } else if parser.is(&SymbolKind::BangEqual) {
+            parser.next();
+            Ok(BinOp::Ne)
+        } else if parser.is(&SymbolKind::Less) {
+            parser.next();
+            Ok(BinOp::Lt)
+        } else if parser.is(&SymbolKind::LessEqual) {
+            parser.next();
+            Ok(BinOp::Le)
+        } else if parser.is(&SymbolKind::Greater) {
+            parser.next();
+            Ok(BinOp::Gt)
+        } else if parser.is(&SymbolKind::GreaterEqual) {
+            parser.next();
+            Ok(BinOp::Ge)
         } else {
             Err(parser.expected("binary operator"))
         }
@@ -156,8 +171,8 @@ impl Parse for ast::LoopExpr {
 }
 
 fn parse_term(parser: ParseStream) -> ParseResult<ast::Expr> {
-    if parser.peek_ident().is_some() || parser.is(&SymbolKind::Colon) {
-        Ok(ast::Expr::Path(parser.parse()?))
+    if let Some(expr) = parser.try_parse() {
+        Ok(ast::Expr::Path(expr))
     } else if let Some(literal) = parser.try_parse::<ast::LiteralExpr>() {
         Ok(ast::Expr::Literal(literal))
     } else if parser.is(&Delimiter::Paren) {
@@ -199,7 +214,7 @@ fn parse_unary(parser: ParseStream) -> ParseResult<ast::Expr> {
 fn parse_binary(parser: ParseStream) -> ParseResult<ast::Expr> {
     let lhs = parse_unary(parser)?;
 
-    if let Some(operator) = parser.try_parse::<BinaryOp>() {
+    if let Some(operator) = parser.try_parse::<BinOp>() {
         let rhs = parse_binary(parser)?;
 
         if let ast::Expr::Binary(ref rhs) = rhs {

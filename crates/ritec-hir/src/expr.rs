@@ -1,4 +1,4 @@
-use ritec_core::{BinaryOp, Id, Literal, Span, UnaryOp};
+use ritec_core::{BinOp, Id, Literal, Span, UnaryOp};
 
 use crate::{BlockId, FunctionInstance, HirId, LocalId, Type};
 
@@ -184,7 +184,7 @@ pub struct UnaryExpr {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct BinaryExpr {
-    pub operator: BinaryOp,
+    pub operator: BinOp,
     pub lhs: ExprId,
     pub rhs: ExprId,
     pub id: HirId,

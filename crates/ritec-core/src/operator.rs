@@ -7,25 +7,37 @@ pub enum UnaryOp {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
-pub enum BinaryOp {
+pub enum BinOp {
     Add,
     Sub,
     Mul,
     Div,
     Eq,
+    Ne,
+    Lt,
+    Le,
+    Gt,
+    Ge,
 }
 
-impl BinaryOp {
+impl BinOp {
     pub const fn precedence(self) -> u8 {
         match self {
             Self::Add | Self::Sub => 1,
             Self::Mul | Self::Div => 2,
-            Self::Eq => 3,
+            Self::Eq | Self::Ne | Self::Lt | Self::Le | Self::Gt | Self::Ge => 3,
         }
+    }
+
+    pub const fn is_comparison(self) -> bool {
+        matches!(
+            self,
+            Self::Eq | Self::Ne | Self::Lt | Self::Le | Self::Gt | Self::Ge
+        )
     }
 }
 
-impl Display for BinaryOp {
+impl Display for BinOp {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             Self::Add => write!(f, "+"),
@@ -33,6 +45,11 @@ impl Display for BinaryOp {
             Self::Mul => write!(f, "*"),
             Self::Div => write!(f, "/"),
             Self::Eq => write!(f, "=="),
+            Self::Ne => write!(f, "!="),
+            Self::Lt => write!(f, "<"),
+            Self::Le => write!(f, "<="),
+            Self::Gt => write!(f, ">"),
+            Self::Ge => write!(f, ">="),
         }
     }
 }

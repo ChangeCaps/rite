@@ -1,4 +1,4 @@
-use ritec_core::{BinaryOp, UnaryOp};
+use ritec_core::{BinOp, UnaryOp};
 use ritec_mir as mir;
 
 use crate::{thir, FunctionBuilder};
@@ -20,19 +20,33 @@ impl<'a> FunctionBuilder<'a> {
 
                 let op = match self.thir[expr.lhs].ty() {
                     mir::Type::Int(ref t) => match expr.operator {
-                        BinaryOp::Add => mir::BinOp::IntAdd,
-                        BinaryOp::Sub => mir::BinOp::IntSub,
-                        BinaryOp::Mul => mir::BinOp::IntMul,
-                        BinaryOp::Div if t.signed => mir::BinOp::IntDivSigned,
-                        BinaryOp::Div => mir::BinOp::IntDivUnsigned,
-                        BinaryOp::Eq => mir::BinOp::IntEq,
+                        BinOp::Add => mir::BinOp::IntAdd,
+                        BinOp::Sub => mir::BinOp::IntSub,
+                        BinOp::Mul => mir::BinOp::IntMul,
+                        BinOp::Div if t.signed => mir::BinOp::IntDivSigned,
+                        BinOp::Div => mir::BinOp::IntDivUnsigned,
+                        BinOp::Eq => mir::BinOp::IntEq,
+                        BinOp::Ne => mir::BinOp::IntNe,
+                        BinOp::Lt if t.signed => mir::BinOp::IntLtSigned,
+                        BinOp::Lt => mir::BinOp::IntLtUnsigned,
+                        BinOp::Le if t.signed => mir::BinOp::IntLeSigned,
+                        BinOp::Le => mir::BinOp::IntLeUnsigned,
+                        BinOp::Gt if t.signed => mir::BinOp::IntGtSigned,
+                        BinOp::Gt => mir::BinOp::IntGtUnsigned,
+                        BinOp::Ge if t.signed => mir::BinOp::IntGeSigned,
+                        BinOp::Ge => mir::BinOp::IntGeUnsigned,
                     },
                     mir::Type::Float(_) => match expr.operator {
-                        BinaryOp::Add => mir::BinOp::FloatAdd,
-                        BinaryOp::Sub => mir::BinOp::FloatSub,
-                        BinaryOp::Mul => mir::BinOp::FloatMul,
-                        BinaryOp::Div => mir::BinOp::FloatDiv,
-                        BinaryOp::Eq => mir::BinOp::FloatEq,
+                        BinOp::Add => mir::BinOp::FloatAdd,
+                        BinOp::Sub => mir::BinOp::FloatSub,
+                        BinOp::Mul => mir::BinOp::FloatMul,
+                        BinOp::Div => mir::BinOp::FloatDiv,
+                        BinOp::Eq => mir::BinOp::FloatEq,
+                        BinOp::Ne => mir::BinOp::FloatNe,
+                        BinOp::Lt => mir::BinOp::FloatLt,
+                        BinOp::Le => mir::BinOp::FloatLe,
+                        BinOp::Gt => mir::BinOp::FloatGt,
+                        BinOp::Ge => mir::BinOp::FloatGe,
                     },
                     _ => unreachable!("{}", expr.ty),
                 };

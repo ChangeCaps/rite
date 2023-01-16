@@ -1,4 +1,4 @@
-use ritec_core::{BinaryOp, Literal, Span, UnaryOp};
+use ritec_core::{BinOp, Literal, Span, UnaryOp};
 
 use crate::{Block, Path};
 
@@ -79,7 +79,7 @@ pub struct UnaryExpr {
 #[derive(Clone, Debug, PartialEq)]
 pub struct BinaryExpr {
     pub lhs: Box<Expr>,
-    pub operator: BinaryOp,
+    pub operator: BinOp,
     pub rhs: Box<Expr>,
     pub span: Span,
 }

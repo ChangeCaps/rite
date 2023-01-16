@@ -1,4 +1,4 @@
-use ritec_core::{BinaryOp, Literal, UnaryOp};
+use ritec_core::{Literal, UnaryOp};
 use ritec_hir as hir;
 
 use crate::{Error, InferType, Instance, ItemId, Solver, TypeVariableKind};
@@ -206,9 +206,10 @@ impl<'a> Solver<'a> {
         let rhs = self.solve_expr(body, &body.exprs[expr.rhs])?;
         self.unify(lhs.clone(), rhs.clone())?;
 
-        let ty = match expr.operator {
-            BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div => lhs,
-            BinaryOp::Eq => InferType::apply(ItemId::Bool, vec![], expr.span),
+        let ty = if expr.operator.is_comparison() {
+            InferType::apply(ItemId::Bool, vec![], expr.span)
+        } else {
+            lhs
         };
 
         Ok(ty)

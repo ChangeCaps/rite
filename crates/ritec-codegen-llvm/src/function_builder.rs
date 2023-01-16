@@ -311,6 +311,69 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
                     .build_int_compare(IntPredicate::EQ, lhs, rhs, "eq")
                     .into()
             }
+            mir::BinOp::IntNe => {
+                let lhs = lhs.into_int_value();
+                let rhs = rhs.into_int_value();
+                self.builder
+                    .build_int_compare(IntPredicate::NE, lhs, rhs, "ne")
+                    .into()
+            }
+            mir::BinOp::IntLtSigned => {
+                let lhs = lhs.into_int_value();
+                let rhs = rhs.into_int_value();
+                self.builder
+                    .build_int_compare(IntPredicate::SLT, lhs, rhs, "lt")
+                    .into()
+            }
+            mir::BinOp::IntLtUnsigned => {
+                let lhs = lhs.into_int_value();
+                let rhs = rhs.into_int_value();
+                self.builder
+                    .build_int_compare(IntPredicate::ULT, lhs, rhs, "lt")
+                    .into()
+            }
+            mir::BinOp::IntLeSigned => {
+                let lhs = lhs.into_int_value();
+                let rhs = rhs.into_int_value();
+                self.builder
+                    .build_int_compare(IntPredicate::SLE, lhs, rhs, "le")
+                    .into()
+            }
+            mir::BinOp::IntLeUnsigned => {
+                let lhs = lhs.into_int_value();
+                let rhs = rhs.into_int_value();
+                self.builder
+                    .build_int_compare(IntPredicate::ULE, lhs, rhs, "le")
+                    .into()
+            }
+            mir::BinOp::IntGtSigned => {
+                let lhs = lhs.into_int_value();
+                let rhs = rhs.into_int_value();
+                self.builder
+                    .build_int_compare(IntPredicate::SGT, lhs, rhs, "gt")
+                    .into()
+            }
+            mir::BinOp::IntGtUnsigned => {
+                let lhs = lhs.into_int_value();
+                let rhs = rhs.into_int_value();
+                self.builder
+                    .build_int_compare(IntPredicate::UGT, lhs, rhs, "gt")
+                    .into()
+            }
+            mir::BinOp::IntGeSigned => {
+                let lhs = lhs.into_int_value();
+                let rhs = rhs.into_int_value();
+                self.builder
+                    .build_int_compare(IntPredicate::SGE, lhs, rhs, "ge")
+                    .into()
+            }
+            mir::BinOp::IntGeUnsigned => {
+                let lhs = lhs.into_int_value();
+                let rhs = rhs.into_int_value();
+                self.builder
+                    .build_int_compare(IntPredicate::UGE, lhs, rhs, "ge")
+                    .into()
+            }
             mir::BinOp::FloatAdd => {
                 let lhs = lhs.into_float_value();
                 let rhs = rhs.into_float_value();
@@ -336,6 +399,41 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
                 let rhs = rhs.into_float_value();
                 self.builder
                     .build_float_compare(FloatPredicate::OEQ, lhs, rhs, "eq")
+                    .into()
+            }
+            mir::BinOp::FloatNe => {
+                let lhs = lhs.into_float_value();
+                let rhs = rhs.into_float_value();
+                self.builder
+                    .build_float_compare(FloatPredicate::ONE, lhs, rhs, "ne")
+                    .into()
+            }
+            mir::BinOp::FloatLt => {
+                let lhs = lhs.into_float_value();
+                let rhs = rhs.into_float_value();
+                self.builder
+                    .build_float_compare(FloatPredicate::OLT, lhs, rhs, "lt")
+                    .into()
+            }
+            mir::BinOp::FloatLe => {
+                let lhs = lhs.into_float_value();
+                let rhs = rhs.into_float_value();
+                self.builder
+                    .build_float_compare(FloatPredicate::OLE, lhs, rhs, "le")
+                    .into()
+            }
+            mir::BinOp::FloatGt => {
+                let lhs = lhs.into_float_value();
+                let rhs = rhs.into_float_value();
+                self.builder
+                    .build_float_compare(FloatPredicate::OGT, lhs, rhs, "gt")
+                    .into()
+            }
+            mir::BinOp::FloatGe => {
+                let lhs = lhs.into_float_value();
+                let rhs = rhs.into_float_value();
+                self.builder
+                    .build_float_compare(FloatPredicate::OGE, lhs, rhs, "ge")
                     .into()
             }
         }
