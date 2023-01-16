@@ -1,33 +1,33 @@
-use std::{fs, path::Path};
+use std::path::Path;
 
 use ritec_ast_lower::ProgramLowerer as AstLowerer;
 use ritec_codegen_llvm::LLVMCodegen;
-use ritec_core::{SourceFile, SourceMap};
+use ritec_core::SourceMap;
 use ritec_hir as hir;
 use ritec_mir_build::ProgramBuilder;
-use ritec_parser::{ParseBuffer, TokenStream};
+use ritec_parser::ProgramParser;
 
 pub struct Compiler {}
 
 impl Compiler {
     pub fn compile(path: impl AsRef<Path>) {
-        let source = fs::read_to_string(&path).unwrap();
-        let source_file = SourceFile {
-            path: path.as_ref().display().to_string(),
-            text: source.clone(),
-        };
-        let mut source_map = SourceMap::new();
-        let file = source_map.insert(source_file);
+        let mut emitter = Vec::new();
 
-        let tokens = TokenStream::lex(&source, Some(file)).unwrap();
-        let mut parser = ParseBuffer::new(&tokens);
-        let items: ritec_ast::Items = parser.parse().unwrap();
+        let mut source_map = SourceMap::new();
+        let mut program_parser = ProgramParser::new(&mut source_map, &mut emitter);
+        let program = program_parser.parse_program(path.as_ref());
+
+        for diagnostic in emitter.iter() {
+            println!("{:?}", diagnostic);
+        }
+
+        let program = program.unwrap();
 
         let mut hir_program = hir::Program::new();
         hir_program.add_intrinsics();
-        let mut emitter = Vec::new();
+
         let mut program_lowerer = AstLowerer::new(&mut hir_program, &mut emitter);
-        let res = program_lowerer.lower(&items);
+        let res = program_lowerer.lower(&program);
 
         for diagnostic in emitter.iter() {
             println!("{:?}", diagnostic);

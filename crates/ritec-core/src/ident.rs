@@ -15,13 +15,14 @@ pub struct Ident {
 }
 
 impl Ident {
+    #[track_caller]
     pub fn new(name: impl Into<Arc<str>>, span: Span) -> Self {
         let ident = Self {
             value: name.into(),
             span,
         };
 
-        debug_assert!(ident.is_valid());
+        debug_assert!(ident.is_valid(), "invalid ident: {:?}", ident);
 
         ident
     }

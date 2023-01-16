@@ -33,7 +33,7 @@ impl DiagnosticHint {
         self
     }
 
-    pub fn with_span(mut self, span: Span) -> Self {
+    pub fn with_msg_span(mut self, span: Span) -> Self {
         self.set_span(span);
         self
     }
@@ -85,7 +85,8 @@ impl Diagnostic {
     }
 
     pub fn add_span(&mut self, span: Span) -> &mut Self {
-        self.messages.push(DiagnosticHint::new().with_span(span));
+        self.messages
+            .push(DiagnosticHint::new().with_msg_span(span));
         self
     }
 
@@ -95,7 +96,11 @@ impl Diagnostic {
     }
 
     pub fn add_msg_span(&mut self, message: impl Into<String>, span: Span) -> &mut Self {
-        self.add_msg(DiagnosticHint::new().with_message(message).with_span(span));
+        self.add_msg(
+            DiagnosticHint::new()
+                .with_message(message)
+                .with_msg_span(span),
+        );
         self
     }
 

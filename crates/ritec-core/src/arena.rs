@@ -181,6 +181,22 @@ impl<T> Arena<T> {
     }
 
     #[inline]
+    pub fn contains_key(&self, id: Id<T>) -> bool {
+        self.arena
+            .get(id.as_raw_index())
+            .map(|x| x.is_some())
+            .unwrap_or(false)
+    }
+
+    #[inline]
+    pub fn contains_value(&self, item: &T) -> bool
+    where
+        T: PartialEq,
+    {
+        self.arena.iter().any(|x| x.as_ref() == Some(item))
+    }
+
+    #[inline]
     pub fn get(&self, id: Id<T>) -> Option<&T> {
         self.arena.get(id.as_raw_index())?.as_ref()
     }

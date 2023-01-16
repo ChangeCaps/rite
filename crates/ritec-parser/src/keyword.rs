@@ -71,6 +71,7 @@ keyword! {
     "break" => Break,
     "while" => While,
     "loop" => Loop,
+    "mod" => Mod,
 }
 
 impl Display for KeywordKind {

@@ -1,6 +1,6 @@
-use ritec_core::{Ident, Span};
+use ritec_core::{Id, Ident, Span};
 
-use crate::{Block, Generics, Type};
+use crate::{Block, Generics, ModuleId, Type};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Item {
@@ -40,8 +40,11 @@ pub struct FunctionArgument {
     pub span: Span,
 }
 
+pub type FunctionId = Id<Function>;
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Function {
+    pub module: ModuleId,
     pub ident: Ident,
     pub generics: Generics,
     pub arguments: Vec<FunctionArgument>,

@@ -7,3 +7,5 @@ edition = "2021"
 
 [dependencies]
 ritec-core = { version = "0.1.0", path = "../ritec-core" }
+
+termion = "2.0"

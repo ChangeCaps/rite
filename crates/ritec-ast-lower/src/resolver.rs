@@ -26,7 +26,7 @@ impl<'a> Resolver<'a> {
                     if iter.peek().is_some() {
                         let Some(&next_module) = module.modules.get(&item.ident) else {
                             let err = Diagnostic::error("module not found")
-                                .with_span("module '{}' not found", item.ident.span());
+                                .with_msg_span("module '{}' not found", item.ident.span());
 
                             return Err(err);
                         };
@@ -54,7 +54,7 @@ impl<'a> Resolver<'a> {
 
                     if expected_len != generics.len() {
                         let err = Diagnostic::error("invalid number of generic arguments")
-                            .with_span(
+                            .with_msg_span(
                                 format!(
                                     "expected {} generic arguments, found {}",
                                     expected_len,

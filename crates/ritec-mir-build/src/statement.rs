@@ -3,7 +3,7 @@ use ritec_mir as mir;
 use crate::{thir, unpack, FunctionBuilder};
 
 impl<'a> FunctionBuilder<'a> {
-    pub fn build_stmt(&mut self, mut block: mir::BlockId, stmt: &thir::Stmt) -> mir::BlockId {
+    pub fn build_stmt(&mut self, block: mir::BlockId, stmt: &thir::Stmt) -> mir::BlockId {
         match stmt {
             thir::Stmt::Let(stmt) => self.build_let_stmt(block, stmt),
             thir::Stmt::Expr(stmt) => self.build_expr_stmt(block, stmt),

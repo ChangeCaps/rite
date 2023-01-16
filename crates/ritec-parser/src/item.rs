@@ -38,6 +38,7 @@ impl Parse for ast::Function {
         let body = parser.parse()?;
 
         Ok(ast::Function {
+            module: parser.module(),
             ident,
             generics,
             arguments,
@@ -48,10 +49,25 @@ impl Parse for ast::Function {
     }
 }
 
+impl Parse for ast::ModuleItem {
+    fn parse(parser: ParseStream) -> ParseResult<Self> {
+        let span = parser.expect(&KeywordKind::Mod)?;
+        let ident = parser.parse()?;
+        parser.expect(&SymbolKind::Semicolon)?;
+
+        Ok(ast::ModuleItem {
+            ident,
+            span: span | parser.span(),
+        })
+    }
+}
+
 impl Parse for ast::Item {
     fn parse(parser: ParseStream) -> ParseResult<Self> {
         if parser.is(&KeywordKind::Fn) {
             Ok(ast::Item::Function(parser.parse()?))
+        } else if parser.is(&KeywordKind::Mod) {
+            Ok(ast::Item::Module(parser.parse()?))
         } else {
             Err(parser.expected("item"))
         }

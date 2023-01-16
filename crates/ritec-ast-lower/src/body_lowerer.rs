@@ -153,7 +153,7 @@ impl<'a> BodyLowerer<'a> {
         }
 
         let err = Diagnostic::error(format!("'{}' not defined", expr.path))
-            .with_span("variable not found", expr.span);
+            .with_msg_span("variable not found", expr.span);
 
         Err(err)
     }
