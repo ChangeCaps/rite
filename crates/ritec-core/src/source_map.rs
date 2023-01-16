@@ -7,7 +7,7 @@ pub type FileId = Id<SourceFile>;
 #[derive(Clone, Debug)]
 pub struct SourceFile {
     pub path: String,
-    pub source: String,
+    pub text: String,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -20,6 +20,10 @@ impl SourceMap {
         Self {
             arena: Arena::new(),
         }
+    }
+
+    pub fn contains_path(&self, path: &str) -> bool {
+        self.arena.values().any(|file| file.path == path)
     }
 
     pub fn insert(&mut self, source_file: SourceFile) -> FileId {

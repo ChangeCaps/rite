@@ -48,7 +48,7 @@ impl<'a> FunctionRegisterer<'a> {
 
     pub fn register_function(
         &mut self,
-        item: &ast::FunctionItem,
+        item: &ast::Function,
     ) -> Result<hir::FunctionId, Diagnostic> {
         let mut generic_params = Vec::new();
         for param in item.generics.params.iter() {
@@ -81,7 +81,7 @@ impl<'a> FunctionRegisterer<'a> {
 
             if ty.is_inferred() {
                 let err = Diagnostic::error("cannot infer type of function argument")
-                    .with_message_span("argument type is inferred", argument.span);
+                    .with_span("argument type is inferred", argument.span);
 
                 return Err(err);
             }
@@ -97,7 +97,7 @@ impl<'a> FunctionRegisterer<'a> {
 
         if return_type.is_inferred() {
             let err = Diagnostic::error("cannot infer type of function return type")
-                .with_message_span("return type is inferred", item.span);
+                .with_span("return type is inferred", item.span);
 
             return Err(err);
         }

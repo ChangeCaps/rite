@@ -18,7 +18,7 @@ impl Parse for ast::FunctionArgument {
     }
 }
 
-impl Parse for ast::FunctionItem {
+impl Parse for ast::Function {
     fn parse(parser: ParseStream) -> ParseResult<Self> {
         let span = parser.expect(&KeywordKind::Fn)?;
 
@@ -37,7 +37,7 @@ impl Parse for ast::FunctionItem {
 
         let body = parser.parse()?;
 
-        Ok(ast::FunctionItem {
+        Ok(ast::Function {
             ident,
             generics,
             arguments,

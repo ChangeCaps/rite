@@ -14,7 +14,7 @@ impl Compiler {
         let source = fs::read_to_string(&path).unwrap();
         let source_file = SourceFile {
             path: path.as_ref().display().to_string(),
-            source: source.clone(),
+            text: source.clone(),
         };
         let mut source_map = SourceMap::new();
         let file = source_map.insert(source_file);

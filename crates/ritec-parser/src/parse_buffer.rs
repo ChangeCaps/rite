@@ -162,14 +162,13 @@ impl<'a> ParseBuffer<'a> {
 
     pub fn ident(&mut self) -> ParseResult<Ident> {
         let token = self.next().ok_or_else(|| {
-            Diagnostic::error("expected identifier")
-                .with_message_span("found end of file", self.span())
+            Diagnostic::error("expected identifier").with_span("found end of file", self.span())
         })?;
 
         match token {
             TokenTree::Ident(ident) => Ok(ident.clone()),
             _ => Err(Diagnostic::error("expected identifier")
-                .with_message_span(format!("found `{}`", token), token.span())),
+                .with_span(format!("found `{}`", token), token.span())),
         }
     }
 
@@ -181,7 +180,7 @@ impl<'a> ParseBuffer<'a> {
         let c = delimiter.open_char().unwrap();
         let token = self.next().ok_or_else(|| {
             Diagnostic::error(format!("expected `{}`", c))
-                .with_message_span("found end of file", self.span())
+                .with_span("found end of file", self.span())
         })?;
 
         match token {
@@ -189,7 +188,7 @@ impl<'a> ParseBuffer<'a> {
                 Ok(ParseBuffer::new(group.stream()))
             }
             _ => Err(Diagnostic::error(format!("expected `{}`", c))
-                .with_message_span(format!("found `{}`", token), token.span())),
+                .with_span(format!("found `{}`", token), token.span())),
         }
     }
 
@@ -199,14 +198,13 @@ impl<'a> ParseBuffer<'a> {
         }
 
         let token = self.next().ok_or_else(|| {
-            Diagnostic::error("expected literal")
-                .with_message_span("found end of file", self.span())
+            Diagnostic::error("expected literal").with_span("found end of file", self.span())
         })?;
 
         match token {
             TokenTree::Literal(literal) => Ok(literal.clone()),
             _ => Err(Diagnostic::error("expected literal")
-                .with_message_span(format!("found `{}`", token), token.span())),
+                .with_span(format!("found `{}`", token), token.span())),
         }
     }
 
@@ -214,9 +212,9 @@ impl<'a> ParseBuffer<'a> {
     pub fn expected<T: Display>(&self, expected: T) -> Diagnostic {
         match self.peek() {
             Some(token) => Diagnostic::error(format!("expected `{}`", expected))
-                .with_message_span(format!("found `{}`", token), token.span()),
+                .with_span(format!("found `{}`", token), token.span()),
             None => Diagnostic::error(format!("expected `{}`", expected))
-                .with_message_span("found end of file", self.span()),
+                .with_span("found end of file", self.span()),
         }
     }
 }

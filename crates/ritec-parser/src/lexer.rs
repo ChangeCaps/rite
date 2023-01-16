@@ -1,4 +1,5 @@
 use ritec_core::{FileId, FloatLiteral, Ident, IntLiteral, IntPrefix, Literal, Span};
+use ritec_error::Diagnostic;
 
 use crate::{Delimiter, Group, Keyword, KeywordKind, Symbol, SymbolKind, TokenStream, TokenTree};
 
@@ -6,6 +7,19 @@ use crate::{Delimiter, Group, Keyword, KeywordKind, Symbol, SymbolKind, TokenStr
 pub enum LexerError {
     UnmatchedDelimiter(Delimiter, Span),
     UnexpectedCharacter(char, Span),
+}
+
+impl Into<Diagnostic> for LexerError {
+    fn into(self) -> Diagnostic {
+        match self {
+            LexerError::UnmatchedDelimiter(delim, span) => {
+                Diagnostic::error(format!("unmatched delimiter: {:?}", delim)).with_span(span)
+            }
+            LexerError::UnexpectedCharacter(ch, span) => {
+                Diagnostic::error(format!("unexpected character: {:?}", ch)).with_span(span)
+            }
+        }
+    }
 }
 
 pub struct Lexer<'a> {
