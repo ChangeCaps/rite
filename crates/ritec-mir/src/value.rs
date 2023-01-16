@@ -3,6 +3,13 @@ use std::fmt::{self, Display};
 use crate::{Constant, Operand, Place, Type};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum UnaryOp {
+    IntNot,
+    IntNeg,
+    FloatNeg,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BinOp {
     IntAdd,
     IntSub,
@@ -48,6 +55,7 @@ impl Display for Cast {
 pub enum Value {
     Use(Operand),
     Address(Place),
+    UnaryOp(UnaryOp, Operand),
     BinaryOp(BinOp, Operand, Operand),
     Cast(Cast, Operand),
     Call(Operand, Vec<Operand>),
@@ -94,6 +102,7 @@ impl Display for Value {
         match self {
             Self::Use(operand) => write!(f, "{}", operand),
             Self::Address(place) => write!(f, "&{}", place),
+            Self::UnaryOp(op, operand) => write!(f, "{:?}({})", op, operand),
             Self::BinaryOp(op, lhs, rhs) => write!(f, "{:?}({}, {})", op, lhs, rhs),
             Self::Cast(cast, operand) => write!(f, "{}({})", cast, operand),
             Self::Call(callee, args) => {

@@ -162,6 +162,8 @@ impl<'a> Solver<'a> {
         match expr.operator {
             UnaryOp::Ref => self.solve_ref_expr(body, expr),
             UnaryOp::Deref => self.solve_deref_expr(body, expr),
+            UnaryOp::Neg => self.solve_neg_expr(body, expr),
+            UnaryOp::Not => self.solve_not_expr(body, expr),
         }
     }
 
@@ -195,6 +197,29 @@ impl<'a> Solver<'a> {
         )?;
 
         Ok(pointee)
+    }
+
+    pub fn solve_neg_expr(
+        &mut self,
+        body: &hir::Body,
+        expr: &hir::UnaryExpr,
+    ) -> Result<InferType, Error> {
+        assert_eq!(expr.operator, UnaryOp::Neg);
+
+        self.solve_expr(body, &body.exprs[expr.operand])
+    }
+
+    pub fn solve_not_expr(
+        &mut self,
+        body: &hir::Body,
+        expr: &hir::UnaryExpr,
+    ) -> Result<InferType, Error> {
+        assert_eq!(expr.operator, UnaryOp::Not);
+
+        let ty = self.solve_expr(body, &body.exprs[expr.operand])?;
+        self.unify(ty, InferType::apply(ItemId::Bool, vec![], expr.span))?;
+
+        Ok(InferType::apply(ItemId::Bool, vec![], expr.span))
     }
 
     pub fn solve_binary_expr(
@@ -267,9 +292,9 @@ impl<'a> Solver<'a> {
         let condition = self.solve_expr(body, &body.exprs[expr.condition])?;
         self.unify(condition, InferType::apply(ItemId::Bool, vec![], expr.span))?;
 
-        self.solve_block(body, &body[expr.then_block])?;
+        self.solve_expr(body, &body[expr.then_expr])?;
 
-        if let Some(else_block) = expr.else_block {
+        if let Some(else_block) = expr.else_expr {
             self.solve_expr(body, &body[else_block])?;
         }
 

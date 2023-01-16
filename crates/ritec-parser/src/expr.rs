@@ -54,6 +54,12 @@ impl Parse for UnaryOp {
         } else if parser.is(&SymbolKind::Star) {
             parser.next();
             Ok(UnaryOp::Deref)
+        } else if parser.is(&SymbolKind::Bang) {
+            parser.next();
+            Ok(UnaryOp::Not)
+        } else if parser.is(&SymbolKind::Minus) {
+            parser.next();
+            Ok(UnaryOp::Neg)
         } else {
             Err(parser.expected("unary operator"))
         }
@@ -139,7 +145,7 @@ impl Parse for ast::IfExpr {
     fn parse(parser: ParseStream) -> ParseResult<Self> {
         let span = parser.expect(&KeywordKind::If)?;
         let condition = parser.parse()?;
-        let then_block = parser.parse()?;
+        let then_block = ast::Expr::Block(parser.parse()?);
 
         let else_block = if parser.is(&KeywordKind::Else) {
             parser.next();
@@ -155,7 +161,7 @@ impl Parse for ast::IfExpr {
 
         Ok(ast::IfExpr {
             condition: Box::new(condition),
-            then_block,
+            then_block: Box::new(then_block),
             else_block,
             span,
         })
@@ -167,6 +173,19 @@ impl Parse for ast::LoopExpr {
         parser.expect(&KeywordKind::Loop)?;
         let (block, span) = parser.parse_spanned()?;
         Ok(ast::LoopExpr { block, span })
+    }
+}
+
+impl Parse for ast::WhileExpr {
+    fn parse(parser: ParseStream) -> ParseResult<Self> {
+        let span = parser.expect(&KeywordKind::While)?;
+        let condition = parser.parse()?;
+        let block = parser.parse()?;
+        Ok(ast::WhileExpr {
+            condition: Box::new(condition),
+            block,
+            span: span | parser.span(),
+        })
     }
 }
 
@@ -218,7 +237,7 @@ fn parse_binary(parser: ParseStream) -> ParseResult<ast::Expr> {
         let rhs = parse_binary(parser)?;
 
         if let ast::Expr::Binary(ref rhs) = rhs {
-            if rhs.operator.precedence() < operator.precedence() {
+            if rhs.operator.precedence() <= operator.precedence() {
                 return Ok(ast::Expr::Binary(ast::BinaryExpr {
                     lhs: Box::new(ast::Expr::Binary(ast::BinaryExpr {
                         lhs: Box::new(lhs),
@@ -267,10 +286,14 @@ impl Parse for ast::Expr {
             Ok(ast::Expr::Return(parser.parse()?))
         } else if parser.is(&KeywordKind::Break) {
             Ok(ast::Expr::Break(parser.parse()?))
+        } else if parser.is(&Delimiter::Brace) {
+            Ok(ast::Expr::Block(parser.parse()?))
         } else if parser.is(&KeywordKind::If) {
             Ok(ast::Expr::If(parser.parse()?))
         } else if parser.is(&KeywordKind::Loop) {
             Ok(ast::Expr::Loop(parser.parse()?))
+        } else if parser.is(&KeywordKind::While) {
+            Ok(ast::Expr::While(parser.parse()?))
         } else {
             parse_assign(parser)
         }

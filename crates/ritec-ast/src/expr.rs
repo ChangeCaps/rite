@@ -16,6 +16,7 @@ pub enum Expr {
     Block(BlockExpr),
     If(IfExpr),
     Loop(LoopExpr),
+    While(WhileExpr),
 }
 
 impl Expr {
@@ -33,12 +34,13 @@ impl Expr {
             Self::Block(expr) => expr.span,
             Self::If(expr) => expr.span,
             Self::Loop(expr) => expr.span,
+            Self::While(expr) => expr.span,
         }
     }
 
     pub const fn stmt_needs_semi(&self) -> bool {
         match self {
-            Self::Block(_) | Self::If(_) | Self::Loop(_) => false,
+            Self::Block(_) | Self::If(_) | Self::Loop(_) | Self::While(_) => false,
             _ => true,
         }
     }
@@ -111,13 +113,20 @@ pub struct BlockExpr {
 #[derive(Clone, Debug, PartialEq)]
 pub struct IfExpr {
     pub condition: Box<Expr>,
-    pub then_block: Block,
+    pub then_block: Box<Expr>,
     pub else_block: Option<Box<Expr>>,
     pub span: Span,
 }
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct LoopExpr {
+    pub block: Block,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct WhileExpr {
+    pub condition: Box<Expr>,
     pub block: Block,
     pub span: Span,
 }

@@ -245,8 +245,8 @@ impl<'a> ThirBuilder<'a> {
 
     pub fn build_if_expr(&mut self, expr: &hir::IfExpr) -> Result<thir::Expr, InferError> {
         let condition = self.build_expr(&self.hir[expr.condition])?;
-        let then_block = self.build_block(&self.hir[expr.then_block])?;
-        let else_block = if let Some(else_block) = expr.else_block {
+        let then_block = self.build_expr(&self.hir[expr.then_expr])?;
+        let else_block = if let Some(else_block) = expr.else_expr {
             Some(self.build_expr(&self.hir[else_block])?)
         } else {
             None
@@ -254,8 +254,8 @@ impl<'a> ThirBuilder<'a> {
 
         Ok(thir::Expr::If(thir::IfExpr {
             condition,
-            then_block,
-            else_block,
+            then_expr: then_block,
+            else_expr: else_block,
             ty: self.table.resolve_mir(expr.id)?,
             span: expr.span,
         }))

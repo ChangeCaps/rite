@@ -69,6 +69,7 @@ keyword! {
     "else" => Else,
     "return" => Return,
     "break" => Break,
+    "while" => While,
     "loop" => Loop,
 }
 

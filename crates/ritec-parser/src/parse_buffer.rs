@@ -42,6 +42,28 @@ impl<'a> ParseBuffer<'a> {
         }
     }
 
+    pub fn parse_with<T>(
+        &mut self,
+        f: impl FnOnce(&mut ParseBuffer) -> ParseResult<T>,
+    ) -> ParseResult<T> {
+        f(self)
+    }
+
+    pub fn try_parse_with<T>(
+        &mut self,
+        f: impl FnOnce(&mut ParseBuffer) -> ParseResult<T>,
+    ) -> Option<T> {
+        let index = self.index;
+
+        if let Ok(result) = f(self) {
+            Some(result)
+        } else {
+            self.index = index;
+
+            None
+        }
+    }
+
     pub fn parse_comma_separated<T: Parse>(&mut self) -> ParseResult<Vec<T>> {
         let mut result = Vec::new();
 

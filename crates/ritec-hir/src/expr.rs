@@ -222,8 +222,8 @@ pub struct BlockExpr {
 #[derive(Clone, Debug, PartialEq)]
 pub struct IfExpr {
     pub condition: ExprId,
-    pub then_block: BlockId,
-    pub else_block: Option<ExprId>,
+    pub then_expr: ExprId,
+    pub else_expr: Option<ExprId>,
     pub id: HirId,
     pub span: Span,
 }

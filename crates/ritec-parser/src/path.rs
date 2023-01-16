@@ -8,30 +8,39 @@ impl Parse for ast::ItemSegment {
         let name = parser.parse()?;
 
         // parse the generics
-        let mut generics = Vec::new();
-        if parser.is(&SymbolKind::Less) {
-            parser.expect(&SymbolKind::Less)?;
+        let generics = if parser.is(&SymbolKind::Less) {
+            let generics = parser.try_parse_with(|parser| {
+                let mut generics = Vec::new();
 
-            loop {
-                // if we have reached the end of the generics, break
-                if parser.is(&SymbolKind::Greater) {
-                    break;
+                parser.expect(&SymbolKind::Less)?;
+
+                loop {
+                    // if we have reached the end of the generics, break
+                    if parser.is(&SymbolKind::Greater) {
+                        break;
+                    }
+
+                    // parse the type
+                    generics.push(parser.parse()?);
+
+                    // if we have reached the end of the generics, break
+                    if parser.is(&SymbolKind::Greater) {
+                        break;
+                    }
+
+                    parser.expect(&SymbolKind::Comma)?;
                 }
 
-                // parse the type
-                generics.push(parser.parse()?);
+                // consume the closing `>`
+                parser.expect(&SymbolKind::Greater)?;
 
-                // if we have reached the end of the generics, break
-                if parser.is(&SymbolKind::Greater) {
-                    break;
-                }
+                Ok(generics)
+            });
 
-                parser.expect(&SymbolKind::Comma)?;
-            }
-
-            // consume the closing `>`
-            parser.expect(&SymbolKind::Greater)?;
-        }
+            generics.unwrap_or(Vec::new())
+        } else {
+            Vec::new()
+        };
 
         Ok(ast::ItemSegment {
             ident: name,

@@ -6,8 +6,8 @@ use std::{
 use ritec_core::{Arena, Ident, Span};
 
 use crate::{
-    BitcastExpr, Block, BlockId, Expr, ExprId, ExprStmt, Local, LocalExpr, LocalId, ReturnExpr,
-    Stmt, Type,
+    BitcastExpr, Block, BlockId, BreakExpr, Expr, ExprId, ExprStmt, IfExpr, Local, LocalExpr,
+    LocalId, ReturnExpr, Stmt, Type,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -54,44 +54,64 @@ impl Body {
     }
 
     pub fn local(&mut self, ident: impl Into<Ident>, ty: impl Into<Type>) -> LocalId {
-        let id = self.next_id();
         let local = Local {
             ident: ident.into(),
             ty: ty.into(),
-            id,
+            id: self.next_id(),
         };
         self.locals.push(local)
     }
 
     pub fn local_expr(&mut self, local: LocalId) -> ExprId {
-        let id = self.next_id();
         let expr = LocalExpr {
             local,
-            id,
+            id: self.next_id(),
             span: Span::DUMMY,
         };
         self.exprs.push(Expr::Local(expr))
     }
 
     pub fn bitcast_expr(&mut self, expr: ExprId, ty: impl Into<Type>) -> ExprId {
-        let id = self.next_id();
         let expr = BitcastExpr {
             expr,
             ty: ty.into(),
-            id,
+            id: self.next_id(),
             span: Span::DUMMY,
         };
         self.exprs.push(Expr::Bitcast(expr))
     }
 
     pub fn return_expr(&mut self, value: Option<ExprId>) -> ExprId {
-        let id = self.next_id();
         let expr = ReturnExpr {
             value,
-            id,
+            id: self.next_id(),
             span: Span::DUMMY,
         };
         self.exprs.push(Expr::Return(expr))
+    }
+
+    pub fn break_expr(&mut self) -> ExprId {
+        let expr = BreakExpr {
+            id: self.next_id(),
+            span: Span::DUMMY,
+        };
+        self.exprs.push(Expr::Break(expr))
+    }
+
+    pub fn if_expr(
+        &mut self,
+        condition: ExprId,
+        then_expr: ExprId,
+        else_expr: Option<ExprId>,
+    ) -> ExprId {
+        let expr = IfExpr {
+            condition,
+            then_expr,
+            else_expr,
+            id: self.next_id(),
+            span: Span::DUMMY,
+        };
+        self.exprs.push(Expr::If(expr))
     }
 
     pub fn expr_stmt(&mut self, expr: ExprId) {

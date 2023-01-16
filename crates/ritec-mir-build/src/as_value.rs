@@ -1,22 +1,39 @@
 use ritec_core::{BinOp, UnaryOp};
 use ritec_mir as mir;
 
-use crate::{thir, FunctionBuilder};
+use crate::{thir, unpack, BlockAnd, FunctionBuilder};
 
 impl<'a> FunctionBuilder<'a> {
-    pub fn as_value(&mut self, expr: &thir::Expr) -> mir::Value {
+    pub fn as_value(&mut self, mut block: mir::BlockId, expr: &thir::Expr) -> BlockAnd<mir::Value> {
         match expr {
             thir::Expr::Bitcast(expr) => {
-                let value = self.as_operand(&self.thir[expr.expr]);
-                mir::Value::Cast(mir::Cast::Bit(expr.ty.clone()), value)
+                let value = unpack!(block = self.as_operand(block, &self.thir[expr.expr]));
+                BlockAnd::new(
+                    block,
+                    mir::Value::Cast(mir::Cast::Bit(expr.ty.clone()), value),
+                )
             }
             thir::Expr::Unary(expr) if expr.operator == UnaryOp::Ref => {
-                let place = self.as_place(&self.thir[expr.operand]);
-                mir::Value::Address(place)
+                let place = unpack!(block = self.as_place(block, &self.thir[expr.operand]));
+                BlockAnd::new(block, mir::Value::Address(place))
+            }
+            thir::Expr::Unary(expr) if expr.operator == UnaryOp::Neg => {
+                let op = match expr.ty {
+                    mir::Type::Int(_) => mir::UnaryOp::IntNeg,
+                    mir::Type::Float(_) => mir::UnaryOp::FloatNeg,
+                    _ => unreachable!("{}", expr.ty),
+                };
+
+                let value = unpack!(block = self.as_operand(block, &self.thir[expr.operand]));
+                BlockAnd::new(block, mir::Value::UnaryOp(op, value))
+            }
+            thir::Expr::Unary(expr) if expr.operator == UnaryOp::Not => {
+                let value = unpack!(block = self.as_operand(block, &self.thir[expr.operand]));
+                BlockAnd::new(block, mir::Value::UnaryOp(mir::UnaryOp::IntNot, value))
             }
             thir::Expr::Binary(expr) => {
-                let lhs = self.as_operand(&self.thir[expr.lhs]);
-                let rhs = self.as_operand(&self.thir[expr.rhs]);
+                let lhs = unpack!(block = self.as_operand(block, &self.thir[expr.lhs]));
+                let rhs = unpack!(block = self.as_operand(block, &self.thir[expr.rhs]));
 
                 let op = match self.thir[expr.lhs].ty() {
                     mir::Type::Int(ref t) => match expr.operator {
@@ -51,16 +68,17 @@ impl<'a> FunctionBuilder<'a> {
                     _ => unreachable!("{}", expr.ty),
                 };
 
-                mir::Value::BinaryOp(op, lhs, rhs)
+                BlockAnd::new(block, mir::Value::BinaryOp(op, lhs, rhs))
             }
             thir::Expr::Call(expr) => {
-                let callee = self.as_operand(&self.thir[expr.callee]);
+                let callee = unpack!(block = self.as_operand(block, &self.thir[expr.callee]));
                 let mut arguments = Vec::new();
                 for &argument in &expr.arguments {
-                    arguments.push(self.as_operand(&self.thir[argument]));
+                    let argument = unpack!(block = self.as_operand(block, &self.thir[argument]));
+                    arguments.push(argument);
                 }
 
-                mir::Value::Call(callee, arguments)
+                BlockAnd::new(block, mir::Value::Call(callee, arguments))
             }
             thir::Expr::Local(_)
             | thir::Expr::Literal(_)
@@ -72,8 +90,8 @@ impl<'a> FunctionBuilder<'a> {
             | thir::Expr::Block(_)
             | thir::Expr::If(_)
             | thir::Expr::Loop(_) => {
-                let operand = self.as_operand(expr);
-                mir::Value::Use(operand)
+                let operand = unpack!(block = self.as_operand(block, expr));
+                BlockAnd::new(block, mir::Value::Use(operand))
             }
         }
     }

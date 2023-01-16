@@ -4,6 +4,8 @@ use std::fmt::{self, Display};
 pub enum UnaryOp {
     Ref,
     Deref,
+    Not,
+    Neg,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

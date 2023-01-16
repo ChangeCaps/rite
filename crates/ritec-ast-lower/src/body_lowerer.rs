@@ -1,5 +1,5 @@
 use ritec_ast as ast;
-use ritec_core::Ident;
+use ritec_core::{Ident, UnaryOp};
 use ritec_error::Diagnostic;
 use ritec_hir as hir;
 
@@ -30,10 +30,13 @@ impl<'a> BodyLowerer<'a> {
         let mut hir = hir::Block::new();
 
         let block_id = self.body.blocks.reserve();
+        let scope_index = self.scope.len();
 
         for stmt in block.stmts.iter() {
             hir.push(self.lower_stmt(stmt)?);
         }
+
+        self.scope.truncate(scope_index);
 
         self.body.blocks.insert(block_id, hir);
         Ok(block_id)
@@ -59,6 +62,9 @@ impl<'a> BodyLowerer<'a> {
             id: self.body.next_id(),
         };
 
+        let local = self.body.locals.push(local);
+        self.scope.push(local);
+
         let init = if let Some(ref init) = stmt.init {
             Some(self.lower_expr(init)?)
         } else {
@@ -66,7 +72,7 @@ impl<'a> BodyLowerer<'a> {
         };
 
         let let_stmt = hir::LetStmt {
-            local: self.body.locals.push(local),
+            local,
             init,
             id: self.body.next_id(),
             span: stmt.span,
@@ -101,6 +107,7 @@ impl<'a> BodyLowerer<'a> {
             ast::Expr::Block(expr) => self.lower_block_expr(expr)?,
             ast::Expr::If(expr) => self.lower_if_expr(expr)?,
             ast::Expr::Loop(expr) => self.lower_loop_expr(expr)?,
+            ast::Expr::While(expr) => self.lower_while_expr(expr)?,
         };
 
         Ok(self.body.exprs.push(expr))
@@ -111,7 +118,9 @@ impl<'a> BodyLowerer<'a> {
     }
 
     pub fn find_local(&self, ident: &Ident) -> Option<hir::LocalId> {
-        for (local_id, local) in self.body.locals.iter().rev() {
+        for &local_id in self.scope.iter().rev() {
+            let local = &self.body[local_id];
+
             if local.ident == *ident {
                 return Some(local_id);
             }
@@ -248,8 +257,8 @@ impl<'a> BodyLowerer<'a> {
 
     pub fn lower_if_expr(&mut self, expr: &ast::IfExpr) -> Result<hir::Expr, Diagnostic> {
         let condition = self.lower_expr(&expr.condition)?;
-        let then_block = self.lower_block(&expr.then_block)?;
-        let else_block = if let Some(else_block) = &expr.else_block {
+        let then_expr = self.lower_expr(&expr.then_block)?;
+        let else_expr = if let Some(else_block) = &expr.else_block {
             Some(self.lower_expr(else_block)?)
         } else {
             None
@@ -257,8 +266,8 @@ impl<'a> BodyLowerer<'a> {
 
         let if_expr = hir::IfExpr {
             condition,
-            then_block,
-            else_block,
+            then_expr,
+            else_expr,
             id: self.body.next_id(),
             span: expr.span,
         };
@@ -274,5 +283,35 @@ impl<'a> BodyLowerer<'a> {
         };
 
         Ok(hir::Expr::Loop(loop_expr))
+    }
+
+    pub fn lower_while_expr(&mut self, expr: &ast::WhileExpr) -> Result<hir::Expr, Diagnostic> {
+        let mut block = expr.block.clone();
+
+        let if_expr = ast::IfExpr {
+            condition: Box::new(ast::Expr::Unary(ast::UnaryExpr {
+                operator: UnaryOp::Not,
+                operand: expr.condition.clone(),
+                span: expr.condition.span(),
+            })),
+            then_block: Box::new(ast::Expr::Break(ast::BreakExpr { span: expr.span })),
+            else_block: None,
+            span: expr.span,
+        };
+
+        block.stmts.insert(
+            0,
+            ast::Stmt::Expr(ast::ExprStmt {
+                expr: ast::Expr::If(if_expr),
+                span: expr.condition.span(),
+            }),
+        );
+
+        let loop_expr = ast::LoopExpr {
+            block,
+            span: expr.span,
+        };
+
+        self.lower_loop_expr(&loop_expr)
     }
 }

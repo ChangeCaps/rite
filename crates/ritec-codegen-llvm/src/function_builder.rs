@@ -263,6 +263,20 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
         match value {
             mir::Value::Use(operand) => self.build_operand(operand),
             mir::Value::Address(place) => self.build_place(place).into(),
+            mir::Value::UnaryOp(op, value) => match op {
+                mir::UnaryOp::IntNot => {
+                    let value = self.build_operand(value).into_int_value();
+                    self.builder.build_not(value, "int_not").into()
+                }
+                mir::UnaryOp::IntNeg => {
+                    let value = self.build_operand(value).into_int_value();
+                    self.builder.build_int_neg(value, "int_neg").into()
+                }
+                mir::UnaryOp::FloatNeg => {
+                    let value = self.build_operand(value).into_float_value();
+                    self.builder.build_float_neg(value, "float_neg").into()
+                }
+            },
             mir::Value::BinaryOp(op, lhs, rhs) => self.build_binary_op(*op, lhs, rhs),
             mir::Value::Cast(cast, value) => self.build_cast(cast, value),
             mir::Value::Call(callee, args) => self.build_call(callee, args),
