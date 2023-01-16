@@ -1,4 +1,4 @@
-mod contraint;
+mod constraint;
 mod error;
 mod instance;
 mod register;
@@ -9,7 +9,7 @@ mod table;
 mod ty;
 mod unify;
 
-pub use contraint::*;
+pub use constraint::*;
 pub use error::*;
 pub use instance::*;
 pub use register::*;

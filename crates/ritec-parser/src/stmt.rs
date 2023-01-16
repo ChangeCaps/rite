@@ -42,7 +42,9 @@ impl Parse for ast::Stmt {
     fn parse(parser: ParseStream) -> ParseResult<Self> {
         if parser.is(&KeywordKind::Let) {
             Ok(ast::Stmt::Let(parser.parse()?))
-        } else if let Some(expr) = parser.try_parse::<ast::Expr>() {
+        } else {
+            let expr = parser.parse::<ast::Expr>()?;
+
             if expr.stmt_needs_semi() {
                 parser.expect(&SymbolKind::Semicolon)?;
             }
@@ -51,8 +53,6 @@ impl Parse for ast::Stmt {
                 expr,
                 span: parser.span(),
             }))
-        } else {
-            Err(parser.expected("statement"))
         }
     }
 }

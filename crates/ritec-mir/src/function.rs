@@ -1,8 +1,8 @@
 use std::fmt::Display;
 
-use ritec_core::{Id, Ident};
+use ritec_core::{Generic, Id, Ident};
 
-use crate::{Body, FunctionType, Generics, LocalId, Type};
+use crate::{Body, FunctionType, LocalId, Type};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FunctionArgument {
@@ -27,7 +27,7 @@ pub struct Function {
     /// The name of the function.
     pub ident: Ident,
     /// The generics of the function.
-    pub generics: Generics,
+    pub generics: Vec<Generic>,
     /// The arguments of the function.
     pub arguments: Vec<FunctionArgument>,
     /// The return type of the function.
@@ -45,7 +45,9 @@ impl Function {
 
 impl Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "fn {}{}(", self.ident, self.generics)?;
+        let generics: Vec<_> = self.generics.iter().map(Generic::to_string).collect();
+
+        write!(f, "fn {}<{}>(", self.ident, generics.join(", "))?;
 
         for (i, arg) in self.arguments.iter().enumerate() {
             if i > 0 {

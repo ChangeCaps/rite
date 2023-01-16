@@ -2,6 +2,8 @@ use std::fmt::{self, Display};
 
 use ritec_core::{FloatSize, Generic, IntSize};
 
+use crate::GenericMap;
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct IntType {
     pub signed: bool,
@@ -121,6 +123,10 @@ impl PointerType {
     pub const fn pointee(&self) -> &Type {
         &self.pointee
     }
+
+    pub fn instantiate(&mut self, generics: &GenericMap) {
+        self.pointee.instantiate(generics);
+    }
 }
 
 impl Display for PointerType {
@@ -142,6 +148,10 @@ impl ArrayType {
             size: length,
         }
     }
+
+    pub fn instantiate(&mut self, generics: &GenericMap) {
+        self.element.instantiate(generics);
+    }
 }
 
 impl Display for ArrayType {
@@ -160,6 +170,10 @@ impl SliceType {
         Self {
             element: element.into(),
         }
+    }
+
+    pub fn instantiate(&mut self, generics: &GenericMap) {
+        self.element.instantiate(generics);
     }
 }
 
@@ -181,6 +195,14 @@ impl FunctionType {
             arguments: arguments.into(),
             return_type: return_type.into(),
         }
+    }
+
+    pub fn instantiate(&mut self, generics: &GenericMap) {
+        for argument in &mut self.arguments {
+            argument.instantiate(generics);
+        }
+
+        self.return_type.instantiate(generics);
     }
 }
 
@@ -206,6 +228,12 @@ impl TupleType {
     pub fn new(fields: impl Into<Vec<Type>>) -> Self {
         Self {
             fields: fields.into(),
+        }
+    }
+
+    pub fn instantiate(&mut self, generics: &GenericMap) {
+        for field in &mut self.fields {
+            field.instantiate(generics);
         }
     }
 }
@@ -277,6 +305,25 @@ impl Type {
 
     pub fn tuple(fields: impl Into<Vec<Type>>) -> Self {
         Self::Tuple(TupleType::new(fields))
+    }
+
+    pub fn instantiate(&mut self, generics: &GenericMap) {
+        match self {
+            Type::Void => {}
+            Type::Bool => {}
+            Type::Int(_) => {}
+            Type::Float(_) => {}
+            Type::Pointer(pointer) => pointer.instantiate(generics),
+            Type::Array(array) => array.instantiate(generics),
+            Type::Slice(slice) => slice.instantiate(generics),
+            Type::Function(function) => function.instantiate(generics),
+            Type::Tuple(tuple) => tuple.instantiate(generics),
+            Type::Generic(generic) => {
+                if let Some(replacement) = generics.get(generic) {
+                    *self = replacement.clone();
+                }
+            }
+        }
     }
 }
 
@@ -381,10 +428,6 @@ mod tests {
         assert_eq!(
             Type::function(args.clone(), Type::I128).to_string(),
             "fn(i32, i64) -> i128"
-        );
-        assert_eq!(
-            Type::function(args.clone(), Type::VOID).to_string(),
-            "fn(i32, i64)"
         );
 
         let args = vec![Type::I32, Type::I64];

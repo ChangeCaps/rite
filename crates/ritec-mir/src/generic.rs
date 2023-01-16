@@ -1,67 +1,32 @@
-use std::{
-    fmt::{self, Display},
-    slice::Iter,
-    vec::IntoIter,
-};
+use std::ops::Index;
 
 use ritec_core::{Generic, Ident};
 
-#[derive(Clone, Debug, PartialEq)]
-pub struct Generics {
-    generics: Vec<Generic>,
+use crate::Type;
+
+#[derive(Clone, Copy)]
+pub struct GenericMap<'a> {
+    generics: &'a [Generic],
+    types: &'a [Type],
 }
 
-impl Generics {
-    pub fn new(generics: impl Into<Vec<Generic>>) -> Self {
-        Self {
-            generics: generics.into(),
-        }
+impl<'a> GenericMap<'a> {
+    pub fn new(generics: &'a [Generic], types: &'a [Type]) -> Self {
+        Self { generics, types }
     }
 
-    pub fn len(&self) -> usize {
-        self.generics.len()
-    }
-
-    pub fn is_empty(&self) -> bool {
-        self.generics.is_empty()
-    }
-
-    pub fn get(&self, ident: &Ident) -> Option<&Generic> {
-        self.generics.iter().find(|g| g.ident == *ident)
-    }
-
-    pub fn iter(&self) -> impl Iterator<Item = &Generic> {
-        self.generics.iter()
+    pub fn get(&self, ident: &Ident) -> Option<&Type> {
+        self.generics
+            .iter()
+            .position(|g| g.ident == *ident)
+            .map(|i| &self.types[i])
     }
 }
 
-impl From<Vec<Generic>> for Generics {
-    fn from(generics: Vec<Generic>) -> Self {
-        Self { generics }
-    }
-}
+impl<'a> Index<&'a Generic> for GenericMap<'a> {
+    type Output = Type;
 
-impl IntoIterator for Generics {
-    type Item = Generic;
-    type IntoIter = IntoIter<Self::Item>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.generics.into_iter()
-    }
-}
-
-impl<'a> IntoIterator for &'a Generics {
-    type Item = &'a Generic;
-    type IntoIter = Iter<'a, Generic>;
-
-    fn into_iter(self) -> Self::IntoIter {
-        self.generics.iter()
-    }
-}
-
-impl Display for Generics {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let generics: Vec<_> = self.generics.iter().map(Generic::to_string).collect();
-        write!(f, "<{}>", generics.join(", "))
+    fn index(&self, index: &'a Generic) -> &Self::Output {
+        self.get(&index.ident).unwrap()
     }
 }

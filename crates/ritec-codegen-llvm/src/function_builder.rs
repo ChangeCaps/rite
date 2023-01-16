@@ -8,6 +8,7 @@ use inkwell::{
     values::{BasicValueEnum, CallableValue, FunctionValue, PointerValue},
     AddressSpace, FloatPredicate, IntPredicate,
 };
+use mir::GenericMap;
 use ritec_core::FloatSize;
 use ritec_mir as mir;
 
@@ -231,13 +232,16 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
         match constant {
             mir::Constant::Void => self.void_value(),
             mir::Constant::Function(id, generics) => {
-                let mut resolved_generics = Vec::new();
-                for generic in generics {
-                    resolved_generics.push(generic.clone());
+                let generic_map = GenericMap::new(&self.function().generics, &self.generics);
+
+                let mut resolved = Vec::new();
+                for mut generic in generics.iter().cloned() {
+                    generic.instantiate(&generic_map);
+                    resolved.push(generic);
                 }
 
                 self.cx
-                    .build_function(*id, &generics)
+                    .build_function(*id, &resolved)
                     .as_global_value()
                     .as_pointer_value()
                     .into()

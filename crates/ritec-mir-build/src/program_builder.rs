@@ -58,7 +58,7 @@ impl<'a> ProgramBuilder<'a> {
 
         let function = mir::Function {
             ident: function.ident.clone(),
-            generics: mir::Generics::new(params),
+            generics: params,
             arguments,
             return_type,
             body: mir,
