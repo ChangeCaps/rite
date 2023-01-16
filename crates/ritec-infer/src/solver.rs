@@ -2,7 +2,9 @@ use ritec_core::Span;
 use ritec_hir as hir;
 use ritec_mir as mir;
 
-use crate::{Constraint, Error, InferType, InferenceTable, ItemId, Solution, TypeVariable, Unify};
+use crate::{
+    Constraint, Error, InferType, InferenceTable, Instance, ItemId, Solution, TypeVariable, Unify,
+};
 
 #[allow(dead_code)]
 pub struct Solver<'a> {
@@ -43,11 +45,15 @@ impl<'a> Solver<'a> {
     }
 
     pub fn set_return_type(&mut self, ty: hir::Type) {
-        self.return_type = self.table.infer_hir(&ty);
+        self.return_type = self.table.infer_hir(&ty, &Instance::empty());
     }
 
     pub fn resolve_return_type(&self) -> Result<mir::Type, Error> {
         self.table.resolve_mir_type(&self.return_type)
+    }
+
+    pub fn program(&self) -> &hir::Program {
+        self.program
     }
 
     pub fn new_variable(&mut self) -> TypeVariable {

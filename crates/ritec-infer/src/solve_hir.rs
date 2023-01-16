@@ -1,16 +1,24 @@
 use ritec_core::{BinaryOp, Literal, UnaryOp};
 use ritec_hir as hir;
 
-use crate::{Error, InferType, ItemId, Solver, TypeVariableKind};
+use crate::{Error, InferType, Instance, ItemId, Solver, TypeVariableKind};
 
 impl<'a> Solver<'a> {
     pub fn solve_body(&mut self, body: &hir::Body) -> Result<(), Error> {
         for local in body.locals.values() {
-            let ty = self.table_mut().infer_hir(&local.ty);
+            let ty = self.table_mut().infer_hir(&local.ty, &Instance::empty());
             self.table_mut().register_type(local.id, ty);
         }
 
-        for stmt in body.stmts.values() {
+        for block in body.blocks.values() {
+            self.solve_block(body, block)?;
+        }
+
+        Ok(())
+    }
+
+    pub fn solve_block(&mut self, body: &hir::Body, block: &hir::Block) -> Result<(), Error> {
+        for stmt in block.stmts.iter() {
             self.solve_stmt(body, stmt)?;
         }
 
@@ -52,6 +60,8 @@ impl<'a> Solver<'a> {
             hir::Expr::Binary(expr) => self.solve_binary_expr(body, expr)?,
             hir::Expr::Assign(expr) => self.solve_assign_expr(body, expr)?,
             hir::Expr::Return(expr) => self.solve_return_expr(body, expr)?,
+            hir::Expr::Block(expr) => self.solve_block_expr(body, expr)?,
+            hir::Expr::If(expr) => self.solve_if_expr(body, expr)?,
         };
 
         self.table_mut().register_type(expr.id(), ty.clone());
@@ -93,12 +103,18 @@ impl<'a> Solver<'a> {
         _body: &hir::Body,
         expr: &hir::FunctionExpr,
     ) -> Result<InferType, Error> {
+        let mut generics = Vec::new();
         for (i, generic) in expr.instance.generics.iter().enumerate() {
-            let ty = self.table_mut().infer_hir(&generic);
-            self.table_mut().register_generic(expr.id, i, ty);
+            let ty = self.table_mut().infer_hir(generic, &Instance::empty());
+            self.table_mut().register_generic(expr.id, i, ty.clone());
+            generics.push(ty);
         }
 
-        Ok(self.register_type(expr.id, &hir::Type::Function(expr.ty.clone())))
+        let function = self.program()[expr.instance.function].clone();
+        let ty = hir::Type::Function(function.ty());
+        let instance = Instance::new(function.generics.params.clone(), generics);
+
+        Ok(self.table_mut().infer_hir(&ty, &instance))
     }
 
     pub fn solve_call_expr(
@@ -180,6 +196,7 @@ impl<'a> Solver<'a> {
 
         let ty = match expr.operator {
             BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul | BinaryOp::Div => lhs,
+            BinaryOp::Eq => InferType::apply(ItemId::Bool, vec![], expr.span),
         };
 
         Ok(ty)
@@ -209,6 +226,32 @@ impl<'a> Solver<'a> {
         };
 
         self.unify(ty.clone(), self.return_type().clone())?;
+        Ok(InferType::void(expr.span))
+    }
+
+    pub fn solve_block_expr(
+        &mut self,
+        body: &hir::Body,
+        expr: &hir::BlockExpr,
+    ) -> Result<InferType, Error> {
+        self.solve_block(body, &body[expr.block])?;
+        Ok(InferType::void(expr.span))
+    }
+
+    pub fn solve_if_expr(
+        &mut self,
+        body: &hir::Body,
+        expr: &hir::IfExpr,
+    ) -> Result<InferType, Error> {
+        let condition = self.solve_expr(body, &body.exprs[expr.condition])?;
+        self.unify(condition, InferType::apply(ItemId::Bool, vec![], expr.span))?;
+
+        self.solve_block(body, &body[expr.then_block])?;
+
+        if let Some(else_block) = expr.else_block {
+            self.solve_expr(body, &body[else_block])?;
+        }
+
         Ok(InferType::void(expr.span))
     }
 }

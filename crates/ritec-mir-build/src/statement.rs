@@ -16,9 +16,10 @@ impl<'a> FunctionBuilder<'a> {
     }
 
     pub fn build_expr_stmt(&mut self, stmt: &thir::ExprStmt) {
-        let value = self.as_value(&self.thir.exprs[stmt.expr]);
+        let expr = &self.thir[stmt.expr];
+        let value = self.as_value(expr);
 
-        if !matches!(self.thir[stmt.expr], thir::Expr::Return(_)) {
+        if !expr.ty().is_void() || matches!(expr, thir::Expr::Call(_)) {
             self.push_drop(value);
         }
     }

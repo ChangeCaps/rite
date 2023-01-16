@@ -12,6 +12,7 @@ pub enum BinaryOp {
     Sub,
     Mul,
     Div,
+    Eq,
 }
 
 impl BinaryOp {
@@ -19,6 +20,7 @@ impl BinaryOp {
         match self {
             Self::Add | Self::Sub => 1,
             Self::Mul | Self::Div => 2,
+            Self::Eq => 3,
         }
     }
 }
@@ -30,6 +32,7 @@ impl Display for BinaryOp {
             Self::Sub => write!(f, "-"),
             Self::Mul => write!(f, "*"),
             Self::Div => write!(f, "/"),
+            Self::Eq => write!(f, "=="),
         }
     }
 }

@@ -8,14 +8,31 @@ pub use stmt::*;
 
 use std::ops::Index;
 
-use ritec_core::Arena;
+use ritec_core::{Arena, Id};
 use ritec_mir::{Local, LocalId};
+
+pub type BlockId = Id<Block>;
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Block {
+    pub stmts: Vec<Stmt>,
+}
+
+impl Block {
+    pub const fn new() -> Self {
+        Self { stmts: Vec::new() }
+    }
+
+    pub fn push(&mut self, stmt: Stmt) {
+        self.stmts.push(stmt);
+    }
+}
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Body {
     pub locals: Arena<Local>,
     pub exprs: Arena<Expr>,
-    pub stmts: Arena<Stmt>,
+    pub blocks: Arena<Block>,
 }
 
 impl Body {
@@ -23,7 +40,7 @@ impl Body {
         Self {
             locals: Arena::new(),
             exprs: Arena::new(),
-            stmts: Arena::new(),
+            blocks: Arena::new(),
         }
     }
 }
@@ -44,10 +61,10 @@ impl Index<ExprId> for Body {
     }
 }
 
-impl Index<StmtId> for Body {
-    type Output = Stmt;
+impl Index<BlockId> for Body {
+    type Output = Block;
 
-    fn index(&self, index: StmtId) -> &Self::Output {
-        &self.stmts[index]
+    fn index(&self, index: BlockId) -> &Self::Output {
+        &self.blocks[index]
     }
 }

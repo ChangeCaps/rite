@@ -85,6 +85,9 @@ impl Parse for BinaryOp {
         } else if parser.is(&SymbolKind::FSlash) {
             parser.next();
             Ok(BinaryOp::Div)
+        } else if parser.is(&SymbolKind::EqualEqual) {
+            parser.next();
+            Ok(BinaryOp::Eq)
         } else {
             Err(parser.expected("binary operator"))
         }
@@ -100,6 +103,40 @@ impl Parse for ast::ReturnExpr {
             Some(Box::new(parser.parse()?))
         };
         Ok(ast::ReturnExpr { value, span })
+    }
+}
+
+impl Parse for ast::BlockExpr {
+    fn parse(parser: ParseStream) -> ParseResult<Self> {
+        let (block, span) = parser.parse_spanned::<ast::Block>()?;
+        Ok(ast::BlockExpr { block, span })
+    }
+}
+
+impl Parse for ast::IfExpr {
+    fn parse(parser: ParseStream) -> ParseResult<Self> {
+        let span = parser.expect(&KeywordKind::If)?;
+        let condition = parser.parse()?;
+        let then_block = parser.parse()?;
+
+        let else_block = if parser.is(&KeywordKind::Else) {
+            parser.next();
+
+            if parser.is(&KeywordKind::If) {
+                Some(Box::new(ast::Expr::If(parser.parse()?)))
+            } else {
+                Some(Box::new(ast::Expr::Block(parser.parse()?)))
+            }
+        } else {
+            None
+        };
+
+        Ok(ast::IfExpr {
+            condition: Box::new(condition),
+            then_block,
+            else_block,
+            span,
+        })
     }
 }
 
@@ -198,6 +235,8 @@ impl Parse for ast::Expr {
     fn parse(parser: ParseStream) -> ParseResult<Self> {
         if parser.is(&KeywordKind::Return) {
             Ok(ast::Expr::Return(parser.parse()?))
+        } else if parser.is(&KeywordKind::If) {
+            Ok(ast::Expr::If(parser.parse()?))
         } else {
             parse_assign(parser)
         }

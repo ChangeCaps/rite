@@ -5,7 +5,7 @@ use std::{
 
 use ritec_core::Arena;
 
-use crate::{Expr, ExprId, Local, LocalId, Stmt};
+use crate::{Block, BlockId, Expr, ExprId, Local, LocalId};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct HirId {
@@ -32,7 +32,7 @@ impl Debug for HirId {
 pub struct Body {
     pub locals: Arena<Local>,
     pub exprs: Arena<Expr>,
-    pub stmts: Arena<Stmt>,
+    pub blocks: Arena<Block>,
     pub next_id: HirId,
 }
 
@@ -41,7 +41,7 @@ impl Body {
         Self {
             locals: Arena::new(),
             exprs: Arena::new(),
-            stmts: Arena::new(),
+            blocks: Arena::new(),
             next_id: HirId::ZERO,
         }
     }
@@ -76,5 +76,19 @@ impl Index<ExprId> for Body {
 impl IndexMut<ExprId> for Body {
     fn index_mut(&mut self, index: ExprId) -> &mut Self::Output {
         &mut self.exprs[index]
+    }
+}
+
+impl Index<BlockId> for Body {
+    type Output = Block;
+
+    fn index(&self, index: BlockId) -> &Self::Output {
+        &self.blocks[index]
+    }
+}
+
+impl IndexMut<BlockId> for Body {
+    fn index_mut(&mut self, index: BlockId) -> &mut Self::Output {
+        &mut self.blocks[index]
     }
 }

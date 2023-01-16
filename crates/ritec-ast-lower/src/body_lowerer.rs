@@ -1,4 +1,3 @@
-use hir::GenericMap;
 use ritec_ast as ast;
 use ritec_core::Ident;
 use ritec_error::Diagnostic;
@@ -27,21 +26,24 @@ impl<'a> BodyLowerer<'a> {
         self.resolver.resolve_type(ty)
     }
 
-    pub fn lower_block(&mut self, block: &ast::Block) -> Result<(), Diagnostic> {
+    pub fn lower_block(&mut self, block: &ast::Block) -> Result<hir::BlockId, Diagnostic> {
+        let mut hir = hir::Block::new();
+
+        let block_id = self.body.blocks.reserve();
+
         for stmt in block.stmts.iter() {
-            self.lower_stmt(stmt)?;
+            hir.push(self.lower_stmt(stmt)?);
         }
 
-        Ok(())
+        self.body.blocks.insert(block_id, hir);
+        Ok(block_id)
     }
 
-    pub fn lower_stmt(&mut self, stmt: &ast::Stmt) -> Result<hir::StmtId, Diagnostic> {
-        let stmt = match stmt {
-            ast::Stmt::Let(stmt) => self.lower_let_stmt(stmt)?,
-            ast::Stmt::Expr(stmt) => self.lower_expr_stmt(stmt)?,
-        };
-
-        Ok(self.body.stmts.push(stmt))
+    pub fn lower_stmt(&mut self, stmt: &ast::Stmt) -> Result<hir::Stmt, Diagnostic> {
+        match stmt {
+            ast::Stmt::Let(stmt) => self.lower_let_stmt(stmt),
+            ast::Stmt::Expr(stmt) => self.lower_expr_stmt(stmt),
+        }
     }
 
     pub fn lower_let_stmt(&mut self, stmt: &ast::LetStmt) -> Result<hir::Stmt, Diagnostic> {
@@ -95,6 +97,8 @@ impl<'a> BodyLowerer<'a> {
             ast::Expr::Binary(expr) => self.lower_binary_expr(expr)?,
             ast::Expr::Assign(expr) => self.lower_assign_expr(expr)?,
             ast::Expr::Return(expr) => self.lower_return_expr(expr)?,
+            ast::Expr::Block(expr) => self.lower_block_expr(expr)?,
+            ast::Expr::If(expr) => self.lower_if_expr(expr)?,
         };
 
         Ok(self.body.exprs.push(expr))
@@ -127,18 +131,9 @@ impl<'a> BodyLowerer<'a> {
             }
         }
 
-        if let Ok(instance) = self.resolver.resolve_function(&expr.path) {
-            let function = &self.resolver.program.functions[instance.function];
-            let mut ty = function.ty();
-
-            ty.specialize(&GenericMap::new(
-                &function.generics.params,
-                &instance.generics,
-            ));
-
+        if let Some(instance) = self.resolver.resolve_function(&expr.path)? {
             let function_expr = hir::FunctionExpr {
                 instance,
-                ty,
                 id: self.body.next_id(),
                 span: expr.span,
             };
@@ -146,7 +141,7 @@ impl<'a> BodyLowerer<'a> {
             return Ok(hir::Expr::Function(function_expr));
         }
 
-        let err = Diagnostic::error("expected a local variable")
+        let err = Diagnostic::error(format!("'{}' not defined", expr.path))
             .with_message_span("variable not found", expr.span);
 
         Err(err)
@@ -228,5 +223,35 @@ impl<'a> BodyLowerer<'a> {
         };
 
         Ok(hir::Expr::Return(return_expr))
+    }
+
+    pub fn lower_block_expr(&mut self, expr: &ast::BlockExpr) -> Result<hir::Expr, Diagnostic> {
+        let block_expr = hir::BlockExpr {
+            block: self.lower_block(&expr.block)?,
+            id: self.body.next_id(),
+            span: expr.span,
+        };
+
+        Ok(hir::Expr::Block(block_expr))
+    }
+
+    pub fn lower_if_expr(&mut self, expr: &ast::IfExpr) -> Result<hir::Expr, Diagnostic> {
+        let condition = self.lower_expr(&expr.condition)?;
+        let then_block = self.lower_block(&expr.then_block)?;
+        let else_block = if let Some(else_block) = &expr.else_block {
+            Some(self.lower_expr(else_block)?)
+        } else {
+            None
+        };
+
+        let if_expr = hir::IfExpr {
+            condition,
+            then_block,
+            else_block,
+            id: self.body.next_id(),
+            span: expr.span,
+        };
+
+        Ok(hir::Expr::If(if_expr))
     }
 }

@@ -9,7 +9,10 @@ pub struct Resolver<'a> {
 }
 
 impl<'a> Resolver<'a> {
-    pub fn resolve_function(&self, path: &ast::Path) -> Result<hir::FunctionInstance, Diagnostic> {
+    pub fn resolve_function(
+        &self,
+        path: &ast::Path,
+    ) -> Result<Option<hir::FunctionInstance>, Diagnostic> {
         let mut module_id = self.module;
 
         let mut iter = path.segments.iter().peekable();
@@ -18,7 +21,7 @@ impl<'a> Resolver<'a> {
 
             match segment {
                 ast::PathSegment::Item(item) => {
-                    let module = &self.program.modules[module_id];
+                    let module = &self.program[module_id];
 
                     if iter.peek().is_some() {
                         let Some(&next_module) = module.modules.get(&item.ident) else {
@@ -33,18 +36,23 @@ impl<'a> Resolver<'a> {
                     }
 
                     let Some(&function) = module.functions.get(&item.ident) else {
-                        let err = Diagnostic::error("function not found")
-                            .with_message_span("function '{}' not found", item.ident.span());
-
-                        return Err(err);
+                        return Ok(None);
                     };
+
+                    let expected_len = self.program[function].generics.params.len();
 
                     let mut generics = Vec::new();
                     for generic in item.generics.iter() {
                         generics.push(self.resolve_type(generic)?);
                     }
 
-                    if self.program.functions[function].generics.params.len() != generics.len() {
+                    if generics.len() == 0 {
+                        for _ in 0..expected_len {
+                            generics.push(hir::Type::inferred(path.span));
+                        }
+                    }
+
+                    if expected_len != generics.len() {
                         let err = Diagnostic::error("invalid number of generic arguments")
                             .with_message_span(
                                 format!(
@@ -58,11 +66,11 @@ impl<'a> Resolver<'a> {
                         return Err(err);
                     }
 
-                    return Ok(hir::FunctionInstance {
+                    return Ok(Some(hir::FunctionInstance {
                         function,
                         generics,
                         span: path.span,
-                    });
+                    }));
                 }
                 ast::PathSegment::SuperSegment(_) => todo!(),
                 ast::PathSegment::SelfSegment(_) => todo!(),

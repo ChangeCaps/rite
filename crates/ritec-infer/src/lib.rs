@@ -1,5 +1,6 @@
 mod contraint;
 mod error;
+mod instance;
 mod register;
 mod resolve;
 mod solve_hir;
@@ -10,6 +11,7 @@ mod unify;
 
 pub use contraint::*;
 pub use error::*;
+pub use instance::*;
 pub use register::*;
 pub use resolve::*;
 pub use solve_hir::*;

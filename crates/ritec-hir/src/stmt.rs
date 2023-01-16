@@ -1,8 +1,6 @@
-use ritec_core::{Id, Span};
+use ritec_core::Span;
 
 use crate::{ExprId, HirId, LocalId};
-
-pub type StmtId = Id<Stmt>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Stmt {

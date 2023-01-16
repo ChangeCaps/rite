@@ -43,7 +43,10 @@ impl Parse for ast::Stmt {
         if parser.is(&KeywordKind::Let) {
             Ok(ast::Stmt::Let(parser.parse()?))
         } else if let Some(expr) = parser.try_parse::<ast::Expr>() {
-            parser.expect(&SymbolKind::Semicolon)?;
+            if expr.stmt_needs_semi() {
+                parser.expect(&SymbolKind::Semicolon)?;
+            }
+
             Ok(ast::Stmt::Expr(ast::ExprStmt {
                 expr,
                 span: parser.span(),

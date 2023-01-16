@@ -14,21 +14,23 @@ impl<'a> FunctionBuilder<'a> {
                 let lhs = self.as_operand(&self.thir[expr.lhs]);
                 let rhs = self.as_operand(&self.thir[expr.rhs]);
 
-                let op = match expr.ty {
+                let op = match self.thir[expr.lhs].ty() {
                     mir::Type::Int(ref t) => match expr.operator {
                         BinaryOp::Add => mir::BinOp::IntAdd,
                         BinaryOp::Sub => mir::BinOp::IntSub,
                         BinaryOp::Mul => mir::BinOp::IntMul,
                         BinaryOp::Div if t.signed => mir::BinOp::IntDivSigned,
                         BinaryOp::Div => mir::BinOp::IntDivUnsigned,
+                        BinaryOp::Eq => mir::BinOp::IntEq,
                     },
                     mir::Type::Float(_) => match expr.operator {
                         BinaryOp::Add => mir::BinOp::FloatAdd,
                         BinaryOp::Sub => mir::BinOp::FloatSub,
                         BinaryOp::Mul => mir::BinOp::FloatMul,
                         BinaryOp::Div => mir::BinOp::FloatDiv,
+                        BinaryOp::Eq => mir::BinOp::FloatEq,
                     },
-                    _ => unreachable!(),
+                    _ => unreachable!("{}", expr.ty),
                 };
 
                 mir::Value::BinaryOp(op, lhs, rhs)
@@ -57,7 +59,9 @@ impl<'a> FunctionBuilder<'a> {
             | thir::Expr::Literal(_)
             | thir::Expr::Function(_)
             | thir::Expr::Unary(_)
-            | thir::Expr::Assign(_) => {
+            | thir::Expr::Assign(_)
+            | thir::Expr::Block(_)
+            | thir::Expr::If(_) => {
                 let operand = self.as_operand(expr);
                 mir::Value::Use(operand)
             }

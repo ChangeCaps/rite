@@ -1,6 +1,6 @@
 use ritec_core::{BinaryOp, Id, Literal, Span, UnaryOp};
 
-use crate::{FunctionInstance, FunctionType, HirId, LocalId};
+use crate::{BlockId, FunctionInstance, HirId, LocalId};
 
 pub type ExprId = Id<Expr>;
 
@@ -14,6 +14,8 @@ pub enum Expr {
     Binary(BinaryExpr),
     Assign(AssignExpr),
     Return(ReturnExpr),
+    Block(BlockExpr),
+    If(IfExpr),
 }
 
 impl Expr {
@@ -27,6 +29,8 @@ impl Expr {
             Expr::Binary(expr) => expr.span,
             Expr::Assign(expr) => expr.span,
             Expr::Return(expr) => expr.span,
+            Expr::Block(expr) => expr.span,
+            Expr::If(expr) => expr.span,
         }
     }
 
@@ -40,6 +44,8 @@ impl Expr {
             Expr::Binary(expr) => expr.id,
             Expr::Assign(expr) => expr.id,
             Expr::Return(expr) => expr.id,
+            Expr::Block(expr) => expr.id,
+            Expr::If(expr) => expr.id,
         }
     }
 }
@@ -109,7 +115,6 @@ pub struct LiteralExpr {
 #[derive(Clone, Debug, PartialEq)]
 pub struct FunctionExpr {
     pub instance: FunctionInstance,
-    pub ty: FunctionType,
     pub id: HirId,
     pub span: Span,
 }
@@ -150,6 +155,22 @@ pub struct AssignExpr {
 #[derive(Clone, Debug, PartialEq)]
 pub struct ReturnExpr {
     pub value: Option<ExprId>,
+    pub id: HirId,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct BlockExpr {
+    pub block: BlockId,
+    pub id: HirId,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct IfExpr {
+    pub condition: ExprId,
+    pub then_block: BlockId,
+    pub else_block: Option<ExprId>,
     pub id: HirId,
     pub span: Span,
 }

@@ -65,6 +65,8 @@ keyword! {
     "super" => Super,
     "let" => Let,
     "fn" => Fn,
+    "if" => If,
+    "else" => Else,
     "return" => Return,
 }
 

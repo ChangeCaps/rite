@@ -9,10 +9,12 @@ pub enum BinOp {
     IntMul,
     IntDivSigned,
     IntDivUnsigned,
+    IntEq,
     FloatAdd,
     FloatSub,
     FloatMul,
     FloatDiv,
+    FloatEq,
 }
 
 #[derive(Clone, Debug, PartialEq)]

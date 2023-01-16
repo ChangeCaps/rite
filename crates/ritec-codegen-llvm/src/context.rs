@@ -47,12 +47,8 @@ impl<'c> CodegenCx<'c> {
             return *function;
         }
 
-        let function = &self.program[function];
-        let mut builder = FunctionBuilder::new(self, function, generics);
-        let value = builder.build();
-
-        self.functions.insert(instance, value);
-        value
+        let mut builder = FunctionBuilder::new(self, function, instance.1);
+        builder.build()
     }
 }
 

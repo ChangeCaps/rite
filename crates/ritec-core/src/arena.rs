@@ -108,6 +108,15 @@ impl<T> Arena<T> {
         }
     }
 
+    /// Gets the next free [`Id`] in the arena.
+    pub fn next_id(&self) -> Id<T> {
+        if let Some(&index) = self.free.last() {
+            Id::from_raw_index(index)
+        } else {
+            Id::from_raw_index(self.arena.len())
+        }
+    }
+
     /// Inserts an item into the arena, returning the id of the item.
     #[inline]
     pub fn reserve(&mut self) -> Id<T> {

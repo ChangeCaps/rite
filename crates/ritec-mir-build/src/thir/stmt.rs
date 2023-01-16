@@ -1,9 +1,7 @@
-use ritec_core::{Id, Span};
+use ritec_core::Span;
 use ritec_mir::LocalId;
 
 use super::ExprId;
-
-pub type StmtId = Id<Stmt>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Stmt {

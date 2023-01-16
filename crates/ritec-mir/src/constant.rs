@@ -8,6 +8,7 @@ pub enum Constant {
     Function(FunctionId, Vec<Type>),
     Integer(i64, IntType),
     Float(f64, FloatType),
+    Bool(bool),
 }
 
 impl Display for Constant {
@@ -20,6 +21,7 @@ impl Display for Constant {
             }
             Self::Integer(c, ty) => write!(f, "{}: {}", c, ty),
             Self::Float(c, ty) => write!(f, "{}: {}", c, ty),
+            Self::Bool(c) => write!(f, "{}", c),
         }
     }
 }

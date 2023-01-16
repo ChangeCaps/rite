@@ -87,8 +87,8 @@ impl PointerType {
         self.pointee.is_inferred()
     }
 
-    pub fn specialize(&mut self, generics: &GenericMap<'_>) {
-        self.pointee.specialize(generics);
+    pub fn instantiate(&mut self, generics: &GenericMap<'_>) {
+        self.pointee.instantiate(generics);
     }
 }
 
@@ -110,8 +110,8 @@ impl ArrayType {
         self.element.is_inferred()
     }
 
-    pub fn specialize(&mut self, generics: &GenericMap<'_>) {
-        self.element.specialize(generics);
+    pub fn instantiate(&mut self, generics: &GenericMap<'_>) {
+        self.element.instantiate(generics);
     }
 }
 
@@ -132,8 +132,8 @@ impl SliceType {
         self.element.is_inferred()
     }
 
-    pub fn specialize(&mut self, generics: &GenericMap<'_>) {
-        self.element.specialize(generics);
+    pub fn instantiate(&mut self, generics: &GenericMap<'_>) {
+        self.element.instantiate(generics);
     }
 }
 
@@ -155,12 +155,12 @@ impl FunctionType {
         self.arguments.iter().any(|arg| arg.is_inferred()) || self.return_type.is_inferred()
     }
 
-    pub fn specialize(&mut self, generics: &GenericMap<'_>) {
+    pub fn instantiate(&mut self, generics: &GenericMap<'_>) {
         for arg in &mut self.arguments {
-            arg.specialize(generics);
+            arg.instantiate(generics);
         }
 
-        self.return_type.specialize(generics);
+        self.return_type.instantiate(generics);
     }
 }
 
@@ -188,9 +188,9 @@ impl TupleType {
         self.fields.iter().any(|field| field.is_inferred())
     }
 
-    pub fn specialize(&mut self, generics: &GenericMap<'_>) {
+    pub fn instantiate(&mut self, generics: &GenericMap<'_>) {
         for field in &mut self.fields {
-            field.specialize(generics);
+            field.instantiate(generics);
         }
     }
 }
@@ -262,13 +262,13 @@ impl Type {
         }
     }
 
-    pub fn specialize(&mut self, generics: &GenericMap<'_>) {
+    pub fn instantiate(&mut self, generics: &GenericMap<'_>) {
         match self {
-            Type::Pointer(t) => t.specialize(generics),
-            Type::Array(t) => t.specialize(generics),
-            Type::Slice(t) => t.specialize(generics),
-            Type::Function(t) => t.specialize(generics),
-            Type::Tuple(t) => t.specialize(generics),
+            Type::Pointer(t) => t.instantiate(generics),
+            Type::Array(t) => t.instantiate(generics),
+            Type::Slice(t) => t.instantiate(generics),
+            Type::Function(t) => t.instantiate(generics),
+            Type::Tuple(t) => t.instantiate(generics),
             Type::Generic(generic) => *self = generics[generic].clone(),
             Type::Inferred(_) | Type::Void(_) | Type::Bool(_) | Type::Int(_) | Type::Float(_) => {}
         }

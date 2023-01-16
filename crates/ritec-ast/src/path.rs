@@ -1,4 +1,7 @@
-use std::hash::{Hash, Hasher};
+use std::{
+    fmt::{self, Display},
+    hash::{Hash, Hasher},
+};
 
 use ritec_core::{Ident, Span};
 
@@ -10,11 +13,27 @@ pub struct ItemSegment {
     pub generics: Vec<Type>,
 }
 
+impl Display for ItemSegment {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.ident)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum PathSegment {
     Item(ItemSegment),
     SuperSegment(Span),
     SelfSegment(Span),
+}
+
+impl Display for PathSegment {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Item(item) => write!(f, "{}", item),
+            Self::SuperSegment(_) => write!(f, "super"),
+            Self::SelfSegment(_) => write!(f, "self"),
+        }
+    }
 }
 
 #[derive(Clone, Debug)]
@@ -62,5 +81,16 @@ impl Hash for Path {
     fn hash<H: Hasher>(&self, state: &mut H) {
         self.is_absolute.hash(state);
         self.segments.hash(state);
+    }
+}
+
+impl Display for Path {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.is_absolute() {
+            write!(f, "::")?;
+        }
+
+        let segments: Vec<_> = self.segments.iter().map(|s| s.to_string()).collect();
+        write!(f, "{}", segments.join("::"))
     }
 }

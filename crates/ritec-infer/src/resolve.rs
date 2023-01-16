@@ -4,6 +4,7 @@ use ritec_mir as mir;
 use crate::{Error, InferType, InferenceTable, ItemId, TypeVariableKind};
 
 impl InferenceTable {
+    #[track_caller]
     pub fn resolve_mir(&self, id: hir::HirId) -> Result<mir::Type, Error> {
         let Some(ty) = self.get_type(id) else {
             unreachable!("{:?} not registered", id);

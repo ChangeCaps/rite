@@ -1,3 +1,5 @@
+use std::ops::{Index, IndexMut};
+
 use ritec_mir as mir;
 
 use crate::thir;
@@ -5,27 +7,23 @@ use crate::thir;
 pub struct FunctionBuilder<'a> {
     pub thir: &'a thir::Body,
     pub mir: mir::Body,
-    pub current_block: mir::BlockId,
+    pub current_block: Option<mir::BlockId>,
 }
 
 impl<'a> FunctionBuilder<'a> {
     pub fn new(thir: &'a thir::Body) -> Self {
-        let mut mir = mir::Body::new();
-        let current_block = mir.blocks.push(mir::Block::new());
-
         Self {
             thir,
-            mir,
-            current_block,
+            mir: mir::Body::new(),
+            current_block: None,
         }
     }
 
     pub fn build(mut self) -> mir::Body {
         self.mir.locals = self.thir.locals.clone();
 
-        for stmt in self.thir.stmts.values() {
-            self.build_stmt(stmt);
-        }
+        let entry_block = self.thir.blocks.values().next().unwrap();
+        self.build_block(entry_block);
 
         if !self.block().is_terminated() {
             self.terminate(mir::Terminator::Return(mir::Operand::VOID));
@@ -34,8 +32,22 @@ impl<'a> FunctionBuilder<'a> {
         self.mir.clone()
     }
 
+    pub fn build_block(&mut self, block: &thir::Block) -> mir::BlockId {
+        let block_id = self.push_block();
+
+        for stmt in block.stmts.iter() {
+            self.build_stmt(stmt);
+        }
+
+        block_id
+    }
+
+    pub fn current_block(&self) -> mir::BlockId {
+        self.current_block.unwrap()
+    }
+
     pub fn block(&self) -> &mir::Block {
-        &self.mir.blocks[self.current_block]
+        &self.mir.blocks[self.current_block()]
     }
 
     pub fn block_mut(&mut self) -> &mut mir::Block {
@@ -43,7 +55,12 @@ impl<'a> FunctionBuilder<'a> {
             self.push_block();
         }
 
-        &mut self.mir.blocks[self.current_block]
+        let block = self.current_block();
+        &mut self.mir.blocks[block]
+    }
+
+    pub fn next_block(&self) -> mir::BlockId {
+        self.mir.blocks.next_id()
     }
 
     pub fn reserve_block(&mut self) -> mir::BlockId {
@@ -57,12 +74,16 @@ impl<'a> FunctionBuilder<'a> {
     }
 
     pub fn set_block(&mut self, block: mir::BlockId) {
-        self.current_block = block;
+        self.current_block = Some(block);
     }
 
     pub fn terminate(&mut self, term: mir::Terminator) -> mir::BlockId {
         self.block_mut().terminator = Some(term);
-        self.current_block
+        self.current_block.unwrap()
+    }
+
+    pub fn is_terminated(&self) -> bool {
+        self.block().is_terminated()
     }
 
     pub fn push_statement(&mut self, stmt: impl Into<mir::Statement>) {
@@ -89,5 +110,19 @@ impl<'a> FunctionBuilder<'a> {
     pub fn push_drop(&mut self, place: impl Into<mir::Value>) {
         let drop = mir::Statement::Drop(place.into());
         self.push_statement(drop);
+    }
+}
+
+impl Index<mir::BlockId> for FunctionBuilder<'_> {
+    type Output = mir::Block;
+
+    fn index(&self, index: mir::BlockId) -> &Self::Output {
+        &self.mir.blocks[index]
+    }
+}
+
+impl IndexMut<mir::BlockId> for FunctionBuilder<'_> {
+    fn index_mut(&mut self, index: mir::BlockId) -> &mut Self::Output {
+        &mut self.mir.blocks[index]
     }
 }

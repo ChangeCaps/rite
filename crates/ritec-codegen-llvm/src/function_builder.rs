@@ -6,9 +6,9 @@ use inkwell::{
     context::Context,
     types::{BasicType, BasicTypeEnum, FunctionType},
     values::{BasicValueEnum, CallableValue, FunctionValue, PointerValue},
-    AddressSpace,
+    AddressSpace, FloatPredicate, IntPredicate,
 };
-use ritec_core::{FloatSize, Generic};
+use ritec_core::FloatSize;
 use ritec_mir as mir;
 
 use crate::CodegenCx;
@@ -16,9 +16,9 @@ use crate::CodegenCx;
 pub struct FunctionBuilder<'a, 'c> {
     pub cx: &'a mut CodegenCx<'c>,
     pub builder: Builder<'c>,
-    pub function: &'a mir::Function,
+    pub function: mir::FunctionId,
     pub fn_value: Option<FunctionValue<'c>>,
-    pub generics: HashMap<Generic, mir::Type>,
+    pub generics: Vec<mir::Type>,
     pub locals: HashMap<mir::LocalId, PointerValue<'c>>,
     pub blocks: HashMap<mir::BlockId, BasicBlock<'c>>,
 }
@@ -26,22 +26,17 @@ pub struct FunctionBuilder<'a, 'c> {
 impl<'a, 'c> FunctionBuilder<'a, 'c> {
     pub fn new(
         cx: &'a mut CodegenCx<'c>,
-        function: &'a mir::Function,
-        generics: &[mir::Type],
+        function: mir::FunctionId,
+        generics: Vec<mir::Type>,
     ) -> Self {
         let builder = cx.context.create_builder();
-
-        let mut generic_map = HashMap::new();
-        for (generic, ty) in function.generics.iter().zip(generics) {
-            generic_map.insert(generic.clone(), ty.clone());
-        }
 
         Self {
             cx,
             builder,
             function,
             fn_value: None,
-            generics: generic_map,
+            generics,
             locals: HashMap::new(),
             blocks: HashMap::new(),
         }
@@ -70,10 +65,14 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
         return_type.fn_type(&arguments, false)
     }
 
+    pub fn function(&self) -> &'a mir::Function {
+        &self.cx.program[self.function]
+    }
+
     pub fn build_type(&self, ty: &mir::Type) -> BasicTypeEnum<'c> {
         match ty {
             mir::Type::Void => self.cx().struct_type(&[], false).into(),
-            mir::Type::Bool => self.cx().i8_type().into(),
+            mir::Type::Bool => self.cx().bool_type().into(),
             mir::Type::Int(ty) => {
                 if let Some(size) = ty.size {
                     (self.cx().custom_width_int_type(size.bit_width() as u32)).into()
@@ -108,26 +107,35 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
                 self.cx().struct_type(&fields, false).into()
             }
             mir::Type::Generic(generic) => {
-                let value = self.generics.get(generic).unwrap();
-                self.build_type(value)
+                for (i, fn_generic) in self.function().generics.iter().enumerate() {
+                    if fn_generic == generic {
+                        return self.build_type(&self.generics[i]);
+                    }
+                }
+
+                unreachable!("generic type not found")
             }
         }
     }
 
     pub fn build(&mut self) -> FunctionValue<'c> {
         // add function
-        let function_name = format!("{}", self.function.ident);
+        let function = &self.cx.program[self.function];
+        let function_name = format!("{}", function.ident);
 
-        let fn_type = self.build_function_type(&self.function.ty());
+        let fn_type = self.build_function_type(&function.ty());
         let fn_value = self.cx.module.add_function(&function_name, fn_type, None);
         self.fn_value = Some(fn_value);
+
+        let instance = (self.function, self.generics.clone());
+        self.cx.functions.insert(instance, fn_value);
 
         // create entry block
         let block = self.cx.append_basic_block(fn_value, "entry");
         self.builder.position_at_end(block);
 
         // allocate locals on the stack
-        for (local_id, local) in self.function.body.locals.iter() {
+        for (local_id, local) in function.body.locals.iter() {
             let ty = self.build_type(&local.ty);
             let name = format!("_{}", local_id.as_raw_index());
             let value = self.builder.build_alloca(ty, &name);
@@ -135,26 +143,26 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
         }
 
         // store arguments in locals
-        for (i, argument) in self.function.arguments.iter().enumerate() {
+        for (i, argument) in function.arguments.iter().enumerate() {
             let local = self.locals[&argument.local];
             let value = fn_value.get_nth_param(i as u32).unwrap();
             self.builder.build_store(local, value);
         }
 
         // allocate blocks
-        for block_id in self.function.body.blocks.keys() {
+        for block_id in function.body.blocks.keys() {
             let name = format!("bb{}", block_id.as_raw_index());
             let block = self.cx().append_basic_block(fn_value, &name);
             self.blocks.insert(block_id, block);
         }
 
         // jump to the first block
-        let first_block = self.function.body.blocks.keys().next().unwrap();
+        let first_block = function.body.blocks.keys().next().unwrap();
         let first_block = self.blocks[&first_block];
         self.builder.build_unconditional_branch(first_block);
 
         // build blocks
-        for (block_id, block) in self.function.body.blocks.iter() {
+        for (block_id, block) in function.body.blocks.iter() {
             self.builder.position_at_end(self.blocks[&block_id]);
             self.build_block(block);
         }
@@ -247,6 +255,7 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
                 FloatSize::F32 => self.cx().f32_type().const_float(*f).into(),
                 FloatSize::F64 => self.cx().f64_type().const_float(*f).into(),
             },
+            mir::Constant::Bool(b) => self.cx().bool_type().const_int(*b as u64, false).into(),
         }
     }
 
@@ -294,6 +303,13 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
                 let rhs = rhs.into_int_value();
                 self.builder.build_int_unsigned_div(lhs, rhs, "div").into()
             }
+            mir::BinOp::IntEq => {
+                let lhs = lhs.into_int_value();
+                let rhs = rhs.into_int_value();
+                self.builder
+                    .build_int_compare(IntPredicate::EQ, lhs, rhs, "eq")
+                    .into()
+            }
             mir::BinOp::FloatAdd => {
                 let lhs = lhs.into_float_value();
                 let rhs = rhs.into_float_value();
@@ -313,6 +329,13 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
                 let lhs = lhs.into_float_value();
                 let rhs = rhs.into_float_value();
                 self.builder.build_float_div(lhs, rhs, "div").into()
+            }
+            mir::BinOp::FloatEq => {
+                let lhs = lhs.into_float_value();
+                let rhs = rhs.into_float_value();
+                self.builder
+                    .build_float_compare(FloatPredicate::OEQ, lhs, rhs, "eq")
+                    .into()
             }
         }
     }
@@ -339,9 +362,24 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
 
     pub fn build_terminator(&mut self, terminator: &mir::Terminator) {
         match terminator {
+            mir::Terminator::Goto(block) => {
+                self.builder.build_unconditional_branch(self.blocks[block]);
+            }
             mir::Terminator::Return(operand) => {
                 let value = self.build_operand(operand);
                 self.builder.build_return(Some(&value));
+            }
+            mir::Terminator::Switch(value, targets) => {
+                let value = self.build_operand(value).into_int_value();
+
+                let mut cases = Vec::new();
+                for (case, target) in targets.targets.iter() {
+                    let case = value.get_type().const_int(*case as u64, false);
+                    cases.push((case, self.blocks[target]));
+                }
+
+                let default = self.blocks[&targets.default];
+                self.builder.build_switch(value, default, &cases);
             }
         }
     }
