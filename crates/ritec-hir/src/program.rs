@@ -2,7 +2,7 @@ use std::ops::{Index, IndexMut};
 
 use ritec_core::Arena;
 
-use crate::{Function, FunctionId, Module, ModuleId};
+use crate::{build_intrinsic_bitcast, Function, FunctionId, Module, ModuleId};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Program {
@@ -23,6 +23,17 @@ impl Program {
             modules,
             functions,
         }
+    }
+
+    pub fn add_function(&mut self, function: Function) -> FunctionId {
+        let ident = function.ident.clone();
+        let id = self.functions.push(function);
+        self.modules[self.root_module].functions.insert(ident, id);
+        id
+    }
+
+    pub fn add_intrinsics(&mut self) {
+        self.add_function(build_intrinsic_bitcast());
     }
 }
 

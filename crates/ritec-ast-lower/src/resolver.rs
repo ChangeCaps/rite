@@ -57,7 +57,7 @@ impl<'a> Resolver<'a> {
                             .with_message_span(
                                 format!(
                                     "expected {} generic arguments, found {}",
-                                    item.generics.len(),
+                                    expected_len,
                                     generics.len(),
                                 ),
                                 path.span,

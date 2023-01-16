@@ -6,6 +6,10 @@ use crate::{thir, FunctionBuilder};
 impl<'a> FunctionBuilder<'a> {
     pub fn as_value(&mut self, expr: &thir::Expr) -> mir::Value {
         match expr {
+            thir::Expr::Bitcast(expr) => {
+                let value = self.as_operand(&self.thir[expr.expr]);
+                mir::Value::Cast(mir::Cast::Bit(expr.ty.clone()), value)
+            }
             thir::Expr::Unary(expr) if expr.operator == UnaryOp::Ref => {
                 let place = self.as_place(&self.thir[expr.operand]);
                 mir::Value::Address(place)
@@ -44,24 +48,16 @@ impl<'a> FunctionBuilder<'a> {
 
                 mir::Value::Call(callee, arguments)
             }
-            thir::Expr::Return(expr) => {
-                let value = if let Some(value) = expr.value {
-                    self.as_operand(&self.thir[value])
-                } else {
-                    mir::Operand::Constant(mir::Constant::Void)
-                };
-
-                self.terminate(mir::Terminator::Return(value));
-
-                mir::Value::VOID
-            }
             thir::Expr::Local(_)
             | thir::Expr::Literal(_)
             | thir::Expr::Function(_)
             | thir::Expr::Unary(_)
             | thir::Expr::Assign(_)
+            | thir::Expr::Return(_)
+            | thir::Expr::Break(_)
             | thir::Expr::Block(_)
-            | thir::Expr::If(_) => {
+            | thir::Expr::If(_)
+            | thir::Expr::Loop(_) => {
                 let operand = self.as_operand(expr);
                 mir::Value::Use(operand)
             }

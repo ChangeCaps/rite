@@ -275,6 +275,72 @@ impl Type {
     }
 }
 
+impl From<InferredType> for Type {
+    fn from(t: InferredType) -> Self {
+        Type::Inferred(t)
+    }
+}
+
+impl From<VoidType> for Type {
+    fn from(t: VoidType) -> Self {
+        Type::Void(t)
+    }
+}
+
+impl From<BoolType> for Type {
+    fn from(t: BoolType) -> Self {
+        Type::Bool(t)
+    }
+}
+
+impl From<IntType> for Type {
+    fn from(t: IntType) -> Self {
+        Type::Int(t)
+    }
+}
+
+impl From<FloatType> for Type {
+    fn from(t: FloatType) -> Self {
+        Type::Float(t)
+    }
+}
+
+impl From<PointerType> for Type {
+    fn from(t: PointerType) -> Self {
+        Type::Pointer(t)
+    }
+}
+
+impl From<ArrayType> for Type {
+    fn from(t: ArrayType) -> Self {
+        Type::Array(t)
+    }
+}
+
+impl From<SliceType> for Type {
+    fn from(t: SliceType) -> Self {
+        Type::Slice(t)
+    }
+}
+
+impl From<FunctionType> for Type {
+    fn from(t: FunctionType) -> Self {
+        Type::Function(t)
+    }
+}
+
+impl From<TupleType> for Type {
+    fn from(t: TupleType) -> Self {
+        Type::Tuple(t)
+    }
+}
+
+impl From<Generic> for Type {
+    fn from(t: Generic) -> Self {
+        Type::Generic(t)
+    }
+}
+
 impl Display for Type {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {

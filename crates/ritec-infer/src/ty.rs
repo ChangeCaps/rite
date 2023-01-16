@@ -16,11 +16,28 @@ pub struct TypeVariable {
 }
 
 impl TypeVariable {
-    pub fn can_unify_with(&self, other: &Self) -> bool {
+    pub fn can_unify_with_var(&self, other: &Self) -> bool {
         if let (Some(kind), Some(other_kind)) = (self.kind, other.kind) {
             kind == other_kind
         } else {
             true
+        }
+    }
+
+    pub fn can_unify_with_apply(&self, other: &TypeApplication) -> bool {
+        match (self.kind, &other.item) {
+            (Some(TypeVariableKind::Integer), ItemId::Int(_)) => true,
+            (Some(TypeVariableKind::Float), ItemId::Float(_)) => true,
+            (None, _) => true,
+            _ => false,
+        }
+    }
+
+    pub fn can_unify_with(&self, other: &InferType) -> bool {
+        match other {
+            InferType::Var(other) => self.can_unify_with_var(other),
+            InferType::Apply(other) => self.can_unify_with_apply(other),
+            _ => false,
         }
     }
 }

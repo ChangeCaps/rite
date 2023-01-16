@@ -106,6 +106,13 @@ impl Parse for ast::ReturnExpr {
     }
 }
 
+impl Parse for ast::BreakExpr {
+    fn parse(parser: ParseStream) -> ParseResult<Self> {
+        let span = parser.expect(&KeywordKind::Break)?;
+        Ok(ast::BreakExpr { span })
+    }
+}
+
 impl Parse for ast::BlockExpr {
     fn parse(parser: ParseStream) -> ParseResult<Self> {
         let (block, span) = parser.parse_spanned::<ast::Block>()?;
@@ -137,6 +144,14 @@ impl Parse for ast::IfExpr {
             else_block,
             span,
         })
+    }
+}
+
+impl Parse for ast::LoopExpr {
+    fn parse(parser: ParseStream) -> ParseResult<Self> {
+        parser.expect(&KeywordKind::Loop)?;
+        let (block, span) = parser.parse_spanned()?;
+        Ok(ast::LoopExpr { block, span })
     }
 }
 
@@ -235,8 +250,12 @@ impl Parse for ast::Expr {
     fn parse(parser: ParseStream) -> ParseResult<Self> {
         if parser.is(&KeywordKind::Return) {
             Ok(ast::Expr::Return(parser.parse()?))
+        } else if parser.is(&KeywordKind::Break) {
+            Ok(ast::Expr::Break(parser.parse()?))
         } else if parser.is(&KeywordKind::If) {
             Ok(ast::Expr::If(parser.parse()?))
+        } else if parser.is(&KeywordKind::Loop) {
+            Ok(ast::Expr::Loop(parser.parse()?))
         } else {
             parse_assign(parser)
         }

@@ -55,13 +55,16 @@ impl<'a> Solver<'a> {
             hir::Expr::Local(expr) => self.solve_local_expr(body, expr)?,
             hir::Expr::Literal(expr) => self.solve_literal_expr(body, expr)?,
             hir::Expr::Function(expr) => self.solve_function_expr(body, expr)?,
+            hir::Expr::Bitcast(expr) => self.solve_bitcast_expr(body, expr)?,
             hir::Expr::Call(expr) => self.solve_call_expr(body, expr)?,
             hir::Expr::Unary(expr) => self.solve_unary_expr(body, expr)?,
             hir::Expr::Binary(expr) => self.solve_binary_expr(body, expr)?,
             hir::Expr::Assign(expr) => self.solve_assign_expr(body, expr)?,
             hir::Expr::Return(expr) => self.solve_return_expr(body, expr)?,
+            hir::Expr::Break(expr) => self.solve_break_expr(body, expr)?,
             hir::Expr::Block(expr) => self.solve_block_expr(body, expr)?,
             hir::Expr::If(expr) => self.solve_if_expr(body, expr)?,
+            hir::Expr::Loop(expr) => self.solve_loop_expr(body, expr)?,
         };
 
         self.table_mut().register_type(expr.id(), ty.clone());
@@ -115,6 +118,15 @@ impl<'a> Solver<'a> {
         let instance = Instance::new(function.generics.params.clone(), generics);
 
         Ok(self.table_mut().infer_hir(&ty, &instance))
+    }
+
+    pub fn solve_bitcast_expr(
+        &mut self,
+        body: &hir::Body,
+        expr: &hir::BitcastExpr,
+    ) -> Result<InferType, Error> {
+        self.solve_expr(body, &body.exprs[expr.expr])?;
+        Ok(self.table_mut().infer_hir(&expr.ty, &Instance::empty()))
     }
 
     pub fn solve_call_expr(
@@ -229,6 +241,14 @@ impl<'a> Solver<'a> {
         Ok(InferType::void(expr.span))
     }
 
+    pub fn solve_break_expr(
+        &mut self,
+        _body: &hir::Body,
+        expr: &hir::BreakExpr,
+    ) -> Result<InferType, Error> {
+        Ok(InferType::void(expr.span))
+    }
+
     pub fn solve_block_expr(
         &mut self,
         body: &hir::Body,
@@ -252,6 +272,15 @@ impl<'a> Solver<'a> {
             self.solve_expr(body, &body[else_block])?;
         }
 
+        Ok(InferType::void(expr.span))
+    }
+
+    pub fn solve_loop_expr(
+        &mut self,
+        body: &hir::Body,
+        expr: &hir::LoopExpr,
+    ) -> Result<InferType, Error> {
+        self.solve_block(body, &body[expr.block])?;
         Ok(InferType::void(expr.span))
     }
 }

@@ -73,6 +73,20 @@ impl Hash for Ident {
     }
 }
 
+impl From<&str> for Ident {
+    fn from(value: &str) -> Self {
+        Self::new(value, Span::DUMMY)
+    }
+}
+
+impl Deref for Ident {
+    type Target = str;
+
+    fn deref(&self) -> &Self::Target {
+        &self.value
+    }
+}
+
 impl Debug for Ident {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{} > {:?}", self.value, self.span())
@@ -82,13 +96,5 @@ impl Debug for Ident {
 impl Display for Ident {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}", self.value)
-    }
-}
-
-impl Deref for Ident {
-    type Target = str;
-
-    fn deref(&self) -> &Self::Target {
-        &self.value
     }
 }

@@ -1,22 +1,19 @@
-use ritec_ast as ast;
-use ritec_core::Arena;
 use ritec_error::{Diagnostic, Emitter};
 use ritec_hir as hir;
 
-use crate::{BodyLowerer, Error, Resolver};
+use crate::{BodyLowerer, Error, RegisteredFunction, Resolver};
 
 pub struct FunctionCompleter<'a> {
     pub program: &'a mut hir::Program,
     pub emitter: &'a mut dyn Emitter,
-    pub blocks: &'a Arena<ast::Block>,
+    pub functions: &'a Vec<RegisteredFunction>,
 }
 
 impl<'a> FunctionCompleter<'a> {
     pub fn complete(&mut self) -> Result<(), Error> {
         let mut has_failed = false;
 
-        let keys: Vec<_> = self.program.functions.keys().collect();
-        for function in keys {
+        for function in self.functions.iter() {
             if let Err(error) = self.complete_function(function) {
                 self.emitter.emit(error);
                 has_failed = true;
@@ -30,18 +27,18 @@ impl<'a> FunctionCompleter<'a> {
         }
     }
 
-    pub fn complete_function(&mut self, function_id: hir::FunctionId) -> Result<(), Diagnostic> {
-        let mut function = self.program.functions[function_id].clone();
+    pub fn complete_function(&mut self, registered: &RegisteredFunction) -> Result<(), Diagnostic> {
+        let mut function = self.program.functions[registered.id].clone();
         let resolver = Resolver {
             program: &self.program,
             generics: &function.generics,
-            module: function.module,
+            module: registered.module,
         };
 
         let mut body_lowerer = BodyLowerer::new(&mut function.body, resolver);
-        body_lowerer.lower_block(&self.blocks[function_id.cast()])?;
+        body_lowerer.lower_block(&registered.block)?;
 
-        self.program.functions[function_id] = function;
+        self.program.functions[registered.id] = function;
 
         Ok(())
     }

@@ -68,6 +68,8 @@ keyword! {
     "if" => If,
     "else" => Else,
     "return" => Return,
+    "break" => Break,
+    "loop" => Loop,
 }
 
 impl Display for KeywordKind {

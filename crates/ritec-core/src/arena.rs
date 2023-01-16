@@ -108,6 +108,14 @@ impl<T> Arena<T> {
         }
     }
 
+    pub fn len(&self) -> usize {
+        self.arena.len() - self.free.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
+    }
+
     /// Gets the next free [`Id`] in the arena.
     pub fn next_id(&self) -> Id<T> {
         if let Some(&index) = self.free.last() {
@@ -180,6 +188,50 @@ impl<T> Arena<T> {
     #[inline]
     pub fn get_mut(&mut self, id: Id<T>) -> Option<&mut T> {
         self.arena.get_mut(id.as_raw_index())?.as_mut()
+    }
+
+    #[inline]
+    pub fn first(&self) -> Option<&T> {
+        for item in self.arena.iter() {
+            if let Some(item) = item {
+                return Some(item);
+            }
+        }
+
+        None
+    }
+
+    #[inline]
+    pub fn first_mut(&mut self) -> Option<&mut T> {
+        for item in self.arena.iter_mut() {
+            if let Some(item) = item {
+                return Some(item);
+            }
+        }
+
+        None
+    }
+
+    #[inline]
+    pub fn last(&self) -> Option<&T> {
+        for item in self.arena.iter().rev() {
+            if let Some(item) = item {
+                return Some(item);
+            }
+        }
+
+        None
+    }
+
+    #[inline]
+    pub fn last_mut(&mut self) -> Option<&mut T> {
+        for item in self.arena.iter_mut().rev() {
+            if let Some(item) = item {
+                return Some(item);
+            }
+        }
+
+        None
     }
 
     /// Gets the id of an item in the arena.

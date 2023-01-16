@@ -1,3 +1,5 @@
+use std::mem;
+
 use ritec_core::Literal;
 use ritec_mir as mir;
 
@@ -17,7 +19,7 @@ impl<'a> FunctionBuilder<'a> {
                 }
                 Literal::Float(lit) => {
                     let mir::Type::Float(ty) = &expr.ty else {
-                        unreachable!()
+                        unreachable!("{}", expr.ty)
                     };
 
                     mir::Operand::Constant(mir::Constant::Float(lit.value, ty.clone()))
@@ -27,6 +29,24 @@ impl<'a> FunctionBuilder<'a> {
                 expr.function.cast(),
                 expr.generics.clone(),
             )),
+            thir::Expr::Return(expr) => {
+                let value = if let Some(value) = expr.value {
+                    self.as_operand(&self.thir[value])
+                } else {
+                    mir::Operand::Constant(mir::Constant::Void)
+                };
+
+                self.terminate(mir::Terminator::Return(value));
+
+                mir::Operand::VOID
+            }
+            thir::Expr::Break(_) => {
+                if !self.is_terminated() {
+                    self.break_blocks.push(self.current_block());
+                }
+
+                mir::Operand::VOID
+            }
             thir::Expr::Block(expr) => {
                 self.build_block(&self.thir[expr.block]);
                 mir::Operand::VOID
@@ -35,12 +55,30 @@ impl<'a> FunctionBuilder<'a> {
                 self.build_if_expr(expr);
                 mir::Operand::VOID
             }
+            thir::Expr::Loop(expr) => {
+                self.terminate(mir::Terminator::Goto(self.next_block()));
+                let loop_block = self.build_block(&self.thir[expr.block]);
+
+                self.terminate(mir::Terminator::Goto(loop_block));
+
+                if self.break_blocks.is_empty() {
+                    return mir::Operand::VOID;
+                }
+
+                let end_block = self.push_block();
+
+                for break_block in mem::take(&mut self.break_blocks) {
+                    self[break_block].terminate(mir::Terminator::Goto(end_block));
+                }
+
+                mir::Operand::VOID
+            }
             thir::Expr::Local(_)
+            | thir::Expr::Bitcast(_)
             | thir::Expr::Call(_)
             | thir::Expr::Unary(_)
             | thir::Expr::Binary(_)
-            | thir::Expr::Assign(_)
-            | thir::Expr::Return(_) => {
+            | thir::Expr::Assign(_) => {
                 let place = self.as_place(expr);
                 mir::Operand::Move(place)
             }

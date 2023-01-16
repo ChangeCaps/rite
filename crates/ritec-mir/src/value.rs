@@ -1,6 +1,6 @@
 use std::fmt::{self, Display};
 
-use crate::{Constant, Operand, Place};
+use crate::{Constant, Operand, Place, Type};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum BinOp {
@@ -17,11 +17,25 @@ pub enum BinOp {
     FloatEq,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub enum Cast {
+    Bit(Type),
+}
+
+impl Display for Cast {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Cast::Bit(ty) => write!(f, "bit_cast<{}>", ty),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
     Use(Operand),
     Address(Place),
     BinaryOp(BinOp, Operand, Operand),
+    Cast(Cast, Operand),
     Call(Operand, Vec<Operand>),
 }
 
@@ -67,6 +81,7 @@ impl Display for Value {
             Self::Use(operand) => write!(f, "{}", operand),
             Self::Address(place) => write!(f, "&{}", place),
             Self::BinaryOp(op, lhs, rhs) => write!(f, "{:?}({}, {})", op, lhs, rhs),
+            Self::Cast(cast, operand) => write!(f, "{}({})", cast, operand),
             Self::Call(callee, args) => {
                 let args = args.iter().map(Operand::to_string).collect::<Vec<_>>();
                 write!(f, "{}({})", callee, args.join(", "))

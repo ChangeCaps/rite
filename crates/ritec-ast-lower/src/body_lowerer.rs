@@ -97,8 +97,10 @@ impl<'a> BodyLowerer<'a> {
             ast::Expr::Binary(expr) => self.lower_binary_expr(expr)?,
             ast::Expr::Assign(expr) => self.lower_assign_expr(expr)?,
             ast::Expr::Return(expr) => self.lower_return_expr(expr)?,
+            ast::Expr::Break(expr) => self.lower_break_expr(expr)?,
             ast::Expr::Block(expr) => self.lower_block_expr(expr)?,
             ast::Expr::If(expr) => self.lower_if_expr(expr)?,
+            ast::Expr::Loop(expr) => self.lower_loop_expr(expr)?,
         };
 
         Ok(self.body.exprs.push(expr))
@@ -225,6 +227,15 @@ impl<'a> BodyLowerer<'a> {
         Ok(hir::Expr::Return(return_expr))
     }
 
+    pub fn lower_break_expr(&mut self, expr: &ast::BreakExpr) -> Result<hir::Expr, Diagnostic> {
+        let break_expr = hir::BreakExpr {
+            id: self.body.next_id(),
+            span: expr.span,
+        };
+
+        Ok(hir::Expr::Break(break_expr))
+    }
+
     pub fn lower_block_expr(&mut self, expr: &ast::BlockExpr) -> Result<hir::Expr, Diagnostic> {
         let block_expr = hir::BlockExpr {
             block: self.lower_block(&expr.block)?,
@@ -253,5 +264,15 @@ impl<'a> BodyLowerer<'a> {
         };
 
         Ok(hir::Expr::If(if_expr))
+    }
+
+    pub fn lower_loop_expr(&mut self, expr: &ast::LoopExpr) -> Result<hir::Expr, Diagnostic> {
+        let loop_expr = hir::LoopExpr {
+            block: self.lower_block(&expr.block)?,
+            id: self.body.next_id(),
+            span: expr.span,
+        };
+
+        Ok(hir::Expr::Loop(loop_expr))
     }
 }

@@ -16,11 +16,11 @@ pub struct Generic {
 
 impl Generic {
     #[inline]
-    pub fn new(ident: Ident) -> Self {
+    pub fn new(ident: impl Into<Ident>) -> Self {
         static ID: AtomicUsize = AtomicUsize::new(0);
 
         Self {
-            ident,
+            ident: ident.into(),
             id: ID.fetch_add(1, Ordering::SeqCst),
         }
     }

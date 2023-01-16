@@ -1,11 +1,10 @@
 use ritec_core::{Id, Ident, Span};
 
-use crate::{Body, FunctionType, Generics, LocalId, ModuleId, Type};
+use crate::{Body, FunctionType, Generics, LocalId, Type};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct FunctionArgument {
     pub ident: Ident,
-    pub ty: Type,
     pub local: LocalId,
     pub span: Span,
 }
@@ -15,7 +14,6 @@ pub type FunctionId = Id<Function>;
 #[derive(Clone, Debug, PartialEq)]
 pub struct Function {
     pub ident: Ident,
-    pub module: ModuleId,
     pub generics: Generics,
     pub arguments: Vec<FunctionArgument>,
     pub return_type: Type,
@@ -29,7 +27,7 @@ impl Function {
         let mut arguments = Vec::with_capacity(self.arguments.len());
         for argument in &self.arguments {
             span |= argument.span;
-            arguments.push(argument.ty.clone());
+            arguments.push(self.body[argument.local].ty.clone());
         }
 
         if !self.return_type.span().is_dummy() {

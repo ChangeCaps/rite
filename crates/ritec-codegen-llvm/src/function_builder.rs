@@ -264,6 +264,7 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
             mir::Value::Use(operand) => self.build_operand(operand),
             mir::Value::Address(place) => self.build_place(place).into(),
             mir::Value::BinaryOp(op, lhs, rhs) => self.build_binary_op(*op, lhs, rhs),
+            mir::Value::Cast(cast, value) => self.build_cast(cast, value),
             mir::Value::Call(callee, args) => self.build_call(callee, args),
         }
     }
@@ -336,6 +337,17 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
                 self.builder
                     .build_float_compare(FloatPredicate::OEQ, lhs, rhs, "eq")
                     .into()
+            }
+        }
+    }
+
+    pub fn build_cast(&mut self, cast: &mir::Cast, value: &mir::Operand) -> BasicValueEnum<'c> {
+        let value = self.build_operand(value);
+
+        match cast {
+            mir::Cast::Bit(ty) => {
+                let ty = self.build_type(ty);
+                self.builder.build_bitcast(value, ty, "cast").into()
             }
         }
     }

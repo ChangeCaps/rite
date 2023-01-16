@@ -12,8 +12,10 @@ pub enum Expr {
     Binary(BinaryExpr),
     Assign(AssignExpr),
     Return(ReturnExpr),
+    Break(BreakExpr),
     Block(BlockExpr),
     If(IfExpr),
+    Loop(LoopExpr),
 }
 
 impl Expr {
@@ -27,14 +29,16 @@ impl Expr {
             Self::Binary(expr) => expr.span,
             Self::Assign(expr) => expr.span,
             Self::Return(expr) => expr.span,
+            Self::Break(expr) => expr.span,
             Self::Block(expr) => expr.span,
             Self::If(expr) => expr.span,
+            Self::Loop(expr) => expr.span,
         }
     }
 
     pub const fn stmt_needs_semi(&self) -> bool {
         match self {
-            Self::Block(_) | Self::If(_) => false,
+            Self::Block(_) | Self::If(_) | Self::Loop(_) => false,
             _ => true,
         }
     }
@@ -94,6 +98,11 @@ pub struct ReturnExpr {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct BreakExpr {
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct BlockExpr {
     pub block: Block,
     pub span: Span,
@@ -104,5 +113,11 @@ pub struct IfExpr {
     pub condition: Box<Expr>,
     pub then_block: Block,
     pub else_block: Option<Box<Expr>>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct LoopExpr {
+    pub block: Block,
     pub span: Span,
 }

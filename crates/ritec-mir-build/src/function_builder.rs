@@ -8,6 +8,7 @@ pub struct FunctionBuilder<'a> {
     pub thir: &'a thir::Body,
     pub mir: mir::Body,
     pub current_block: Option<mir::BlockId>,
+    pub break_blocks: Vec<mir::BlockId>,
 }
 
 impl<'a> FunctionBuilder<'a> {
@@ -16,6 +17,7 @@ impl<'a> FunctionBuilder<'a> {
             thir,
             mir: mir::Body::new(),
             current_block: None,
+            break_blocks: Vec::new(),
         }
     }
 

@@ -1,6 +1,6 @@
 use ritec_core::{BinaryOp, Id, Literal, Span, UnaryOp};
 
-use crate::{BlockId, FunctionInstance, HirId, LocalId};
+use crate::{BlockId, FunctionInstance, HirId, LocalId, Type};
 
 pub type ExprId = Id<Expr>;
 
@@ -9,13 +9,16 @@ pub enum Expr {
     Local(LocalExpr),
     Literal(LiteralExpr),
     Function(FunctionExpr),
+    Bitcast(BitcastExpr),
     Call(CallExpr),
     Unary(UnaryExpr),
     Binary(BinaryExpr),
     Assign(AssignExpr),
     Return(ReturnExpr),
+    Break(BreakExpr),
     Block(BlockExpr),
     If(IfExpr),
+    Loop(LoopExpr),
 }
 
 impl Expr {
@@ -24,13 +27,16 @@ impl Expr {
             Expr::Local(expr) => expr.span,
             Expr::Literal(expr) => expr.span,
             Expr::Function(expr) => expr.span,
+            Expr::Bitcast(expr) => expr.span,
             Expr::Call(expr) => expr.span,
             Expr::Unary(expr) => expr.span,
             Expr::Binary(expr) => expr.span,
             Expr::Assign(expr) => expr.span,
             Expr::Return(expr) => expr.span,
+            Expr::Break(expr) => expr.span,
             Expr::Block(expr) => expr.span,
             Expr::If(expr) => expr.span,
+            Expr::Loop(expr) => expr.span,
         }
     }
 
@@ -39,13 +45,16 @@ impl Expr {
             Expr::Local(expr) => expr.id,
             Expr::Literal(expr) => expr.id,
             Expr::Function(expr) => expr.id,
+            Expr::Bitcast(expr) => expr.id,
             Expr::Call(expr) => expr.id,
             Expr::Unary(expr) => expr.id,
             Expr::Binary(expr) => expr.id,
             Expr::Assign(expr) => expr.id,
             Expr::Return(expr) => expr.id,
+            Expr::Break(expr) => expr.id,
             Expr::Block(expr) => expr.id,
             Expr::If(expr) => expr.id,
+            Expr::Loop(expr) => expr.id,
         }
     }
 }
@@ -65,6 +74,12 @@ impl From<LiteralExpr> for Expr {
 impl From<FunctionExpr> for Expr {
     fn from(expr: FunctionExpr) -> Self {
         Self::Function(expr)
+    }
+}
+
+impl From<BitcastExpr> for Expr {
+    fn from(expr: BitcastExpr) -> Self {
+        Self::Bitcast(expr)
     }
 }
 
@@ -98,6 +113,30 @@ impl From<ReturnExpr> for Expr {
     }
 }
 
+impl From<BreakExpr> for Expr {
+    fn from(expr: BreakExpr) -> Self {
+        Self::Break(expr)
+    }
+}
+
+impl From<BlockExpr> for Expr {
+    fn from(expr: BlockExpr) -> Self {
+        Self::Block(expr)
+    }
+}
+
+impl From<IfExpr> for Expr {
+    fn from(expr: IfExpr) -> Self {
+        Self::If(expr)
+    }
+}
+
+impl From<LoopExpr> for Expr {
+    fn from(expr: LoopExpr) -> Self {
+        Self::Loop(expr)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct LocalExpr {
     pub local: LocalId,
@@ -115,6 +154,14 @@ pub struct LiteralExpr {
 #[derive(Clone, Debug, PartialEq)]
 pub struct FunctionExpr {
     pub instance: FunctionInstance,
+    pub id: HirId,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct BitcastExpr {
+    pub expr: ExprId,
+    pub ty: Type,
     pub id: HirId,
     pub span: Span,
 }
@@ -160,6 +207,12 @@ pub struct ReturnExpr {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct BreakExpr {
+    pub id: HirId,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct BlockExpr {
     pub block: BlockId,
     pub id: HirId,
@@ -171,6 +224,13 @@ pub struct IfExpr {
     pub condition: ExprId,
     pub then_block: BlockId,
     pub else_block: Option<ExprId>,
+    pub id: HirId,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct LoopExpr {
+    pub block: BlockId,
     pub id: HirId,
     pub span: Span,
 }

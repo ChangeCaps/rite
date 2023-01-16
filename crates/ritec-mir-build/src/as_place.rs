@@ -27,12 +27,15 @@ impl<'a> FunctionBuilder<'a> {
             }
             thir::Expr::Literal(_)
             | thir::Expr::Function(_)
+            | thir::Expr::Bitcast(_)
             | thir::Expr::Call(_)
             | thir::Expr::Unary(_)
             | thir::Expr::Binary(_)
             | thir::Expr::Return(_)
+            | thir::Expr::Break(_)
             | thir::Expr::Block(_)
-            | thir::Expr::If(_) => {
+            | thir::Expr::If(_)
+            | thir::Expr::Loop(_) => {
                 let value = self.as_value(expr);
                 let temp = self.push_temp(expr.ty().clone());
                 self.push_assign(temp.clone(), value);

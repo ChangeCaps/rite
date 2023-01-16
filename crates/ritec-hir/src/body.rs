@@ -3,9 +3,12 @@ use std::{
     ops::{Index, IndexMut},
 };
 
-use ritec_core::Arena;
+use ritec_core::{Arena, Ident, Span};
 
-use crate::{Block, BlockId, Expr, ExprId, Local, LocalId};
+use crate::{
+    BitcastExpr, Block, BlockId, Expr, ExprId, ExprStmt, Local, LocalExpr, LocalId, ReturnExpr,
+    Stmt, Type,
+};
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct HirId {
@@ -44,6 +47,69 @@ impl Body {
             blocks: Arena::new(),
             next_id: HirId::ZERO,
         }
+    }
+
+    pub fn block(&mut self, block: Block) -> BlockId {
+        self.blocks.push(block)
+    }
+
+    pub fn local(&mut self, ident: impl Into<Ident>, ty: impl Into<Type>) -> LocalId {
+        let id = self.next_id();
+        let local = Local {
+            ident: ident.into(),
+            ty: ty.into(),
+            id,
+        };
+        self.locals.push(local)
+    }
+
+    pub fn local_expr(&mut self, local: LocalId) -> ExprId {
+        let id = self.next_id();
+        let expr = LocalExpr {
+            local,
+            id,
+            span: Span::DUMMY,
+        };
+        self.exprs.push(Expr::Local(expr))
+    }
+
+    pub fn bitcast_expr(&mut self, expr: ExprId, ty: impl Into<Type>) -> ExprId {
+        let id = self.next_id();
+        let expr = BitcastExpr {
+            expr,
+            ty: ty.into(),
+            id,
+            span: Span::DUMMY,
+        };
+        self.exprs.push(Expr::Bitcast(expr))
+    }
+
+    pub fn return_expr(&mut self, value: Option<ExprId>) -> ExprId {
+        let id = self.next_id();
+        let expr = ReturnExpr {
+            value,
+            id,
+            span: Span::DUMMY,
+        };
+        self.exprs.push(Expr::Return(expr))
+    }
+
+    pub fn expr_stmt(&mut self, expr: ExprId) {
+        let stmt = Stmt::Expr(ExprStmt {
+            expr,
+            id: self.next_id(),
+            span: Span::DUMMY,
+        });
+        self.push_stmt(stmt)
+    }
+
+    pub fn push_stmt(&mut self, stmt: Stmt) {
+        if self.blocks.is_empty() {
+            self.block(Block::new());
+        }
+
+        let block = self.blocks.last_mut().unwrap();
+        block.push(stmt);
     }
 
     pub fn next_id(&mut self) -> HirId {

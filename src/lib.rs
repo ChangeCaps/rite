@@ -24,6 +24,7 @@ impl Compiler {
         let items: ritec_ast::Items = parser.parse().unwrap();
 
         let mut hir_program = hir::Program::new();
+        hir_program.add_intrinsics();
         let mut emitter = Vec::new();
         let mut program_lowerer = AstLowerer::new(&mut hir_program, &mut emitter);
         let res = program_lowerer.lower(&items);

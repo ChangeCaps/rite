@@ -1,14 +1,20 @@
 use ritec_ast as ast;
-use ritec_core::{Arena, Generic};
+use ritec_core::Generic;
 use ritec_error::{Diagnostic, Emitter};
 use ritec_hir as hir;
 
 use crate::{Error, Resolver};
 
+pub struct RegisteredFunction {
+    pub block: ast::Block,
+    pub id: hir::FunctionId,
+    pub module: hir::ModuleId,
+}
+
 pub struct FunctionRegisterer<'a> {
     pub program: &'a mut hir::Program,
     pub emitter: &'a mut dyn Emitter,
-    pub blocks: &'a mut Arena<ast::Block>,
+    pub functions: &'a mut Vec<RegisteredFunction>,
     pub module: hir::ModuleId,
 }
 
@@ -60,20 +66,20 @@ impl<'a> FunctionRegisterer<'a> {
 
         let mut arguments = Vec::new();
         for argument in &item.arguments {
+            let ty = resolver.resolve_type(&argument.ty)?;
             let local = hir::Local {
                 id: body.next_id(),
                 ident: argument.ident.clone(),
-                ty: resolver.resolve_type(&argument.ty)?,
+                ty: ty.clone(),
             };
 
             let argument = hir::FunctionArgument {
                 ident: argument.ident.clone(),
-                ty: resolver.resolve_type(&argument.ty)?,
                 local: body.locals.push(local),
                 span: argument.span,
             };
 
-            if argument.ty.is_inferred() {
+            if ty.is_inferred() {
                 let err = Diagnostic::error("cannot infer type of function argument")
                     .with_message_span("argument type is inferred", argument.span);
 
@@ -98,7 +104,6 @@ impl<'a> FunctionRegisterer<'a> {
 
         let function = hir::Function {
             ident: item.ident.clone(),
-            module: self.module,
             generics,
             arguments,
             body,
@@ -107,7 +112,13 @@ impl<'a> FunctionRegisterer<'a> {
         };
 
         let function_id = self.program.functions.push(function);
-        self.blocks.insert(function_id.cast(), item.body.clone());
+
+        let registered = RegisteredFunction {
+            block: item.body.clone(),
+            id: function_id,
+            module: self.module,
+        };
+        self.functions.push(registered);
 
         self.program[self.module]
             .functions

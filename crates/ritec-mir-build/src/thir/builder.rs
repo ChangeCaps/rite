@@ -91,13 +91,16 @@ impl<'a> ThirBuilder<'a> {
             hir::Expr::Local(expr) => self.build_local_expr(expr)?,
             hir::Expr::Literal(expr) => self.build_literal_expr(expr)?,
             hir::Expr::Function(expr) => self.build_function_expr(expr)?,
+            hir::Expr::Bitcast(expr) => self.build_bitcast_expr(expr)?,
             hir::Expr::Call(expr) => self.build_call_expr(expr)?,
             hir::Expr::Unary(expr) => self.build_unary_expr(expr)?,
             hir::Expr::Binary(expr) => self.build_binary_expr(expr)?,
             hir::Expr::Assign(expr) => self.build_assign_expr(expr)?,
             hir::Expr::Return(expr) => self.build_return_expr(expr)?,
+            hir::Expr::Break(expr) => self.build_break_expr(expr)?,
             hir::Expr::Block(expr) => self.build_block_expr(expr)?,
             hir::Expr::If(expr) => self.build_if_expr(expr)?,
+            hir::Expr::Loop(expr) => self.build_loop_expr(expr)?,
         };
 
         Ok(self.thir.exprs.push(expr))
@@ -141,6 +144,19 @@ impl<'a> ThirBuilder<'a> {
         };
 
         Ok(thir::Expr::Function(expr))
+    }
+
+    pub fn build_bitcast_expr(
+        &mut self,
+        expr: &hir::BitcastExpr,
+    ) -> Result<thir::Expr, InferError> {
+        let expr = thir::BitcastExpr {
+            expr: self.build_expr(&self.hir.exprs[expr.expr])?,
+            ty: self.table.resolve_mir(expr.id)?,
+            span: expr.span,
+        };
+
+        Ok(thir::Expr::Bitcast(expr))
     }
 
     pub fn build_call_expr(&mut self, expr: &hir::CallExpr) -> Result<thir::Expr, InferError> {
@@ -210,6 +226,13 @@ impl<'a> ThirBuilder<'a> {
         }))
     }
 
+    pub fn build_break_expr(&mut self, expr: &hir::BreakExpr) -> Result<thir::Expr, InferError> {
+        Ok(thir::Expr::Break(thir::BreakExpr {
+            ty: self.table.resolve_mir(expr.id)?,
+            span: expr.span,
+        }))
+    }
+
     pub fn build_block_expr(&mut self, expr: &hir::BlockExpr) -> Result<thir::Expr, InferError> {
         let expr = thir::BlockExpr {
             block: self.build_block(&self.hir[expr.block])?,
@@ -233,6 +256,16 @@ impl<'a> ThirBuilder<'a> {
             condition,
             then_block,
             else_block,
+            ty: self.table.resolve_mir(expr.id)?,
+            span: expr.span,
+        }))
+    }
+
+    pub fn build_loop_expr(&mut self, expr: &hir::LoopExpr) -> Result<thir::Expr, InferError> {
+        let block = self.build_block(&self.hir[expr.block])?;
+
+        Ok(thir::Expr::Loop(thir::LoopExpr {
+            block,
             ty: self.table.resolve_mir(expr.id)?,
             span: expr.span,
         }))

@@ -54,7 +54,7 @@ impl<'a> Unifier<'a> {
             return Ok(());
         }
 
-        if !a.can_unify_with(&b) {
+        if !a.can_unify_with_var(&b) {
             return Err(Error::Mismatch(
                 InferType::Var(a.clone()),
                 InferType::Var(b.clone()),
@@ -86,6 +86,10 @@ impl<'a> Unifier<'a> {
     }
 
     pub fn unify_var_ty(&mut self, a: &TypeVariable, b: &InferType) -> Result<(), Error> {
+        if !a.can_unify_with(&b) {
+            return Err(Error::Mismatch(InferType::Var(a.clone()), b.clone()));
+        }
+
         self.table.substite(a.clone(), b.clone());
 
         Ok(())
