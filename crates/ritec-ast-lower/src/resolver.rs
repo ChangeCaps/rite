@@ -26,7 +26,10 @@ impl<'a> Resolver<'a> {
                     if iter.peek().is_some() {
                         let Some(&next_module) = module.modules.get(&item.ident) else {
                             let err = Diagnostic::error("module not found")
-                                .with_msg_span("module '{}' not found", item.ident.span());
+                                .with_msg_span(
+                                    format!("module '{}' not found", item.ident),
+                                    item.ident.span()
+                                );
 
                             return Err(err);
                         };
