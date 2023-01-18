@@ -135,6 +135,7 @@ impl<'a> ProgramLowerer<'a> {
             ident: item.ident.clone(),
             generics,
             fields: Arena::new(),
+            methods: Arena::new(),
             span: item.span,
         };
 

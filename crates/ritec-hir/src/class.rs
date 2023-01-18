@@ -2,7 +2,7 @@ use std::ops::Index;
 
 use ritec_core::{Arena, Id, Ident, Span};
 
-use crate::{Generics, Type};
+use crate::{FunctionId, Generics, Type};
 
 pub type FieldId = Id<Field>;
 
@@ -13,6 +13,21 @@ pub struct Field {
     pub span: Span,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SelfArgument {
+    Owned,
+    Pointer,
+}
+
+pub type MethodId = Id<Method>;
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Method {
+    pub ident: Ident,
+    pub function: FunctionId,
+    pub span: Span,
+}
+
 pub type ClassId = Id<Class>;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -20,6 +35,7 @@ pub struct Class {
     pub ident: Ident,
     pub generics: Generics,
     pub fields: Arena<Field>,
+    pub methods: Arena<Method>,
     pub span: Span,
 }
 
