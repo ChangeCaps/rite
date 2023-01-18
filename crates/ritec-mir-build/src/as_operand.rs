@@ -15,6 +15,10 @@ impl<'a> FunctionBuilder<'a> {
 
         match expr {
             thir::Expr::Literal(expr) => match &expr.literal {
+                Literal::Null(_) => {
+                    let value = mir::Operand::Constant(mir::Constant::Null);
+                    BlockAnd::new(block, value)
+                }
                 Literal::Bool(lit) => {
                     let constant = mir::Operand::Constant(mir::Constant::Bool(lit.value));
                     BlockAnd::new(block, constant)

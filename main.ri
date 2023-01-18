@@ -1,12 +1,17 @@
 mod module;
 
-class Foo<T> {
-	x: *T,
+class Vec<T> {
+	len: usize,
+	cap: usize,
+	ptr: *T,
 }
 
 fn main(argc: i32, argv: **i8) -> i32 {
-	let foo = Foo { x: &argc };
-	let y = foo.x;
+	let v = Vec<_> {
+		ptr: null,
+	};
 
-	return *foo.x;
+	let x = v;
+
+	return *v.ptr;
 }

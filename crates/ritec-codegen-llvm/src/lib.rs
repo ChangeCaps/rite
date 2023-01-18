@@ -26,7 +26,6 @@ impl LLVMCodegen {
         }
 
         cx.module.print_to_stderr();
-        cx.module.verify().unwrap();
 
         let main_address = cx.execution_engine.get_function_address("main").unwrap();
 

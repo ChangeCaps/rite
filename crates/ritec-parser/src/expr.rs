@@ -1,5 +1,5 @@
 use ritec_ast as ast;
-use ritec_core::{BinOp, BoolLiteral, Literal, UnaryOp};
+use ritec_core::{BinOp, BoolLiteral, Literal, NullLiteral, UnaryOp};
 
 use crate::{Delimiter, KeywordKind, Parse, ParseResult, ParseStream, SymbolKind};
 
@@ -24,7 +24,13 @@ impl Parse for ast::PathExpr {
 impl Parse for ast::LiteralExpr {
     fn parse(parser: ParseStream) -> ParseResult<Self> {
         let span = parser.span();
-        let literal = if parser.is(&KeywordKind::True) {
+        let literal = if parser.is(&KeywordKind::Null) {
+            parser.next();
+
+            Literal::Null(NullLiteral {
+                span: span | parser.span(),
+            })
+        } else if parser.is(&KeywordKind::True) {
             parser.next();
 
             Literal::Bool(BoolLiteral {

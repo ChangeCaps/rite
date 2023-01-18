@@ -102,12 +102,8 @@ impl<'a> Solver<'a> {
                 let field = class.find_field(&field)?;
                 trace!("proj: {:?} -> {}", proj, class[field].ty);
 
-                let mut generics = Vec::new();
-                for _ in 0..class.generics.params.len() {
-                    generics.push(InferType::Var(self.table.new_variable(None)));
-                }
-
-                let instance = Instance::new(class.generics.params.clone(), generics);
+                let instance =
+                    Instance::new(class.generics.params.clone(), apply.arguments.clone());
                 Some(self.table.infer_hir(&class[field].ty, &instance))
             }
         }

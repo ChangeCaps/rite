@@ -55,6 +55,13 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
         self.void_type().const_zero()
     }
 
+    pub fn null_value(&self) -> BasicValueEnum<'c> {
+        self.void_type()
+            .ptr_type(AddressSpace::Generic)
+            .const_null()
+            .into()
+    }
+
     pub fn build_function_type(&self, ty: &mir::FunctionType) -> FunctionType<'c> {
         let return_type = self.build_type(&ty.return_type);
 
@@ -250,6 +257,7 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
     pub fn build_constant(&mut self, constant: &mir::Constant) -> BasicValueEnum<'c> {
         match constant {
             mir::Constant::Void => self.void_value(),
+            mir::Constant::Null => self.null_value(),
             mir::Constant::Function(id, generics) => {
                 let generic_map = GenericMap::new(&self.function().generics, &self.generics);
 

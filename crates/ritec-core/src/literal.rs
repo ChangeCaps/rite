@@ -3,6 +3,17 @@ use std::fmt::{self, Display};
 use crate::Span;
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct NullLiteral {
+    pub span: Span,
+}
+
+impl Display for NullLiteral {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "null")
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct BoolLiteral {
     pub value: bool,
     pub span: Span,
@@ -72,6 +83,7 @@ impl Display for FloatLiteral {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Literal {
+    Null(NullLiteral),
     Bool(BoolLiteral),
     Int(IntLiteral),
     Float(FloatLiteral),
@@ -80,6 +92,7 @@ pub enum Literal {
 impl Literal {
     pub const fn span(&self) -> Span {
         match self {
+            Self::Null(lit) => lit.span,
             Self::Bool(lit) => lit.span,
             Self::Int(lit) => lit.span,
             Self::Float(lit) => lit.span,
@@ -90,6 +103,7 @@ impl Literal {
 impl Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Null(lit) => write!(f, "{}", lit),
             Self::Bool(lit) => write!(f, "{}", lit),
             Self::Int(lit) => write!(f, "{}", lit),
             Self::Float(lit) => write!(f, "{}", lit),

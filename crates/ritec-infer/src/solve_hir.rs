@@ -93,6 +93,14 @@ impl<'a> Solver<'a> {
         expr: &hir::LiteralExpr,
     ) -> Result<InferType, Error> {
         match expr.literal {
+            Literal::Null(_) => {
+                let var = self.table_mut().new_variable(None);
+                Ok(InferType::apply(
+                    ItemId::Pointer,
+                    [InferType::Var(var)],
+                    expr.span,
+                ))
+            }
             Literal::Bool(_) => Ok(InferType::apply(ItemId::Bool, vec![], expr.span)),
             Literal::Int(_) => {
                 let var = (self.table_mut()).new_variable(Some(TypeVariableKind::Integer));

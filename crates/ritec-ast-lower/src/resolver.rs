@@ -35,7 +35,7 @@ impl<'a> Resolver<'a> {
     ) -> Result<(), Diagnostic> {
         if actual != expected {
             let err = Diagnostic::error("invalid number of generic arguments").with_msg_span(
-                format!("expected {} generic arguments, found {}", expected, actual,),
+                format!("expected {} generic arguments, found {}", expected, actual),
                 span,
             );
 

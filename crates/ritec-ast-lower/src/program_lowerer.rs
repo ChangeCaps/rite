@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use ritec_ast as ast;
 use ritec_core::{Arena, Generic};
 use ritec_error::{Diagnostic, Emitter};
@@ -8,11 +10,54 @@ use crate::{BodyLowerer, Error, Resolver};
 pub struct ProgramLowerer<'a> {
     pub program: &'a mut hir::Program,
     pub emitter: &'a mut dyn Emitter,
+    pub modules: HashMap<ast::ModuleId, hir::ModuleId>,
+    pub classes: HashMap<ast::ClassId, hir::ClassId>,
+    pub functions: HashMap<ast::FunctionId, hir::FunctionId>,
 }
 
 impl<'a> ProgramLowerer<'a> {
     pub fn new(program: &'a mut hir::Program, emitter: &'a mut dyn Emitter) -> Self {
-        Self { program, emitter }
+        Self {
+            program,
+            emitter,
+            modules: HashMap::new(),
+            classes: HashMap::new(),
+            functions: HashMap::new(),
+        }
+    }
+
+    pub fn cast_module(&mut self, ast: ast::ModuleId) -> hir::ModuleId {
+        if ast.cast() == self.program.root_module {
+            return self.program.root_module;
+        }
+
+        if let Some(id) = self.modules.get(&ast) {
+            return *id;
+        } else {
+            let id = self.program.modules.reserve();
+            self.modules.insert(ast, id);
+            id
+        }
+    }
+
+    pub fn cast_class(&mut self, ast: ast::ClassId) -> hir::ClassId {
+        if let Some(id) = self.classes.get(&ast) {
+            return *id;
+        } else {
+            let id = self.program.classes.reserve();
+            self.classes.insert(ast, id);
+            id
+        }
+    }
+
+    pub fn cast_function(&mut self, ast: ast::FunctionId) -> hir::FunctionId {
+        if let Some(id) = self.functions.get(&ast) {
+            return *id;
+        } else {
+            let id = self.program.functions.reserve();
+            self.functions.insert(ast, id);
+            id
+        }
     }
 
     pub fn lower(&mut self, program: &ast::Program) -> Result<(), Error> {
@@ -27,25 +72,31 @@ impl<'a> ProgramLowerer<'a> {
 
     pub fn register_modules(&mut self, program: &ast::Program) {
         for (id, module) in program.modules.iter() {
-            if !self.program.modules.contains_key(id.cast()) {
-                self.program.modules.insert(id.cast(), hir::Module::new());
+            let mod_id = self.cast_module(id);
+
+            if !self.program.modules.contains_key(mod_id) {
+                self.program.modules.insert(mod_id, hir::Module::new());
             }
 
-            let hir = &mut self.program.modules[id.cast()];
-
             for &id in module.modules.iter() {
+                let hir_id = self.cast_module(id);
+
                 let ident = program.modules[id].ident.clone();
-                hir.modules.insert(ident, id.cast());
+                self.program[mod_id].modules.insert(ident, hir_id);
             }
 
             for &id in module.classes.iter() {
+                let hir_id = self.cast_class(id);
+
                 let ident = program.classes[id].ident.clone();
-                hir.classes.insert(ident, id.cast());
+                self.program[mod_id].classes.insert(ident, hir_id);
             }
 
             for &id in module.functions.iter() {
+                let hir_id = self.cast_function(id);
+
                 let ident = program.functions[id].ident.clone();
-                hir.functions.insert(ident, id.cast());
+                self.program[mod_id].functions.insert(ident, hir_id);
             }
         }
     }
@@ -54,7 +105,8 @@ impl<'a> ProgramLowerer<'a> {
         let mut has_failed = false;
 
         for (id, item) in program.classes.iter() {
-            if let Err(err) = self.register_class(id.cast(), item) {
+            let id = self.cast_class(id);
+            if let Err(err) = self.register_class(id, item) {
                 self.emitter.emit(err.into());
                 has_failed = true;
             }
@@ -95,7 +147,8 @@ impl<'a> ProgramLowerer<'a> {
         let mut has_failed = false;
 
         for (id, item) in program.classes.iter() {
-            if let Err(err) = self.complete_class(id.cast(), item) {
+            let id = self.cast_class(id);
+            if let Err(err) = self.complete_class(id, item) {
                 self.emitter.emit(err.into());
                 has_failed = true;
             }
@@ -114,10 +167,11 @@ impl<'a> ProgramLowerer<'a> {
         item: &ast::Class,
     ) -> Result<(), Diagnostic> {
         let mut class = self.program[id].clone();
+        let module = self.cast_module(item.module);
         let resolver = Resolver {
             program: &self.program,
             generics: &class.generics,
-            module: item.module.cast(),
+            module,
         };
 
         for field in item.fields.iter() {
@@ -141,7 +195,8 @@ impl<'a> ProgramLowerer<'a> {
         let mut has_failed = false;
 
         for (id, item) in program.functions.iter() {
-            if let Err(err) = self.register_function(id.cast(), item) {
+            let id = self.cast_function(id);
+            if let Err(err) = self.register_function(id, item) {
                 self.emitter.emit(err.into());
                 has_failed = true;
             }
@@ -165,10 +220,11 @@ impl<'a> ProgramLowerer<'a> {
         }
 
         let generics = hir::Generics::new(generic_params, item.generics.span);
+        let module = self.cast_module(item.module);
         let resolver = Resolver {
             program: self.program,
             generics: &generics,
-            module: item.module.cast(),
+            module,
         };
 
         let mut body = hir::Body::new();
@@ -229,7 +285,8 @@ impl<'a> ProgramLowerer<'a> {
         let mut has_failed = false;
 
         for (id, function) in program.functions.iter() {
-            if let Err(err) = self.complete_function(id.cast(), function) {
+            let id = self.cast_function(id);
+            if let Err(err) = self.complete_function(id, function) {
                 self.emitter.emit(err.into());
                 has_failed = true;
             }
@@ -248,10 +305,11 @@ impl<'a> ProgramLowerer<'a> {
         item: &ast::Function,
     ) -> Result<(), Diagnostic> {
         let mut function = self.program.functions[id].clone();
+        let module = self.cast_module(item.module);
         let resolver = Resolver {
             program: &self.program,
             generics: &function.generics,
-            module: item.module.cast(),
+            module,
         };
 
         let mut body_lowerer = BodyLowerer::new(&mut function.body, resolver);

@@ -34,6 +34,7 @@ macro_rules! keyword {
 keyword! {
     /* types */
     "void" => Void,
+    "null" => Null,
 
     /* boolean */
     "bool" => Bool,
