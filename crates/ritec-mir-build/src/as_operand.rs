@@ -87,6 +87,8 @@ impl<'a> FunctionBuilder<'a> {
                 BlockAnd::new(exit_block, mir::Operand::VOID)
             }
             thir::Expr::Local(_)
+            | thir::Expr::Init(_)
+            | thir::Expr::Field(_)
             | thir::Expr::Bitcast(_)
             | thir::Expr::Call(_)
             | thir::Expr::Unary(_)

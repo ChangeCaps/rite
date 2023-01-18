@@ -61,7 +61,7 @@ impl<'a> Unifier<'a> {
             ));
         }
 
-        self.table.substite(*a, InferType::Var(*b));
+        (self.table).substitute(InferType::Var(*a), InferType::Var(*b));
 
         Ok(())
     }
@@ -76,7 +76,7 @@ impl<'a> Unifier<'a> {
 
     pub fn unify_proj_ty(&mut self, a: &TypeProjection, b: &InferType) -> Result<(), Error> {
         let noramlize = Normalize {
-            projection: a.clone(),
+            proj: a.clone(),
             expected: b.clone(),
         };
 
@@ -90,7 +90,7 @@ impl<'a> Unifier<'a> {
             return Err(Error::Mismatch(InferType::Var(a.clone()), b.clone()));
         }
 
-        self.table.substite(a.clone(), b.clone());
+        self.table.substitute(InferType::Var(a.clone()), b.clone());
 
         Ok(())
     }

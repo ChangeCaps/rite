@@ -1,6 +1,6 @@
 use ritec_core::{BinOp, Id, Literal, Span, UnaryOp};
 use ritec_hir::FunctionId;
-use ritec_mir::{LocalId, Type};
+use ritec_mir::{ClassType, FieldId, LocalId, Type};
 
 use super::BlockId;
 
@@ -11,6 +11,8 @@ pub enum Expr {
     Local(LocalExpr),
     Literal(LiteralExpr),
     Function(FunctionExpr),
+    Init(InitExpr),
+    Field(FieldExpr),
     Bitcast(BitcastExpr),
     Call(CallExpr),
     Unary(UnaryExpr),
@@ -29,6 +31,8 @@ impl Expr {
             Expr::Local(expr) => &expr.ty,
             Expr::Literal(expr) => &expr.ty,
             Expr::Function(expr) => &expr.ty,
+            Expr::Init(expr) => &expr.ty,
+            Expr::Field(expr) => &expr.ty,
             Expr::Bitcast(expr) => &expr.ty,
             Expr::Call(expr) => &expr.ty,
             Expr::Unary(expr) => &expr.ty,
@@ -47,6 +51,8 @@ impl Expr {
             Expr::Local(expr) => expr.span,
             Expr::Literal(expr) => expr.span,
             Expr::Function(expr) => expr.span,
+            Expr::Init(expr) => expr.span,
+            Expr::Field(expr) => expr.span,
             Expr::Bitcast(expr) => expr.span,
             Expr::Call(expr) => expr.span,
             Expr::Unary(expr) => expr.span,
@@ -79,6 +85,22 @@ pub struct LiteralExpr {
 pub struct FunctionExpr {
     pub function: FunctionId,
     pub generics: Vec<Type>,
+    pub ty: Type,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct InitExpr {
+    pub class: ClassType,
+    pub fields: Vec<(FieldId, ExprId)>,
+    pub ty: Type,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct FieldExpr {
+    pub class: ExprId,
+    pub field: FieldId,
     pub ty: Type,
     pub span: Span,
 }

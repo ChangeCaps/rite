@@ -46,6 +46,35 @@ impl Parse for ast::LiteralExpr {
     }
 }
 
+impl Parse for ast::InitField {
+    fn parse(parser: ParseStream) -> ParseResult<Self> {
+        let span = parser.span();
+        let name = parser.parse()?;
+        parser.expect(&SymbolKind::Colon)?;
+        let expr = parser.parse()?;
+        Ok(ast::InitField {
+            ident: name,
+            expr,
+            span,
+        })
+    }
+}
+
+impl Parse for ast::InitExpr {
+    fn parse(parser: ParseStream) -> ParseResult<Self> {
+        let span = parser.span();
+        let path = parser.parse()?;
+        let mut contents = parser.delim(Delimiter::Brace)?;
+        let fields = contents.parse_comma_separated()?;
+
+        Ok(ast::InitExpr {
+            class: path,
+            fields,
+            span,
+        })
+    }
+}
+
 impl Parse for UnaryOp {
     fn parse(parser: ParseStream) -> ParseResult<Self> {
         if parser.is(&SymbolKind::Amp) {
@@ -191,6 +220,8 @@ impl Parse for ast::WhileExpr {
 
 fn parse_term(parser: ParseStream) -> ParseResult<ast::Expr> {
     if let Some(expr) = parser.try_parse() {
+        Ok(ast::Expr::Init(expr))
+    } else if let Some(expr) = parser.try_parse() {
         Ok(ast::Expr::Path(expr))
     } else if let Some(literal) = parser.try_parse::<ast::LiteralExpr>() {
         Ok(ast::Expr::Literal(literal))
@@ -201,9 +232,27 @@ fn parse_term(parser: ParseStream) -> ParseResult<ast::Expr> {
     }
 }
 
+fn parse_field(parser: ParseStream) -> ParseResult<ast::Expr> {
+    let span = parser.span();
+    let mut base = parse_term(parser)?;
+
+    while parser.is(&SymbolKind::Dot) {
+        parser.next();
+        let field = parser.parse()?;
+
+        base = ast::Expr::Field(ast::FieldExpr {
+            class: Box::new(base),
+            field,
+            span: span | parser.span(),
+        });
+    }
+
+    Ok(base)
+}
+
 fn parse_call(parser: ParseStream) -> ParseResult<ast::Expr> {
     let span = parser.span();
-    let callee = parse_term(parser)?;
+    let callee = parse_field(parser)?;
 
     if let Ok(mut contents) = parser.delim(Delimiter::Paren) {
         let arguments = contents.parse_comma_separated()?;

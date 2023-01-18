@@ -14,20 +14,20 @@ impl InferenceTable {
     }
 
     pub fn resolve_mir_type(&self, ty: &InferType) -> Result<mir::Type, Error> {
+        if let Some(ty) = self.get_substitution(ty) {
+            return self.resolve_mir_type(&ty);
+        }
+
         match ty {
             InferType::Var(var) => {
-                if let Some(ty) = self.get_substitution(var) {
-                    self.resolve_mir_type(&ty)
-                } else {
-                    if let Some(kind) = var.kind {
-                        match kind {
-                            TypeVariableKind::Integer => return Ok(mir::Type::I32),
-                            TypeVariableKind::Float => return Ok(mir::Type::F32),
-                        }
+                if let Some(kind) = var.kind {
+                    match kind {
+                        TypeVariableKind::Integer => return Ok(mir::Type::I32),
+                        TypeVariableKind::Float => return Ok(mir::Type::F32),
                     }
-
-                    Err(Error::AmbiguousType(var.clone()))
                 }
+
+                Err(Error::AmbiguousType(var.clone()))
             }
             InferType::Apply(apply) => {
                 let mut args = Vec::new();

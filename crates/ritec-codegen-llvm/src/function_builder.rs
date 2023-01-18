@@ -226,6 +226,10 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
     ) -> PointerValue<'c> {
         match proj {
             mir::Projection::Deref => self.builder.build_load(ptr, "deref").into_pointer_value(),
+            mir::Projection::Field(field) => {
+                let index = field.as_raw_index() as u32;
+                self.builder.build_struct_gep(ptr, index, "field").unwrap()
+            }
         }
     }
 

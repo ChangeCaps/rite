@@ -19,8 +19,8 @@ impl Display for Constant {
                 let generics: Vec<_> = generics.iter().map(Type::to_string).collect();
                 write!(f, "fn[{}]<{}>", id.as_raw_index(), generics.join(", "))
             }
-            Self::Integer(c, ty) => write!(f, "{}: {}", c, ty),
-            Self::Float(c, ty) => write!(f, "{}: {}", c, ty),
+            Self::Integer(c, ty) => write!(f, "{}{}", c, ty),
+            Self::Float(c, ty) => write!(f, "{}{}", c, ty),
             Self::Bool(c) => write!(f, "{}", c),
         }
     }

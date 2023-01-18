@@ -98,6 +98,8 @@ impl<'a> BodyLowerer<'a> {
             ast::Expr::Paren(expr) => return self.lower_paren_expr(expr),
             ast::Expr::Path(expr) => self.lower_path_expr(expr)?,
             ast::Expr::Literal(expr) => self.lower_literal_expr(expr)?,
+            ast::Expr::Init(expr) => self.lower_init_expr(expr)?,
+            ast::Expr::Field(expr) => self.lower_field_expr(expr)?,
             ast::Expr::Call(expr) => self.lower_call_expr(expr)?,
             ast::Expr::Unary(expr) => self.lower_unary_expr(expr)?,
             ast::Expr::Binary(expr) => self.lower_binary_expr(expr)?,
@@ -166,6 +168,53 @@ impl<'a> BodyLowerer<'a> {
         };
 
         Ok(hir::Expr::Literal(literal_expr))
+    }
+
+    pub fn lower_init_expr(&mut self, expr: &ast::InitExpr) -> Result<hir::Expr, Diagnostic> {
+        let ty = self.resolver.resolve_path_type(&expr.class)?;
+
+        let hir::Type::Class(class_type) = ty else {
+            let err = Diagnostic::error(format!("'{}' is not a class", expr.class.path))
+                .with_msg_span("expected class", expr.class.span);
+
+            return Err(err);
+        };
+
+        let class = &self.resolver.program[class_type.class];
+
+        let mut fields = Vec::new();
+        for field in &expr.fields {
+            let Some(field_id) = class.find_field(&field.ident) else {
+                let err = Diagnostic::error(format!("'{}' has no field '{}'", class.ident, field.ident))
+                    .with_msg_span("field not found", field.ident.span());
+
+                return Err(err);
+            };
+
+            let field_init = self.lower_expr(&field.expr)?;
+
+            fields.push((field_id, field_init));
+        }
+
+        let init_expr = hir::InitExpr {
+            class: class_type,
+            fields,
+            id: self.body.next_id(),
+            span: expr.span,
+        };
+
+        Ok(hir::Expr::Init(init_expr))
+    }
+
+    pub fn lower_field_expr(&mut self, expr: &ast::FieldExpr) -> Result<hir::Expr, Diagnostic> {
+        let field_expr = hir::FieldExpr {
+            class: self.lower_expr(&expr.class)?,
+            field: expr.field.clone(),
+            id: self.body.next_id(),
+            span: expr.span,
+        };
+
+        Ok(hir::Expr::Field(field_expr))
     }
 
     pub fn lower_call_expr(&mut self, expr: &ast::CallExpr) -> Result<hir::Expr, Diagnostic> {

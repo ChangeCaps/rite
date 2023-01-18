@@ -54,7 +54,7 @@ impl Debug for TypeVariable {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum ItemId {
     Void,
     Bool,
@@ -87,7 +87,7 @@ impl Debug for ItemId {
     }
 }
 
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub struct TypeApplication {
     pub item: ItemId,
     pub arguments: Vec<InferType>,
@@ -107,11 +107,32 @@ impl Debug for TypeApplication {
     }
 }
 
-#[non_exhaustive]
-#[derive(Clone, Debug, PartialEq)]
-pub struct TypeProjection {}
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub enum Projection {
+    Field(Ident),
+}
 
-#[derive(Clone, PartialEq)]
+impl Debug for Projection {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Field(ident) => write!(f, ".{}", ident),
+        }
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Hash)]
+pub struct TypeProjection {
+    pub base: Box<InferType>,
+    pub proj: Projection,
+}
+
+impl Debug for TypeProjection {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{:?}{:?}", self.base, self.proj)
+    }
+}
+
+#[derive(Clone, PartialEq, Eq, Hash)]
 pub enum InferType {
     Var(TypeVariable),
     Apply(TypeApplication),

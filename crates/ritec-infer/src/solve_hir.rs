@@ -1,7 +1,9 @@
 use ritec_core::{Literal, UnaryOp};
 use ritec_hir as hir;
 
-use crate::{Error, InferType, Instance, ItemId, Solver, TypeVariableKind};
+use crate::{
+    Error, InferType, Instance, ItemId, Projection, Solver, TypeProjection, TypeVariableKind,
+};
 
 impl<'a> Solver<'a> {
     pub fn solve_body(&mut self, body: &hir::Body) -> Result<(), Error> {
@@ -55,6 +57,8 @@ impl<'a> Solver<'a> {
             hir::Expr::Local(expr) => self.solve_local_expr(body, expr)?,
             hir::Expr::Literal(expr) => self.solve_literal_expr(body, expr)?,
             hir::Expr::Function(expr) => self.solve_function_expr(body, expr)?,
+            hir::Expr::Init(expr) => self.solve_init_expr(body, expr)?,
+            hir::Expr::Field(expr) => self.solve_field_expr(body, expr)?,
             hir::Expr::Bitcast(expr) => self.solve_bitcast_expr(body, expr)?,
             hir::Expr::Call(expr) => self.solve_call_expr(body, expr)?,
             hir::Expr::Unary(expr) => self.solve_unary_expr(body, expr)?,
@@ -118,6 +122,50 @@ impl<'a> Solver<'a> {
         let instance = Instance::new(function.generics.params.clone(), generics);
 
         Ok(self.table_mut().infer_hir(&ty, &instance))
+    }
+
+    pub fn solve_init_expr(
+        &mut self,
+        body: &hir::Body,
+        expr: &hir::InitExpr,
+    ) -> Result<InferType, Error> {
+        let class = &self.program()[expr.class.class];
+
+        let mut generics = Vec::new();
+        for generic in expr.class.generics.iter() {
+            let ty = self.table_mut().infer_hir(generic, &Instance::empty());
+            generics.push(ty);
+        }
+
+        let instance = Instance::new(class.generics.params.clone(), generics);
+
+        for (id, init) in expr.fields.iter() {
+            let field = &class.fields[*id];
+            let init_type = self.solve_expr(body, &body.exprs[*init])?;
+            let field_type = self.table_mut().infer_hir(&field.ty, &instance);
+
+            self.unify(field_type, init_type)?;
+        }
+
+        Ok(InferType::apply(
+            ItemId::Class(expr.class.class.cast(), expr.class.ident.clone()),
+            instance.types,
+            expr.span,
+        ))
+    }
+
+    pub fn solve_field_expr(
+        &mut self,
+        body: &hir::Body,
+        expr: &hir::FieldExpr,
+    ) -> Result<InferType, Error> {
+        let class = self.solve_expr(body, &body.exprs[expr.class])?;
+        let proj = TypeProjection {
+            base: Box::new(class),
+            proj: Projection::Field(expr.field.clone()),
+        };
+
+        Ok(InferType::Proj(proj))
     }
 
     pub fn solve_bitcast_expr(

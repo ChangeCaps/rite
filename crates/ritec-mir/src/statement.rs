@@ -2,22 +2,12 @@ use std::fmt::{self, Display};
 
 use ritec_core::Id;
 
-use crate::{LocalId, Type, Value};
+use crate::{Field, LocalId, Value};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Projection {
     Deref,
-}
-
-impl Projection {
-    pub fn apply_type(&self, ty: Type) -> Type {
-        match self {
-            Projection::Deref => match ty {
-                Type::Pointer(ty) => *ty.pointee,
-                _ => panic!("cannot deref non-pointer type"),
-            },
-        }
-    }
+    Field(Id<Field>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -51,6 +41,7 @@ impl Display for Place {
         for proj in &self.proj {
             match proj {
                 Projection::Deref => out = format!("*{}", out),
+                Projection::Field(field) => out = format!("{}.{}", out, field.as_raw_index()),
             }
         }
 

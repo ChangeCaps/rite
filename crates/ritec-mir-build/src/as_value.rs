@@ -83,6 +83,8 @@ impl<'a> FunctionBuilder<'a> {
             thir::Expr::Local(_)
             | thir::Expr::Literal(_)
             | thir::Expr::Function(_)
+            | thir::Expr::Init(_)
+            | thir::Expr::Field(_)
             | thir::Expr::Unary(_)
             | thir::Expr::Assign(_)
             | thir::Expr::Return(_)

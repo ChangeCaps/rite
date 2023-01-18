@@ -4,6 +4,8 @@ use ritec_core::{Generic, Id, Ident};
 
 use crate::{FunctionId, Type};
 
+pub type FieldId = Id<Field>;
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct Field {
     pub ident: Ident,

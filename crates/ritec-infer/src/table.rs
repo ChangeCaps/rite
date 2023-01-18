@@ -2,14 +2,16 @@ use std::collections::HashMap;
 
 use ritec_core::trace;
 use ritec_hir as hir;
+use ritec_mir as mir;
 
 use crate::{Error, InferType, TypeVariable, TypeVariableKind, Unifier, UnifyResult};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct InferenceTable {
-    variables: HashMap<TypeVariable, InferType>,
+    variables: HashMap<InferType, InferType>,
     identifed: HashMap<hir::HirId, InferType>,
     generics: HashMap<(hir::HirId, usize), InferType>,
+    fields: HashMap<hir::HirId, mir::FieldId>,
     next_variable: usize,
 }
 
@@ -19,6 +21,7 @@ impl InferenceTable {
             variables: HashMap::new(),
             identifed: HashMap::new(),
             generics: HashMap::new(),
+            fields: HashMap::new(),
             next_variable: 0,
         }
     }
@@ -40,34 +43,38 @@ impl InferenceTable {
         self.identifed.insert(id, ty);
     }
 
-    pub fn register_generic(&mut self, id: hir::HirId, generic: usize, ty: InferType) {
-        self.generics.insert((id, generic), ty);
-    }
-
     pub fn get_type(&self, id: hir::HirId) -> Option<&InferType> {
         self.identifed.get(&id)
+    }
+
+    pub fn register_generic(&mut self, id: hir::HirId, generic: usize, ty: InferType) {
+        self.generics.insert((id, generic), ty);
     }
 
     pub fn get_generic(&self, id: hir::HirId, generic: usize) -> Option<&InferType> {
         self.generics.get(&(id, generic))
     }
 
+    pub fn register_field(&mut self, id: hir::HirId, field: hir::FieldId) {
+        self.fields.insert(id, field.cast());
+    }
+
+    pub fn get_field(&self, id: hir::HirId) -> Option<mir::FieldId> {
+        self.fields.get(&id).copied()
+    }
+
     pub fn normalize_shallow(&mut self, ty: &InferType) -> Option<InferType> {
-        let InferType::Var(var) = ty else {
-            return None;
-        };
-
-        self.variables.get(var).cloned()
+        self.variables.get(ty).cloned()
     }
 
-    pub fn substite(&mut self, var: TypeVariable, ty: InferType) {
-        trace!("substite: {:?} -> {:?}", var, ty);
+    pub fn substitute(&mut self, from: InferType, to: InferType) {
+        trace!("substitute: {:?} -> {:?}", from, to);
 
-        self.variables.insert(var, ty);
+        self.variables.insert(from, to);
     }
 
-    pub fn get_substitution(&self, var: &TypeVariable) -> Option<InferType> {
-        self.variables.get(var).cloned()
+    pub fn get_substitution(&self, ty: &InferType) -> Option<InferType> {
+        self.variables.get(ty).cloned()
     }
 
     pub fn unify(&mut self, a: &InferType, b: &InferType) -> Result<UnifyResult, Error> {

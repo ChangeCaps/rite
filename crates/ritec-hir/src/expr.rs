@@ -1,6 +1,6 @@
-use ritec_core::{BinOp, Id, Literal, Span, UnaryOp};
+use ritec_core::{BinOp, Id, Ident, Literal, Span, UnaryOp};
 
-use crate::{BlockId, FunctionInstance, HirId, LocalId, Type};
+use crate::{BlockId, ClassType, FieldId, FunctionInstance, HirId, LocalId, Type};
 
 pub type ExprId = Id<Expr>;
 
@@ -9,6 +9,8 @@ pub enum Expr {
     Local(LocalExpr),
     Literal(LiteralExpr),
     Function(FunctionExpr),
+    Init(InitExpr),
+    Field(FieldExpr),
     Bitcast(BitcastExpr),
     Call(CallExpr),
     Unary(UnaryExpr),
@@ -27,6 +29,8 @@ impl Expr {
             Expr::Local(expr) => expr.span,
             Expr::Literal(expr) => expr.span,
             Expr::Function(expr) => expr.span,
+            Expr::Init(expr) => expr.span,
+            Expr::Field(expr) => expr.span,
             Expr::Bitcast(expr) => expr.span,
             Expr::Call(expr) => expr.span,
             Expr::Unary(expr) => expr.span,
@@ -45,6 +49,8 @@ impl Expr {
             Expr::Local(expr) => expr.id,
             Expr::Literal(expr) => expr.id,
             Expr::Function(expr) => expr.id,
+            Expr::Init(expr) => expr.id,
+            Expr::Field(expr) => expr.id,
             Expr::Bitcast(expr) => expr.id,
             Expr::Call(expr) => expr.id,
             Expr::Unary(expr) => expr.id,
@@ -74,6 +80,18 @@ impl From<LiteralExpr> for Expr {
 impl From<FunctionExpr> for Expr {
     fn from(expr: FunctionExpr) -> Self {
         Self::Function(expr)
+    }
+}
+
+impl From<InitExpr> for Expr {
+    fn from(expr: InitExpr) -> Self {
+        Self::Init(expr)
+    }
+}
+
+impl From<FieldExpr> for Expr {
+    fn from(expr: FieldExpr) -> Self {
+        Self::Field(expr)
     }
 }
 
@@ -154,6 +172,22 @@ pub struct LiteralExpr {
 #[derive(Clone, Debug, PartialEq)]
 pub struct FunctionExpr {
     pub instance: FunctionInstance,
+    pub id: HirId,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct InitExpr {
+    pub class: ClassType,
+    pub fields: Vec<(FieldId, ExprId)>,
+    pub id: HirId,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct FieldExpr {
+    pub class: ExprId,
+    pub field: Ident,
     pub id: HirId,
     pub span: Span,
 }

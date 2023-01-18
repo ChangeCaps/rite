@@ -36,7 +36,7 @@ impl<'a> ProgramBuilder<'a> {
         }
 
         let mut fields = Vec::new();
-        for field in class.fields.iter() {
+        for field in class.fields.values() {
             let ty = build_type(&field.ty);
 
             let field = mir::Field {

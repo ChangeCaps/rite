@@ -1,5 +1,5 @@
 use ritec_ast as ast;
-use ritec_core::Generic;
+use ritec_core::{Arena, Generic};
 use ritec_error::{Diagnostic, Emitter};
 use ritec_hir as hir;
 
@@ -82,7 +82,7 @@ impl<'a> ProgramLowerer<'a> {
         let class = hir::Class {
             ident: item.ident.clone(),
             generics,
-            fields: Vec::new(),
+            fields: Arena::new(),
             span: item.span,
         };
 

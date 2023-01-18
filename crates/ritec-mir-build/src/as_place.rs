@@ -14,6 +14,25 @@ impl<'a> FunctionBuilder<'a> {
 
                 BlockAnd::new(block, place)
             }
+            thir::Expr::Init(expr) => {
+                let place = self.push_temp(expr.ty.clone());
+
+                for (field, init) in expr.fields.iter() {
+                    let mut place = place.clone();
+                    place.proj.push(mir::Projection::Field(*field));
+
+                    let value = unpack!(block = self.as_value(block, &self.thir[*init]));
+                    self[block].push_assign(place, value);
+                }
+
+                BlockAnd::new(block, place)
+            }
+            thir::Expr::Field(expr) => {
+                let mut place = unpack!(block = self.as_place(block, &self.thir[expr.class]));
+                place.proj.push(mir::Projection::Field(expr.field));
+
+                BlockAnd::new(block, place)
+            }
             thir::Expr::Unary(expr) if expr.operator == UnaryOp::Deref => {
                 let mut place = unpack!(block = self.as_place(block, &self.thir[expr.operand]));
                 place.proj.push(mir::Projection::Deref);

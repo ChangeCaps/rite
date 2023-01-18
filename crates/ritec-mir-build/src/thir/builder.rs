@@ -91,6 +91,8 @@ impl<'a> ThirBuilder<'a> {
             hir::Expr::Local(expr) => self.build_local_expr(expr)?,
             hir::Expr::Literal(expr) => self.build_literal_expr(expr)?,
             hir::Expr::Function(expr) => self.build_function_expr(expr)?,
+            hir::Expr::Init(expr) => self.build_init_expr(expr)?,
+            hir::Expr::Field(expr) => self.build_field_expr(expr)?,
             hir::Expr::Bitcast(expr) => self.build_bitcast_expr(expr)?,
             hir::Expr::Call(expr) => self.build_call_expr(expr)?,
             hir::Expr::Unary(expr) => self.build_unary_expr(expr)?,
@@ -144,6 +146,47 @@ impl<'a> ThirBuilder<'a> {
         };
 
         Ok(thir::Expr::Function(expr))
+    }
+
+    pub fn build_init_expr(&mut self, expr: &hir::InitExpr) -> Result<thir::Expr, InferError> {
+        let ty = self.table.resolve_mir(expr.id)?;
+
+        let mir::Type::Class(class) = ty.clone() else {
+            unreachable!();
+        };
+
+        let mut fields = Vec::new();
+
+        for (field, expr) in expr.fields.iter() {
+            let expr = self.build_expr(&self.hir.exprs[*expr])?;
+            fields.push((field.cast(), expr));
+        }
+
+        Ok(thir::Expr::Init(thir::InitExpr {
+            class,
+            fields,
+            ty,
+            span: expr.span,
+        }))
+    }
+
+    pub fn build_field_expr(&mut self, expr: &hir::FieldExpr) -> Result<thir::Expr, InferError> {
+        let base = self.build_expr(&self.hir.exprs[expr.class])?;
+        let class = self.table.resolve_mir(self.hir.exprs[expr.class].id())?;
+        let ty = self.table.resolve_mir(expr.id)?;
+
+        let mir::Type::Class(class) = class.clone() else {
+            unreachable!();
+        };
+        let class = &self.program.classes[class.class.cast()];
+        let field = class.find_field(&expr.field).unwrap();
+
+        Ok(thir::Expr::Field(thir::FieldExpr {
+            class: base,
+            field: field.cast(),
+            ty,
+            span: expr.span,
+        }))
     }
 
     pub fn build_bitcast_expr(

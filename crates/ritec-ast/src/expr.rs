@@ -1,12 +1,14 @@
-use ritec_core::{BinOp, Literal, Span, UnaryOp};
+use ritec_core::{BinOp, Ident, Literal, Span, UnaryOp};
 
-use crate::{Block, Path};
+use crate::{Block, Path, PathType};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
     Paren(ParenExpr),
     Path(PathExpr),
     Literal(LiteralExpr),
+    Init(InitExpr),
+    Field(FieldExpr),
     Call(CallExpr),
     Unary(UnaryExpr),
     Binary(BinaryExpr),
@@ -25,6 +27,8 @@ impl Expr {
             Self::Paren(expr) => expr.span,
             Self::Path(expr) => expr.span,
             Self::Literal(expr) => expr.span,
+            Self::Init(expr) => expr.span,
+            Self::Field(expr) => expr.span,
             Self::Call(expr) => expr.span,
             Self::Unary(expr) => expr.span,
             Self::Binary(expr) => expr.span,
@@ -61,6 +65,27 @@ pub struct PathExpr {
 #[derive(Clone, Debug, PartialEq)]
 pub struct LiteralExpr {
     pub literal: Literal,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct InitField {
+    pub ident: Ident,
+    pub expr: Expr,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct InitExpr {
+    pub class: PathType,
+    pub fields: Vec<InitField>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct FieldExpr {
+    pub class: Box<Expr>,
+    pub field: Ident,
     pub span: Span,
 }
 

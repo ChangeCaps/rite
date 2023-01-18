@@ -17,7 +17,7 @@ impl Unify {
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Normalize {
-    pub projection: TypeProjection,
+    pub proj: TypeProjection,
     pub expected: InferType,
 }
 
