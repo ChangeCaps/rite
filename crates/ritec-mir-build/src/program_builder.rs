@@ -2,7 +2,7 @@ use ritec_hir as hir;
 use ritec_infer::Solver;
 use ritec_mir as mir;
 
-use crate::{thir, Error, FunctionBuilder};
+use crate::{build_type, thir, Error, FunctionBuilder};
 
 pub struct ProgramBuilder<'a> {
     pub hir: &'a hir::Program,
@@ -18,21 +18,59 @@ impl<'a> ProgramBuilder<'a> {
     }
 
     pub fn build(mut self) -> Result<mir::Program, Error> {
-        for function in self.hir.functions.values() {
-            self.build_function(function)?;
+        for (id, class) in self.hir.classes.iter() {
+            self.build_class(id, class)?;
+        }
+
+        for (id, function) in self.hir.functions.iter() {
+            self.build_function(id, function)?;
         }
 
         Ok(self.mir)
     }
 
-    pub fn build_function(&mut self, function: &hir::Function) -> Result<(), Error> {
+    pub fn build_class(&mut self, id: hir::ClassId, class: &hir::Class) -> Result<(), Error> {
+        let mut generics = Vec::new();
+        for generic in class.generics.params.iter() {
+            generics.push(generic.clone());
+        }
+
+        let mut fields = Vec::new();
+        for field in class.fields.iter() {
+            let ty = build_type(&field.ty);
+
+            let field = mir::Field {
+                ident: field.ident.clone(),
+                ty,
+                init: None,
+            };
+
+            fields.push(field);
+        }
+
+        let class = mir::Class {
+            ident: class.ident.clone(),
+            generics,
+            fields,
+        };
+
+        self.mir.classes.insert(id.cast(), class);
+
+        Ok(())
+    }
+
+    pub fn build_function(
+        &mut self,
+        id: hir::FunctionId,
+        function: &hir::Function,
+    ) -> Result<(), Error> {
         let mut solver = Solver::new(self.hir);
         solver.set_return_type(function.return_type.clone());
         solver.solve_body(&function.body)?;
 
         let return_type = solver.resolve_return_type()?;
 
-        let mut thir_builder = thir::ThirBuilder::new(&self.hir, &function.body, solver.finish())?;
+        let mut thir_builder = thir::ThirBuilder::new(&self.hir, &function.body, solver.finish()?)?;
         let thir = thir_builder.build()?;
 
         let function_builder = FunctionBuilder::new(&thir);
@@ -64,7 +102,7 @@ impl<'a> ProgramBuilder<'a> {
             body: mir,
         };
 
-        self.mir.functions.push(function);
+        self.mir.functions.insert(id.cast(), function);
 
         Ok(())
     }

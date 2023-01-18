@@ -63,6 +63,19 @@ impl InferenceTable {
 
                 InferType::apply(ItemId::Tuple, fields, ty.span)
             }
+            hir::Type::Class(ty) => {
+                let mut arguments = Vec::new();
+
+                for argument in ty.generics.iter() {
+                    arguments.push(self.infer_hir(&argument, instance));
+                }
+
+                InferType::apply(
+                    ItemId::Class(ty.class.cast(), ty.ident.clone()),
+                    arguments,
+                    ty.span,
+                )
+            }
             hir::Type::Generic(generic) => {
                 if let Some(ty) = instance.get(generic) {
                     ty.clone()

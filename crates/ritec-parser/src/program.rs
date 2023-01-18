@@ -77,6 +77,10 @@ impl<'a> ProgramParser<'a> {
                     let id = program.functions.push(item);
                     program.root_mut().functions.push(id);
                 }
+                ast::Item::Class(item) => {
+                    let id = program.classes.push(item);
+                    program.root_mut().classes.push(id);
+                }
                 ast::Item::Module(item) => {
                     let id = self.parse_module(&mut program, path, &item.ident)?;
                     program.root_mut().modules.push(id);
@@ -148,6 +152,10 @@ impl<'a> ProgramParser<'a> {
                 ast::Item::Function(item) => {
                     let id = program.functions.push(item);
                     program.modules[module].functions.push(id);
+                }
+                ast::Item::Class(item) => {
+                    let id = program.classes.push(item);
+                    program.modules[module].classes.push(id);
                 }
                 ast::Item::Module(item) => {
                     let id = self.parse_module(program, &path, &item.ident)?;

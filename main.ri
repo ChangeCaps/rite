@@ -1,5 +1,9 @@
 mod module;
 
+fn foo(foo: module::Foo<usize>) -> usize {
+	return 0;
+}
+
 fn main(argc: i32, argv: **i8) -> i32 {
 	return module::foo(argc);
 }

@@ -1,4 +1,5 @@
 use ritec_ast as ast;
+use ritec_core::{Ident, Span};
 use ritec_error::Diagnostic;
 use ritec_hir::{self as hir, Generics};
 
@@ -9,6 +10,41 @@ pub struct Resolver<'a> {
 }
 
 impl<'a> Resolver<'a> {
+    fn get_module(
+        &self,
+        parent: hir::ModuleId,
+        ident: &Ident,
+    ) -> Result<hir::ModuleId, Diagnostic> {
+        let module = &self.program[parent];
+
+        if let Some(&module) = module.modules.get(&ident) {
+            Ok(module)
+        } else {
+            let err = Diagnostic::error("module not found")
+                .with_msg_span(format!("module '{}' not found", ident), ident.span());
+
+            Err(err)
+        }
+    }
+
+    fn assert_generic_length(
+        &self,
+        actual: usize,
+        expected: usize,
+        span: Span,
+    ) -> Result<(), Diagnostic> {
+        if actual != expected {
+            let err = Diagnostic::error("invalid number of generic arguments").with_msg_span(
+                format!("expected {} generic arguments, found {}", expected, actual,),
+                span,
+            );
+
+            Err(err)
+        } else {
+            Ok(())
+        }
+    }
+
     pub fn resolve_function(
         &self,
         path: &ast::Path,
@@ -24,17 +60,7 @@ impl<'a> Resolver<'a> {
                     let module = &self.program[module_id];
 
                     if iter.peek().is_some() {
-                        let Some(&next_module) = module.modules.get(&item.ident) else {
-                            let err = Diagnostic::error("module not found")
-                                .with_msg_span(
-                                    format!("module '{}' not found", item.ident),
-                                    item.ident.span()
-                                );
-
-                            return Err(err);
-                        };
-
-                        module_id = next_module;
+                        module_id = self.get_module(module_id, &item.ident)?;
                         continue;
                     }
 
@@ -55,19 +81,7 @@ impl<'a> Resolver<'a> {
                         }
                     }
 
-                    if expected_len != generics.len() {
-                        let err = Diagnostic::error("invalid number of generic arguments")
-                            .with_msg_span(
-                                format!(
-                                    "expected {} generic arguments, found {}",
-                                    expected_len,
-                                    generics.len(),
-                                ),
-                                path.span,
-                            );
-
-                        return Err(err);
-                    }
+                    self.assert_generic_length(generics.len(), expected_len, path.span)?;
 
                     return Ok(Some(hir::FunctionInstance {
                         function,
@@ -196,10 +210,59 @@ impl<'a> Resolver<'a> {
             if let Some(generic) = self.generics.get_ident(ident) {
                 return Ok(hir::Type::Generic(generic.clone()));
             }
-
-            todo!()
-        } else {
-            todo!()
         }
+
+        let mut module_id = self.module;
+
+        let mut iter = ty.path.segments.iter().peekable();
+
+        loop {
+            let segment = iter.next().unwrap();
+
+            match segment {
+                ast::PathSegment::Item(item) => {
+                    let module = &self.program[module_id];
+
+                    if iter.peek().is_some() {
+                        module_id = self.get_module(module_id, &item.ident)?;
+                        continue;
+                    }
+
+                    let Some(&class) = module.classes.get(&item.ident) else {
+                        break;
+                    };
+
+                    let expected_len = self.program[class].generics.params.len();
+
+                    let mut generics = Vec::new();
+                    for generic in &item.generics {
+                        generics.push(self.resolve_type(generic)?);
+                    }
+
+                    if generics.len() == 0 {
+                        for _ in 0..expected_len {
+                            generics.push(hir::Type::Inferred(hir::InferredType { span: ty.span }));
+                        }
+                    }
+
+                    self.assert_generic_length(expected_len, generics.len(), ty.span)?;
+
+                    let class_type = hir::ClassType {
+                        class,
+                        ident: item.ident.clone(),
+                        generics,
+                        span: ty.span,
+                    };
+
+                    return Ok(hir::Type::Class(class_type));
+                }
+                ast::PathSegment::SuperSegment(_) => todo!(),
+                ast::PathSegment::SelfSegment(_) => todo!(),
+            }
+        }
+
+        let err = Diagnostic::error(format!("'{}' not defined", ty.path)).with_span(ty.span);
+
+        Err(err)
     }
 }

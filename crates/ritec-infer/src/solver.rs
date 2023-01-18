@@ -19,7 +19,7 @@ pub struct Solver<'a> {
 impl<'a> Solver<'a> {
     pub fn new(program: &'a hir::Program) -> Self {
         Self {
-            program: program,
+            program,
             table: InferenceTable::new(),
             constraints: Vec::new(),
             stack: Vec::new(),
@@ -28,8 +28,10 @@ impl<'a> Solver<'a> {
         }
     }
 
-    pub fn finish(self) -> InferenceTable {
-        self.table
+    pub fn finish(mut self) -> Result<InferenceTable, Error> {
+        self.solve_all()?;
+
+        Ok(self.table)
     }
 
     pub fn table(&self) -> &InferenceTable {
@@ -73,11 +75,6 @@ impl<'a> Solver<'a> {
         })
     }
 
-    #[allow(unused)]
-    fn solve_one(&mut self, constraint: &Constraint, progress: &mut bool) -> Result<(), Error> {
-        todo!()
-    }
-
     pub fn solve(&mut self, constraint: impl Into<Constraint>) -> Result<Solution, Error> {
         let constraint = constraint.into();
 
@@ -98,6 +95,18 @@ impl<'a> Solver<'a> {
         self.stack.pop().unwrap();
 
         result
+    }
+
+    pub fn solve_all(&mut self) -> Result<(), Error> {
+        while let Some(constraint) = self.constraints.pop() {
+            let solution = self.solve(constraint)?;
+
+            if !solution.is_solved {
+                self.constraints.push(solution.constraint);
+            }
+        }
+
+        Ok(())
     }
 
     pub fn unify(

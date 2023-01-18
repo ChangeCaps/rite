@@ -1,8 +1,8 @@
 use std::fmt::{self, Display};
 
-use ritec_core::{FloatSize, Generic, IntSize, Span};
+use ritec_core::{FloatSize, Generic, Ident, IntSize, Span};
 
-use crate::GenericMap;
+use crate::{ClassId, GenericMap};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct InferredType {
@@ -203,6 +203,33 @@ impl Display for TupleType {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ClassType {
+    pub class: ClassId,
+    pub ident: Ident,
+    pub generics: Vec<Type>,
+    pub span: Span,
+}
+
+impl ClassType {
+    pub fn is_inferred(&self) -> bool {
+        self.generics.iter().any(|generic| generic.is_inferred())
+    }
+
+    pub fn instantiate(&mut self, generics: &GenericMap<'_>) {
+        for generic in &mut self.generics {
+            generic.instantiate(generics);
+        }
+    }
+}
+
+impl Display for ClassType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let generics: Vec<_> = self.generics.iter().map(Type::to_string).collect();
+        write!(f, "{}<{}>", self.ident, generics.join(", "))
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Type {
     Inferred(InferredType),
     Void(VoidType),
@@ -214,6 +241,7 @@ pub enum Type {
     Slice(SliceType),
     Function(FunctionType),
     Tuple(TupleType),
+    Class(ClassType),
     Generic(Generic),
 }
 
@@ -230,6 +258,7 @@ impl Type {
             Type::Slice(t) => t.span,
             Type::Function(t) => t.span,
             Type::Tuple(t) => t.span,
+            Type::Class(t) => t.span,
             Type::Generic(t) => t.span(),
         }
     }
@@ -269,6 +298,7 @@ impl Type {
             Type::Slice(t) => t.instantiate(generics),
             Type::Function(t) => t.instantiate(generics),
             Type::Tuple(t) => t.instantiate(generics),
+            Type::Class(t) => t.instantiate(generics),
             Type::Generic(generic) => *self = generics[generic].clone(),
             Type::Inferred(_) | Type::Void(_) | Type::Bool(_) | Type::Int(_) | Type::Float(_) => {}
         }
@@ -335,6 +365,12 @@ impl From<TupleType> for Type {
     }
 }
 
+impl From<ClassType> for Type {
+    fn from(t: ClassType) -> Self {
+        Type::Class(t)
+    }
+}
+
 impl From<Generic> for Type {
     fn from(t: Generic) -> Self {
         Type::Generic(t)
@@ -354,6 +390,7 @@ impl Display for Type {
             Type::Slice(t) => write!(f, "{}", t),
             Type::Function(t) => write!(f, "{}", t),
             Type::Tuple(t) => write!(f, "{}", t),
+            Type::Class(t) => write!(f, "{}", t),
             Type::Generic(t) => write!(f, "{}", t),
         }
     }

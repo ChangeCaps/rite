@@ -1,8 +1,8 @@
 use std::fmt::{self, Display};
 
-use ritec_core::{FloatSize, Generic, IntSize};
+use ritec_core::{FloatSize, Generic, Ident, IntSize};
 
-use crate::GenericMap;
+use crate::{ClassId, GenericMap};
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct IntType {
@@ -246,6 +246,40 @@ impl Display for TupleType {
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct ClassType {
+    pub class: ClassId,
+    pub ident: Ident,
+    pub generics: Vec<Type>,
+}
+
+impl ClassType {
+    pub fn new(class: ClassId, ident: Ident, generics: impl Into<Vec<Type>>) -> Self {
+        Self {
+            class,
+            ident,
+            generics: generics.into(),
+        }
+    }
+
+    pub fn instantiate(&mut self, generics: &GenericMap) {
+        for generic in &mut self.generics {
+            generic.instantiate(generics);
+        }
+    }
+}
+
+impl Display for ClassType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.generics.is_empty() {
+            write!(f, "{}", self.ident)
+        } else {
+            let generics: Vec<_> = self.generics.iter().map(Type::to_string).collect();
+            write!(f, "{}<{}>", self.ident, generics.join(", "))
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub enum Type {
     Void,
     Bool,
@@ -256,6 +290,7 @@ pub enum Type {
     Slice(SliceType),
     Function(FunctionType),
     Tuple(TupleType),
+    Class(ClassType),
     Generic(Generic),
 }
 
@@ -307,6 +342,10 @@ impl Type {
         Self::Tuple(TupleType::new(fields))
     }
 
+    pub fn class(class: ClassId, ident: Ident, generics: impl Into<Vec<Type>>) -> Self {
+        Self::Class(ClassType::new(class, ident, generics))
+    }
+
     pub fn instantiate(&mut self, generics: &GenericMap) {
         match self {
             Type::Void => {}
@@ -318,6 +357,7 @@ impl Type {
             Type::Slice(slice) => slice.instantiate(generics),
             Type::Function(function) => function.instantiate(generics),
             Type::Tuple(tuple) => tuple.instantiate(generics),
+            Type::Class(class) => class.instantiate(generics),
             Type::Generic(generic) => {
                 if let Some(replacement) = generics.get(generic) {
                     *self = replacement.clone();
@@ -339,6 +379,7 @@ impl Display for Type {
             Type::Slice(ty) => ty.fmt(f),
             Type::Function(ty) => ty.fmt(f),
             Type::Tuple(ty) => ty.fmt(f),
+            Type::Class(ty) => ty.fmt(f),
             Type::Generic(ty) => ty.fmt(f),
         }
     }
@@ -383,6 +424,12 @@ impl From<FunctionType> for Type {
 impl From<TupleType> for Type {
     fn from(ty: TupleType) -> Self {
         Self::Tuple(ty)
+    }
+}
+
+impl From<ClassType> for Type {
+    fn from(ty: ClassType) -> Self {
+        Self::Class(ty)
     }
 }
 

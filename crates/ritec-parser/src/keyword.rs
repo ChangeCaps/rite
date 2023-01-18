@@ -71,6 +71,7 @@ keyword! {
     "break" => Break,
     "while" => While,
     "loop" => Loop,
+    "class" => Class,
     "mod" => Mod,
 }
 

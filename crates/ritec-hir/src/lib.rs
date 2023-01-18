@@ -1,5 +1,6 @@
 mod block;
 mod body;
+mod class;
 mod expr;
 mod function;
 mod generic;
@@ -12,6 +13,7 @@ mod ty;
 
 pub use block::*;
 pub use body::*;
+pub use class::*;
 pub use expr::*;
 pub use function::*;
 pub use generic::*;

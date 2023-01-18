@@ -17,6 +17,8 @@ impl<'a> ProgramLowerer<'a> {
 
     pub fn lower(&mut self, program: &ast::Program) -> Result<(), Error> {
         self.register_modules(program);
+        self.register_classes(program)?;
+        self.complete_classes(program)?;
         self.register_functions(program)?;
         self.complete_functions(program)?;
 
@@ -36,6 +38,11 @@ impl<'a> ProgramLowerer<'a> {
                 hir.modules.insert(ident, id.cast());
             }
 
+            for &id in module.classes.iter() {
+                let ident = program.classes[id].ident.clone();
+                hir.classes.insert(ident, id.cast());
+            }
+
             for &id in module.functions.iter() {
                 let ident = program.functions[id].ident.clone();
                 hir.functions.insert(ident, id.cast());
@@ -43,11 +50,98 @@ impl<'a> ProgramLowerer<'a> {
         }
     }
 
+    pub fn register_classes(&mut self, program: &ast::Program) -> Result<(), Error> {
+        let mut has_failed = false;
+
+        for (id, item) in program.classes.iter() {
+            if let Err(err) = self.register_class(id.cast(), item) {
+                self.emitter.emit(err.into());
+                has_failed = true;
+            }
+        }
+
+        if has_failed {
+            Err(Error::ClassRegistration)
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn register_class(
+        &mut self,
+        id: hir::ClassId,
+        item: &ast::Class,
+    ) -> Result<(), Diagnostic> {
+        let mut generic_params = Vec::new();
+        for param in item.generics.params.iter() {
+            generic_params.push(Generic::new(param.ident.clone()));
+        }
+
+        let generics = hir::Generics::new(generic_params, item.generics.span);
+
+        let class = hir::Class {
+            ident: item.ident.clone(),
+            generics,
+            fields: Vec::new(),
+            span: item.span,
+        };
+
+        self.program.classes.insert(id, class);
+
+        Ok(())
+    }
+
+    pub fn complete_classes(&mut self, program: &ast::Program) -> Result<(), Error> {
+        let mut has_failed = false;
+
+        for (id, item) in program.classes.iter() {
+            if let Err(err) = self.complete_class(id.cast(), item) {
+                self.emitter.emit(err.into());
+                has_failed = true;
+            }
+        }
+
+        if has_failed {
+            Err(Error::ClassCompletion)
+        } else {
+            Ok(())
+        }
+    }
+
+    pub fn complete_class(
+        &mut self,
+        id: hir::ClassId,
+        item: &ast::Class,
+    ) -> Result<(), Diagnostic> {
+        let mut class = self.program[id].clone();
+        let resolver = Resolver {
+            program: &self.program,
+            generics: &class.generics,
+            module: item.module.cast(),
+        };
+
+        for field in item.fields.iter() {
+            let ty = resolver.resolve_type(&field.ty)?;
+
+            let field = hir::Field {
+                ident: field.ident.clone(),
+                ty,
+                span: field.span,
+            };
+
+            class.fields.push(field);
+        }
+
+        self.program[id] = class;
+
+        Ok(())
+    }
+
     pub fn register_functions(&mut self, program: &ast::Program) -> Result<(), Error> {
         let mut has_failed = false;
 
-        for (id, function) in program.functions.iter() {
-            if let Err(err) = self.register_function(id.cast(), function) {
+        for (id, item) in program.functions.iter() {
+            if let Err(err) = self.register_function(id.cast(), item) {
                 self.emitter.emit(err.into());
                 has_failed = true;
             }
@@ -127,8 +221,6 @@ impl<'a> ProgramLowerer<'a> {
         };
 
         self.program.functions.insert(id, function);
-        let module = &mut self.program.modules[item.module.cast()];
-        module.functions.insert(item.ident.clone(), id);
 
         Ok(())
     }
@@ -166,6 +258,7 @@ impl<'a> ProgramLowerer<'a> {
         body_lowerer.lower_block(&item.body)?;
 
         self.program.functions[id] = function;
+
         Ok(())
     }
 }

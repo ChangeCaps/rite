@@ -1,5 +1,6 @@
 mod block;
 mod body;
+mod class;
 mod constant;
 mod function;
 mod generic;
@@ -13,6 +14,7 @@ mod value;
 
 pub use block::*;
 pub use body::*;
+pub use class::*;
 pub use constant::*;
 pub use function::*;
 pub use generic::*;

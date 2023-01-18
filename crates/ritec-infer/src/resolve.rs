@@ -58,6 +58,7 @@ impl InferenceTable {
                 mir::Type::function(args, return_type)
             }
             ItemId::Tuple => mir::Type::tuple(args),
+            ItemId::Class(id, ident) => mir::Type::class(*id, ident.clone(), args),
             ItemId::Generic(generic) => mir::Type::Generic(generic.clone()),
         }
     }

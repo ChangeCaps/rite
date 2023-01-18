@@ -1,3 +1,7 @@
+class Foo<T> {
+	x: *T,
+}
+
 fn foo(x: i32) -> i32 {
-	return x + main::bar();
+	return x + 2;
 }

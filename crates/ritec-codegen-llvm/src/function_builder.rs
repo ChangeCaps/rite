@@ -107,6 +107,21 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
 
                 self.cx().struct_type(&fields, false).into()
             }
+            mir::Type::Class(ty) => {
+                let class = &self.cx.program[ty.class];
+
+                let generic_map = GenericMap::new(&class.generics, &ty.generics);
+
+                let mut fields = Vec::new();
+                for field in &class.fields {
+                    let mut field_type = field.ty.clone();
+                    field_type.instantiate(&generic_map);
+
+                    fields.push(self.build_type(&field_type));
+                }
+
+                self.cx().struct_type(&fields, false).into()
+            }
             mir::Type::Generic(generic) => {
                 for (i, fn_generic) in self.function().generics.iter().enumerate() {
                     if fn_generic == generic {
@@ -114,7 +129,7 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
                     }
                 }
 
-                unreachable!("generic type not found")
+                unreachable!("generic type not found {:?}", generic)
             }
         }
     }

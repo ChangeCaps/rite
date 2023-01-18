@@ -4,14 +4,16 @@ use crate::{Block, Generics, ModuleId, Type};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Item {
-    Function(Function),
     Module(ModuleItem),
+    Class(Class),
+    Function(Function),
 }
 
 impl Item {
     pub const fn span(&self) -> Span {
         match self {
             Item::Function(item) => item.span,
+            Item::Class(item) => item.span,
             Item::Module(item) => item.span,
         }
     }
@@ -31,6 +33,24 @@ impl Items {
     pub fn iter(&self) -> impl Iterator<Item = &Item> {
         self.items.iter()
     }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Field {
+    pub ident: Ident,
+    pub ty: Type,
+    pub span: Span,
+}
+
+pub type ClassId = Id<Class>;
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Class {
+    pub module: ModuleId,
+    pub ident: Ident,
+    pub generics: Generics,
+    pub fields: Vec<Field>,
+    pub span: Span,
 }
 
 #[derive(Clone, Debug, PartialEq)]

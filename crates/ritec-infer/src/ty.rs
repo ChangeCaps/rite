@@ -1,6 +1,6 @@
 use std::fmt::{self, Debug};
 
-use ritec_core::{Generic, Span};
+use ritec_core::{Generic, Ident, Span};
 use ritec_mir as mir;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -65,6 +65,7 @@ pub enum ItemId {
     Slice,
     Function,
     Tuple,
+    Class(mir::ClassId, Ident),
     Generic(Generic),
 }
 
@@ -80,6 +81,7 @@ impl Debug for ItemId {
             Self::Slice => write!(f, "[]"),
             Self::Function => write!(f, "fn"),
             Self::Tuple => write!(f, "()"),
+            Self::Class(_, ident) => write!(f, "{}", ident),
             Self::Generic(generic) => write!(f, "{}", generic),
         }
     }

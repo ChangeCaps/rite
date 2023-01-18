@@ -1,22 +1,24 @@
 use ritec_core::{Arena, Id, Ident};
 
-use crate::{Function, FunctionId};
+use crate::{Class, ClassId, Function, FunctionId};
 
 pub type ModuleId = Id<Module>;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Module {
     pub ident: Ident,
-    pub functions: Vec<FunctionId>,
     pub modules: Vec<ModuleId>,
+    pub classes: Vec<ClassId>,
+    pub functions: Vec<FunctionId>,
 }
 
 impl Module {
     pub fn new(ident: Ident) -> Self {
         Self {
             ident,
-            functions: Vec::new(),
             modules: Vec::new(),
+            classes: Vec::new(),
+            functions: Vec::new(),
         }
     }
 }
@@ -24,8 +26,9 @@ impl Module {
 #[derive(Clone, Debug, PartialEq)]
 pub struct Program {
     pub root_module: ModuleId,
-    pub functions: Arena<Function>,
     pub modules: Arena<Module>,
+    pub classes: Arena<Class>,
+    pub functions: Arena<Function>,
 }
 
 impl Program {
@@ -35,8 +38,9 @@ impl Program {
 
         Self {
             root_module,
-            functions: Arena::new(),
             modules,
+            classes: Arena::new(),
+            functions: Arena::new(),
         }
     }
 

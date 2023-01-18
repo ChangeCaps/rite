@@ -2,18 +2,20 @@ use std::ops::{Index, IndexMut};
 
 use ritec_core::Arena;
 
-use crate::{build_intrinsic_bitcast, Function, FunctionId, Module, ModuleId};
+use crate::{build_intrinsic_bitcast, Class, ClassId, Function, FunctionId, Module, ModuleId};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Program {
     pub root_module: ModuleId,
     pub modules: Arena<Module>,
+    pub classes: Arena<Class>,
     pub functions: Arena<Function>,
 }
 
 impl Program {
     pub fn new() -> Self {
         let mut modules = Arena::new();
+        let classes = Arena::new();
         let functions = Arena::new();
 
         let root_module = modules.push(Module::new());
@@ -21,6 +23,7 @@ impl Program {
         Self {
             root_module,
             modules,
+            classes,
             functions,
         }
     }
@@ -48,6 +51,20 @@ impl Index<ModuleId> for Program {
 impl IndexMut<ModuleId> for Program {
     fn index_mut(&mut self, index: ModuleId) -> &mut Self::Output {
         &mut self.modules[index]
+    }
+}
+
+impl Index<ClassId> for Program {
+    type Output = Class;
+
+    fn index(&self, index: ClassId) -> &Self::Output {
+        &self.classes[index]
+    }
+}
+
+impl IndexMut<ClassId> for Program {
+    fn index_mut(&mut self, index: ClassId) -> &mut Self::Output {
+        &mut self.classes[index]
     }
 }
 
