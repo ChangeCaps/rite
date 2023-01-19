@@ -2,45 +2,45 @@ use ritec_ast as ast;
 
 use crate::{KeywordKind, Parse, ParseResult, ParseStream, SymbolKind};
 
+pub(crate) fn parse_generics(parser: ParseStream) -> Vec<ast::Type> {
+    let generics = parser.try_parse_with(|parser| {
+        let mut generics = Vec::new();
+
+        parser.expect(&SymbolKind::Less)?;
+
+        loop {
+            // if we have reached the end of the generics, break
+            if parser.is(&SymbolKind::Greater) {
+                break;
+            }
+
+            // parse the type
+            generics.push(parser.parse()?);
+
+            // if we have reached the end of the generics, break
+            if parser.is(&SymbolKind::Greater) {
+                break;
+            }
+
+            parser.expect(&SymbolKind::Comma)?;
+        }
+
+        // consume the closing `>`
+        parser.expect(&SymbolKind::Greater)?;
+
+        Ok(generics)
+    });
+
+    generics.unwrap_or(Vec::new())
+}
+
 impl Parse for ast::ItemSegment {
     fn parse(parser: ParseStream) -> ParseResult<Self> {
         // parse the name of the segment
         let name = parser.parse()?;
 
         // parse the generics
-        let generics = if parser.is(&SymbolKind::Less) {
-            let generics = parser.try_parse_with(|parser| {
-                let mut generics = Vec::new();
-
-                parser.expect(&SymbolKind::Less)?;
-
-                loop {
-                    // if we have reached the end of the generics, break
-                    if parser.is(&SymbolKind::Greater) {
-                        break;
-                    }
-
-                    // parse the type
-                    generics.push(parser.parse()?);
-
-                    // if we have reached the end of the generics, break
-                    if parser.is(&SymbolKind::Greater) {
-                        break;
-                    }
-
-                    parser.expect(&SymbolKind::Comma)?;
-                }
-
-                // consume the closing `>`
-                parser.expect(&SymbolKind::Greater)?;
-
-                Ok(generics)
-            });
-
-            generics.unwrap_or(Vec::new())
-        } else {
-            Vec::new()
-        };
+        let generics = parse_generics(parser);
 
         Ok(ast::ItemSegment {
             ident: name,

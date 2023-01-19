@@ -1,8 +1,9 @@
+use ritec_error::Diagnostic;
 use ritec_hir as hir;
 use ritec_infer::Solver;
 use ritec_mir as mir;
 
-use crate::{build_type, thir, Error, FunctionBuilder};
+use crate::{build_type, thir, FunctionBuilder};
 
 pub struct ProgramBuilder<'a> {
     pub hir: &'a hir::Program,
@@ -17,7 +18,7 @@ impl<'a> ProgramBuilder<'a> {
         }
     }
 
-    pub fn build(mut self) -> Result<mir::Program, Error> {
+    pub fn build(mut self) -> Result<mir::Program, Diagnostic> {
         for (id, class) in self.hir.classes.iter() {
             self.build_class(id, class)?;
         }
@@ -29,7 +30,7 @@ impl<'a> ProgramBuilder<'a> {
         Ok(self.mir)
     }
 
-    pub fn build_class(&mut self, id: hir::ClassId, class: &hir::Class) -> Result<(), Error> {
+    pub fn build_class(&mut self, id: hir::ClassId, class: &hir::Class) -> Result<(), Diagnostic> {
         let mut generics = Vec::new();
         for generic in class.generics.params.iter() {
             generics.push(generic.clone());
@@ -63,7 +64,7 @@ impl<'a> ProgramBuilder<'a> {
         &mut self,
         id: hir::FunctionId,
         function: &hir::Function,
-    ) -> Result<(), Error> {
+    ) -> Result<(), Diagnostic> {
         let mut solver = Solver::new(self.hir);
         solver.set_return_type(function.return_type.clone());
         solver.solve_body(&function.body)?;

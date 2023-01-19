@@ -1,11 +1,12 @@
 use std::collections::VecDeque;
 
 use ritec_core::{trace, Ident, Span};
+use ritec_error::Diagnostic;
 use ritec_hir as hir;
 use ritec_mir as mir;
 
 use crate::{
-    Constraint, Error, InferType, InferenceTable, Instance, ItemId, Normalize, Projection,
+    Constraint, InferType, InferenceTable, Instance, ItemId, Modification, Normalize, Projection,
     Solution, TypeProjection, TypeVariable, Unify,
 };
 
@@ -31,7 +32,7 @@ impl<'a> Solver<'a> {
         }
     }
 
-    pub fn finish(mut self) -> Result<InferenceTable, Error> {
+    pub fn finish(mut self) -> Result<InferenceTable, Diagnostic> {
         self.solve_all()?;
 
         Ok(self.table)
@@ -53,7 +54,7 @@ impl<'a> Solver<'a> {
         self.return_type = self.table.infer_hir(&ty, &Instance::empty());
     }
 
-    pub fn resolve_return_type(&self) -> Result<mir::Type, Error> {
+    pub fn resolve_return_type(&self) -> Result<mir::Type, Diagnostic> {
         self.table.resolve_mir_type(&self.return_type)
     }
 
@@ -65,7 +66,7 @@ impl<'a> Solver<'a> {
         self.table.new_variable(None)
     }
 
-    fn solve_unify(&mut self, unify: Unify) -> Result<Solution, Error> {
+    fn solve_unify(&mut self, unify: Unify) -> Result<Solution, Diagnostic> {
         let result = self.table.unify(&unify.a, &unify.b)?;
         self.constraints.extend(result.constraints);
         Ok(Solution {
@@ -76,29 +77,143 @@ impl<'a> Solver<'a> {
 
     fn normalize_field(
         &mut self,
+        id: hir::HirId,
         base: &InferType,
         field: &Ident,
-    ) -> Result<Option<InferType>, Error> {
+    ) -> Result<Option<InferType>, Diagnostic> {
+        // if base isn't an applied type, try again later
         let InferType::Apply(apply) = base else {
             return Ok(None);
         };
 
+        // if base is a pointer, try dereferencing it
+        if let ItemId::Pointer = apply.item {
+            if let Some(field) = self.normalize_field(id, &apply[0], field)? {
+                self.table.push_modification(id, Modification::Deref);
+
+                return Ok(Some(field));
+            }
+        }
+
+        // if base isn't a class, it can't have fields
         let ItemId::Class(class_id, _) = apply.item else {
-            return Err(Error::InvalidFieldAccess(apply.clone(), field.clone()));
+            let err = Diagnostic::error("expected a class")
+                .with_msg_span("found this type", apply.span);
+
+            return Err(err);
         };
 
         let class = &self.program.classes[class_id.cast()];
         trace!("proj: {:?} -> {}", base, class.ident);
 
+        // find the field in the class
         let Some(field) = class.find_field(&field) else {
-            return Err(Error::InvalidFieldAccess(apply.clone(), field.clone()));
+            let err = Diagnostic::error("field not found")
+                .with_msg_span("found this class", class.span)
+                .with_msg(format!("class has no field `{}`", field));
+
+            return Err(err);
         };
 
+        self.table.register_field(id, field);
+
+        // create the projection
         let instance = Instance::new(class.generics.params.clone(), apply.arguments.clone());
         Ok(Some(self.table.infer_hir(&class[field].ty, &instance)))
     }
 
-    fn normalize_projection(&mut self, proj: &TypeProjection) -> Result<Option<InferType>, Error> {
+    fn normalize_method(
+        &mut self,
+        id: hir::HirId,
+        base: &InferType,
+        method: &Ident,
+        generics: &Vec<InferType>,
+    ) -> Result<Option<InferType>, Diagnostic> {
+        // if base isn't an applied type, try again later
+        let InferType::Apply(apply) = base else {
+            return Ok(None);
+        };
+
+        // if base is a pointer, try dereferencing it
+        if let ItemId::Pointer = apply.item {
+            if let Some(method) = self.normalize_method(id, &apply[0], method, generics)? {
+                self.table.push_modification(id, Modification::Deref);
+
+                return Ok(Some(method));
+            }
+        }
+
+        // if base isn't a class, it can't have methods
+        let ItemId::Class(class_id, _) = apply.item else {
+            let err = Diagnostic::error("invalid method access")
+                .with_msg_span("method access on non-class type", apply.span);
+
+            return Err(err);
+        };
+
+        let class = &self.program.classes[class_id.cast()];
+        trace!("proj: {:?} -> {}", base, class.ident);
+
+        // find the method in the class
+        let Some(method) = class.find_method(&method) else {
+            let err = Diagnostic::error("invalid method access")
+                .with_msg_span("method not found in class", apply.span);
+
+            return Err(err);
+        };
+
+        self.table.register_method(id, method);
+
+        let method = &class[method];
+        let function = &self.program.functions[method.function];
+
+        if matches!(method.self_argument, Some(hir::SelfArgument::Pointer)) {
+            self.table.push_modification(id, Modification::Ref);
+        }
+
+        let mut fn_generics = apply.arguments.clone();
+        if generics.len() == 0 {
+            let fn_len = function.generics.params.len();
+            let class_len = class.generics.params.len();
+
+            for _ in 0..fn_len - class_len {
+                let generic = InferType::Var(self.new_variable());
+                self.table.register_generic(id, generic.clone());
+                fn_generics.push(generic);
+            }
+        } else {
+            for generic in generics {
+                self.table.register_generic(id, generic.clone());
+                fn_generics.push(generic.clone());
+            }
+        }
+
+        if fn_generics.len() != function.generics.params.len() {
+            let err = Diagnostic::error("invalid method access").with_msg_span(
+                format!(
+                    "wrong number of generic arguments, expected {}, got {}",
+                    function.generics.params.len() - class.generics.params.len(),
+                    fn_generics.len() - class.generics.params.len()
+                ),
+                apply.span,
+            );
+
+            return Err(err);
+        }
+
+        let instance = Instance::new(function.generics.params.clone(), fn_generics);
+
+        let mut function = function.ty();
+        function.arguments.remove(0);
+
+        let ty = hir::Type::Function(function);
+        Ok(Some(self.table.infer_hir(&ty, &instance)))
+    }
+
+    fn normalize_projection(
+        &mut self,
+        proj: &TypeProjection,
+    ) -> Result<Option<InferType>, Diagnostic> {
         if let Some(ty) = self.table.normalize_shallow(&InferType::Proj(proj.clone())) {
             return Ok(Some(ty));
         }
@@ -113,11 +228,14 @@ impl<'a> Solver<'a> {
         }
 
         match proj.proj {
-            Projection::Field(ref field) => self.normalize_field(&proj.base, field),
+            Projection::Field(id, ref field) => self.normalize_field(id, &proj.base, field),
+            Projection::Method(id, ref method, ref generics) => {
+                self.normalize_method(id, &proj.base, method, generics)
+            }
         }
     }
 
-    fn solve_normalize(&mut self, norm: Normalize) -> Result<Solution, Error> {
+    fn solve_normalize(&mut self, norm: Normalize) -> Result<Solution, Diagnostic> {
         trace!("normalize: {:?} = {:?}", norm.proj, norm.expected);
 
         let Some(ty) = self.normalize_projection(&norm.proj)? else {
@@ -131,7 +249,7 @@ impl<'a> Solver<'a> {
         self.unify(ty, norm.expected)
     }
 
-    pub fn solve(&mut self, constraint: impl Into<Constraint>) -> Result<Solution, Error> {
+    pub fn solve(&mut self, constraint: impl Into<Constraint>) -> Result<Solution, Diagnostic> {
         let constraint = constraint.into();
 
         if self.stack.contains(&constraint) || self.stack.len() > self.overflow_depth {
@@ -159,7 +277,7 @@ impl<'a> Solver<'a> {
         Ok(solution)
     }
 
-    pub fn solve_all(&mut self) -> Result<(), Error> {
+    pub fn solve_all(&mut self) -> Result<(), Diagnostic> {
         while let Some(constraint) = self.constraints.pop_front() {
             let solution = self.solve(constraint)?;
 
@@ -175,7 +293,7 @@ impl<'a> Solver<'a> {
         &mut self,
         a: impl Into<InferType>,
         b: impl Into<InferType>,
-    ) -> Result<Solution, Error> {
+    ) -> Result<Solution, Diagnostic> {
         self.solve(Constraint::Unify(Unify::new(a, b)))
     }
 
@@ -183,7 +301,7 @@ impl<'a> Solver<'a> {
         &mut self,
         proj: impl Into<TypeProjection>,
         expected: impl Into<InferType>,
-    ) -> Result<Solution, Error> {
+    ) -> Result<Solution, Diagnostic> {
         self.solve(Constraint::Normalize(Normalize::new(proj, expected)))
     }
 

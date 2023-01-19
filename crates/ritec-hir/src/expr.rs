@@ -13,6 +13,7 @@ pub enum Expr {
     Field(FieldExpr),
     Bitcast(BitcastExpr),
     Call(CallExpr),
+    MethodCall(MethodCallExpr),
     Unary(UnaryExpr),
     Binary(BinaryExpr),
     Assign(AssignExpr),
@@ -33,6 +34,7 @@ impl Expr {
             Expr::Field(expr) => expr.span,
             Expr::Bitcast(expr) => expr.span,
             Expr::Call(expr) => expr.span,
+            Expr::MethodCall(expr) => expr.span,
             Expr::Unary(expr) => expr.span,
             Expr::Binary(expr) => expr.span,
             Expr::Assign(expr) => expr.span,
@@ -53,6 +55,7 @@ impl Expr {
             Expr::Field(expr) => expr.id,
             Expr::Bitcast(expr) => expr.id,
             Expr::Call(expr) => expr.id,
+            Expr::MethodCall(expr) => expr.id,
             Expr::Unary(expr) => expr.id,
             Expr::Binary(expr) => expr.id,
             Expr::Assign(expr) => expr.id,
@@ -203,6 +206,16 @@ pub struct BitcastExpr {
 #[derive(Clone, Debug, PartialEq)]
 pub struct CallExpr {
     pub callee: ExprId,
+    pub arguments: Vec<ExprId>,
+    pub id: HirId,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct MethodCallExpr {
+    pub callee: ExprId,
+    pub method: Ident,
+    pub generics: Vec<Type>,
     pub arguments: Vec<ExprId>,
     pub id: HirId,
     pub span: Span,

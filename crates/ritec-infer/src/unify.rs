@@ -1,8 +1,8 @@
 use ritec_core::trace;
+use ritec_error::Diagnostic;
 
 use crate::{
-    Constraint, Error, InferType, InferenceTable, Normalize, TypeApplication, TypeProjection,
-    TypeVariable,
+    Constraint, InferType, InferenceTable, Normalize, TypeApplication, TypeProjection, TypeVariable,
 };
 
 #[derive(Clone, Debug, PartialEq)]
@@ -29,7 +29,7 @@ impl<'a> Unifier<'a> {
         }
     }
 
-    pub fn unify(&mut self, a: &InferType, b: &InferType) -> Result<(), Error> {
+    pub fn unify(&mut self, a: &InferType, b: &InferType) -> Result<(), Diagnostic> {
         if let Some(ty) = self.table.normalize_shallow(a) {
             return self.unify(&ty, b);
         } else if let Some(ty) = self.table.normalize_shallow(b) {
@@ -49,16 +49,14 @@ impl<'a> Unifier<'a> {
         }
     }
 
-    pub fn unify_var_var(&mut self, a: &TypeVariable, b: &TypeVariable) -> Result<(), Error> {
+    pub fn unify_var_var(&mut self, a: &TypeVariable, b: &TypeVariable) -> Result<(), Diagnostic> {
         if a == b {
             return Ok(());
         }
 
         if !a.can_unify_with_var(&b) {
-            return Err(Error::Mismatch(
-                InferType::Var(a.clone()),
-                InferType::Var(b.clone()),
-            ));
+            let err = Diagnostic::error("cannot unify types");
+            return Err(err);
         }
 
         (self.table).substitute(InferType::Var(*a), InferType::Var(*b));
@@ -66,7 +64,11 @@ impl<'a> Unifier<'a> {
         Ok(())
     }
 
-    pub fn unify_proj_proj(&mut self, a: &TypeProjection, b: &TypeProjection) -> Result<(), Error> {
+    pub fn unify_proj_proj(
+        &mut self,
+        a: &TypeProjection,
+        b: &TypeProjection,
+    ) -> Result<(), Diagnostic> {
         let var = InferType::Var(self.table.new_variable(None));
         self.unify_proj_ty(a, &var)?;
         self.unify_proj_ty(b, &var)?;
@@ -74,7 +76,7 @@ impl<'a> Unifier<'a> {
         Ok(())
     }
 
-    pub fn unify_proj_ty(&mut self, a: &TypeProjection, b: &InferType) -> Result<(), Error> {
+    pub fn unify_proj_ty(&mut self, a: &TypeProjection, b: &InferType) -> Result<(), Diagnostic> {
         let noramlize = Normalize {
             proj: a.clone(),
             expected: b.clone(),
@@ -85,9 +87,10 @@ impl<'a> Unifier<'a> {
         Ok(())
     }
 
-    pub fn unify_var_ty(&mut self, a: &TypeVariable, b: &InferType) -> Result<(), Error> {
+    pub fn unify_var_ty(&mut self, a: &TypeVariable, b: &InferType) -> Result<(), Diagnostic> {
         if !a.can_unify_with(&b) {
-            return Err(Error::Mismatch(InferType::Var(a.clone()), b.clone()));
+            let err = Diagnostic::error("cannot unify types");
+            return Err(err);
         }
 
         self.table.substitute(InferType::Var(a.clone()), b.clone());
@@ -99,16 +102,15 @@ impl<'a> Unifier<'a> {
         &mut self,
         a: &TypeApplication,
         b: &TypeApplication,
-    ) -> Result<(), Error> {
+    ) -> Result<(), Diagnostic> {
         if a.item != b.item {
-            return Err(Error::Mismatch(
-                InferType::Apply(a.clone()),
-                InferType::Apply(b.clone()),
-            ));
+            let err = Diagnostic::error("cannot unify types");
+            return Err(err);
         }
 
         if a.arguments.len() != b.arguments.len() {
-            return Err(Error::ArgumentCount(a.clone(), b.clone()));
+            let err = Diagnostic::error("wrong number of arguments");
+            return Err(err);
         }
 
         for (a, b) in a.arguments.iter().zip(b.arguments.iter()) {

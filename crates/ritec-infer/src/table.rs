@@ -1,17 +1,22 @@
 use std::collections::HashMap;
 
 use ritec_core::trace;
+use ritec_error::Diagnostic;
 use ritec_hir as hir;
-use ritec_mir as mir;
 
-use crate::{Error, InferType, TypeVariable, TypeVariableKind, Unifier, UnifyResult};
+use crate::{
+    InferType, Modification, Modifications, TypeVariable, TypeVariableKind, Unifier, UnifyResult,
+};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct InferenceTable {
     variables: HashMap<InferType, InferType>,
     identifed: HashMap<hir::HirId, InferType>,
-    generics: HashMap<(hir::HirId, usize), InferType>,
-    fields: HashMap<hir::HirId, mir::FieldId>,
+    generics: HashMap<hir::HirId, Vec<InferType>>,
+    classes: HashMap<hir::HirId, hir::ClassId>,
+    fields: HashMap<hir::HirId, hir::FieldId>,
+    methods: HashMap<hir::HirId, hir::MethodId>,
+    modifications: HashMap<hir::HirId, Modifications>,
     next_variable: usize,
 }
 
@@ -21,7 +26,10 @@ impl InferenceTable {
             variables: HashMap::new(),
             identifed: HashMap::new(),
             generics: HashMap::new(),
+            classes: HashMap::new(),
             fields: HashMap::new(),
+            methods: HashMap::new(),
+            modifications: HashMap::new(),
             next_variable: 0,
         }
     }
@@ -47,20 +55,45 @@ impl InferenceTable {
         self.identifed.get(&id)
     }
 
-    pub fn register_generic(&mut self, id: hir::HirId, generic: usize, ty: InferType) {
-        self.generics.insert((id, generic), ty);
+    pub fn register_generic(&mut self, id: hir::HirId, ty: InferType) {
+        self.generics.entry(id).or_default().push(ty);
     }
 
-    pub fn get_generic(&self, id: hir::HirId, generic: usize) -> Option<&InferType> {
-        self.generics.get(&(id, generic))
+    pub fn get_generics(&self, id: hir::HirId) -> &Vec<InferType> {
+        const EMPTY: &'static Vec<InferType> = &Vec::new();
+        self.generics.get(&id).unwrap_or(EMPTY)
+    }
+
+    pub fn register_class(&mut self, id: hir::HirId, class: hir::ClassId) {
+        self.classes.insert(id, class);
+    }
+
+    pub fn get_class(&self, id: hir::HirId) -> Option<hir::ClassId> {
+        self.classes.get(&id).copied()
     }
 
     pub fn register_field(&mut self, id: hir::HirId, field: hir::FieldId) {
-        self.fields.insert(id, field.cast());
+        self.fields.insert(id, field);
     }
 
-    pub fn get_field(&self, id: hir::HirId) -> Option<mir::FieldId> {
+    pub fn get_field(&self, id: hir::HirId) -> Option<hir::FieldId> {
         self.fields.get(&id).copied()
+    }
+
+    pub fn register_method(&mut self, id: hir::HirId, method: hir::MethodId) {
+        self.methods.insert(id, method);
+    }
+
+    pub fn get_method(&self, id: hir::HirId) -> Option<hir::MethodId> {
+        self.methods.get(&id).copied()
+    }
+
+    pub fn push_modification(&mut self, id: hir::HirId, modification: Modification) {
+        self.modifications.entry(id).or_default().push(modification);
+    }
+
+    pub fn get_modifications(&self, id: hir::HirId) -> Option<&Modifications> {
+        self.modifications.get(&id)
     }
 
     pub fn normalize_shallow(&mut self, ty: &InferType) -> Option<InferType> {
@@ -77,7 +110,7 @@ impl InferenceTable {
         self.variables.get(ty).cloned()
     }
 
-    pub fn unify(&mut self, a: &InferType, b: &InferType) -> Result<UnifyResult, Error> {
+    pub fn unify(&mut self, a: &InferType, b: &InferType) -> Result<UnifyResult, Diagnostic> {
         let mut unifier = Unifier::new(self);
 
         unifier.unify(a, b)?;

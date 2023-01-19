@@ -31,7 +31,7 @@ impl<'a> FunctionBuilder<'a> {
         let expr = &self.thir[stmt.expr];
         let value = unpack!(block = self.as_value(block, expr));
 
-        if !expr.ty().is_void() || matches!(expr, thir::Expr::Call(_)) {
+        if !expr.ty().is_void() || matches!(expr, thir::Expr::Call(_) | thir::Expr::StaticCall(_)) {
             self[block].terminate_drop(value);
         }
 

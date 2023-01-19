@@ -95,6 +95,7 @@ impl<'a> FunctionBuilder<'a> {
             | thir::Expr::Field(_)
             | thir::Expr::Bitcast(_)
             | thir::Expr::Call(_)
+            | thir::Expr::StaticCall(_)
             | thir::Expr::Unary(_)
             | thir::Expr::Binary(_)
             | thir::Expr::Assign(_) => {

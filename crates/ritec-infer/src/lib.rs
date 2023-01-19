@@ -1,6 +1,6 @@
 mod constraint;
-mod error;
 mod instance;
+mod modification;
 mod register;
 mod resolve;
 mod solve_hir;
@@ -10,8 +10,8 @@ mod ty;
 mod unify;
 
 pub use constraint::*;
-pub use error::*;
 pub use instance::*;
+pub use modification::*;
 pub use register::*;
 pub use resolve::*;
 pub use solve_hir::*;

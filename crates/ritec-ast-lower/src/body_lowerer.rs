@@ -156,7 +156,7 @@ impl<'a> BodyLowerer<'a> {
             }
         }
 
-        if let Some(instance) = self.resolver.resolve_function(&expr.path)? {
+        if let Some(instance) = self.resolver.resolve_constant(&expr.path)? {
             let function_expr = hir::FunctionExpr {
                 instance,
                 id: self.body.next_id(),
@@ -230,21 +230,42 @@ impl<'a> BodyLowerer<'a> {
     }
 
     pub fn lower_call_expr(&mut self, expr: &ast::CallExpr) -> Result<hir::Expr, Diagnostic> {
-        let callee = self.lower_expr(&expr.callee)?;
         let mut arguments = Vec::new();
 
         for arg in expr.arguments.iter() {
             arguments.push(self.lower_expr(arg)?);
         }
 
-        let call_expr = hir::CallExpr {
-            callee,
-            arguments,
-            id: self.body.next_id(),
-            span: expr.span,
-        };
+        if let ast::Expr::Field(expr) = expr.callee.as_ref() {
+            let callee = self.lower_expr(&expr.class)?;
 
-        Ok(hir::Expr::Call(call_expr))
+            let mut generics = Vec::new();
+            for generic in &expr.generics {
+                generics.push(self.resolver.resolve_type(generic)?);
+            }
+
+            let call_expr = hir::MethodCallExpr {
+                callee,
+                method: expr.field.clone(),
+                generics,
+                arguments,
+                id: self.body.next_id(),
+                span: expr.span,
+            };
+
+            Ok(hir::Expr::MethodCall(call_expr))
+        } else {
+            let callee = self.lower_expr(&expr.callee)?;
+
+            let call_expr = hir::CallExpr {
+                callee,
+                arguments,
+                id: self.body.next_id(),
+                span: expr.span,
+            };
+
+            Ok(hir::Expr::Call(call_expr))
+        }
     }
 
     pub fn lower_unary_expr(&mut self, expr: &ast::UnaryExpr) -> Result<hir::Expr, Diagnostic> {

@@ -1,7 +1,9 @@
 use ritec_ast as ast;
 use ritec_core::{BinOp, BoolLiteral, Literal, NullLiteral, UnaryOp};
 
-use crate::{Delimiter, KeywordKind, Parse, ParseResult, ParseStream, SymbolKind};
+use crate::{
+    path::parse_generics, Delimiter, KeywordKind, Parse, ParseResult, ParseStream, SymbolKind,
+};
 
 impl Parse for ast::ParenExpr {
     fn parse(parser: ParseStream) -> ParseResult<Self> {
@@ -245,10 +247,12 @@ fn parse_field(parser: ParseStream) -> ParseResult<ast::Expr> {
     while parser.is(&SymbolKind::Dot) {
         parser.next();
         let field = parser.parse()?;
+        let generics = parse_generics(parser);
 
         base = ast::Expr::Field(ast::FieldExpr {
             class: Box::new(base),
             field,
+            generics,
             span: span | parser.span(),
         });
     }

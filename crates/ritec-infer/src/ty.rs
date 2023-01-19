@@ -1,6 +1,10 @@
-use std::fmt::{self, Debug};
+use std::{
+    fmt::{self, Debug},
+    ops::Index,
+};
 
 use ritec_core::{Generic, Ident, Span};
+use ritec_hir as hir;
 use ritec_mir as mir;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -94,6 +98,14 @@ pub struct TypeApplication {
     pub span: Span,
 }
 
+impl Index<usize> for TypeApplication {
+    type Output = InferType;
+
+    fn index(&self, index: usize) -> &Self::Output {
+        &self.arguments[index]
+    }
+}
+
 impl Debug for TypeApplication {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let arguments = self
@@ -109,13 +121,15 @@ impl Debug for TypeApplication {
 
 #[derive(Clone, PartialEq, Eq, Hash)]
 pub enum Projection {
-    Field(Ident),
+    Field(hir::HirId, Ident),
+    Method(hir::HirId, Ident, Vec<InferType>),
 }
 
 impl Debug for Projection {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Field(ident) => write!(f, ".{}", ident),
+            Self::Field(_, ident) => write!(f, ".{}", ident),
+            Self::Method(_, ident, _) => write!(f, ".{}()", ident),
         }
     }
 }

@@ -1,11 +1,12 @@
+use ritec_error::Diagnostic;
 use ritec_hir as hir;
 use ritec_mir as mir;
 
-use crate::{Error, InferType, InferenceTable, ItemId, TypeVariableKind};
+use crate::{InferType, InferenceTable, ItemId, TypeVariableKind};
 
 impl InferenceTable {
     #[track_caller]
-    pub fn resolve_mir(&self, id: hir::HirId) -> Result<mir::Type, Error> {
+    pub fn resolve_mir(&self, id: hir::HirId) -> Result<mir::Type, Diagnostic> {
         let Some(ty) = self.get_type(id) else {
             unreachable!("{:?} not registered", id);
         };
@@ -13,7 +14,7 @@ impl InferenceTable {
         self.resolve_mir_type(ty)
     }
 
-    pub fn resolve_mir_type(&self, ty: &InferType) -> Result<mir::Type, Error> {
+    pub fn resolve_mir_type(&self, ty: &InferType) -> Result<mir::Type, Diagnostic> {
         if let Some(ty) = self.get_substitution(ty) {
             return self.resolve_mir_type(&ty);
         }
@@ -27,7 +28,7 @@ impl InferenceTable {
                     }
                 }
 
-                Err(Error::AmbiguousType(var.clone()))
+                Err(Diagnostic::error("unresolved type variable"))
             }
             InferType::Apply(apply) => {
                 let mut args = Vec::new();

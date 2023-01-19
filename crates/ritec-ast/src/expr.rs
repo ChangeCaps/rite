@@ -1,6 +1,6 @@
 use ritec_core::{BinOp, Ident, Literal, Span, UnaryOp};
 
-use crate::{Block, Path, PathType};
+use crate::{Block, Path, PathType, Type};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Expr {
@@ -86,6 +86,7 @@ pub struct InitExpr {
 pub struct FieldExpr {
     pub class: Box<Expr>,
     pub field: Ident,
+    pub generics: Vec<Type>,
     pub span: Span,
 }
 

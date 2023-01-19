@@ -56,6 +56,6 @@ impl Deref for Generic {
 
 impl Display for Generic {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}({})", self.ident, self.id)
+        write!(f, "{}", self.ident)
     }
 }

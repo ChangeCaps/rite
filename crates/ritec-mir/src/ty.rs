@@ -346,6 +346,13 @@ impl Type {
         Self::Class(ClassType::new(class, ident, generics))
     }
 
+    pub fn deref(&self) -> &Type {
+        match self {
+            Type::Pointer(pointer) => pointer.pointee.deref(),
+            _ => self,
+        }
+    }
+
     pub fn instantiate(&mut self, generics: &GenericMap) {
         match self {
             Type::Void => {}

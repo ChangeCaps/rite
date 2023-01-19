@@ -80,6 +80,19 @@ impl<'a> FunctionBuilder<'a> {
 
                 BlockAnd::new(block, mir::Value::Call(callee, arguments))
             }
+            thir::Expr::StaticCall(expr) => {
+                let mut arguments = Vec::new();
+                for &argument in &expr.arguments {
+                    let argument = unpack!(block = self.as_operand(block, &self.thir[argument]));
+                    arguments.push(argument);
+                }
+
+                let callee = mir::Operand::Constant(mir::Constant::Function(
+                    expr.callee.cast(),
+                    expr.generics.clone(),
+                ));
+                BlockAnd::new(block, mir::Value::Call(callee, arguments))
+            }
             thir::Expr::Local(_)
             | thir::Expr::Literal(_)
             | thir::Expr::Function(_)

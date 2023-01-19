@@ -40,6 +40,23 @@ impl<'a> Resolver<'a> {
         }
     }
 
+    fn get_function(
+        &self,
+        parent: hir::ModuleId,
+        ident: &Ident,
+    ) -> Result<hir::FunctionId, Diagnostic> {
+        let module = &self.program[parent];
+
+        if let Some(&function) = module.functions.get(&ident) {
+            Ok(function)
+        } else {
+            let err = Diagnostic::error("function not found")
+                .with_msg_span(format!("function '{}' not found", ident), ident.span());
+
+            Err(err)
+        }
+    }
+
     fn assert_generic_length(
         &self,
         actual: usize,
@@ -144,11 +161,58 @@ impl<'a> Resolver<'a> {
         }
     }
 
-    pub fn resolve_function(
+    fn resolve_function(
+        &self,
+        path: &ast::Path,
+    ) -> Result<Option<hir::FunctionInstance>, Diagnostic> {
+        let len = path.segments.len();
+        if len < 1 {
+            return Ok(None);
+        }
+
+        let ast::PathSegment::Item(ref segment) = path.segments[len - 1] else {
+            return Ok(None);
+        };
+
+        let module = self.resolve_module(&path.segments[..len - 1])?;
+        let Ok(function) = self.get_function(module, &segment.ident) else {
+            return Ok(None);
+        };
+
+        let expected = self.program[function].generics.params.len();
+
+        let mut generics = Vec::new();
+
+        if segment.generics.len() == 0 {
+            for _ in 0..expected {
+                generics.push(hir::Type::inferred(segment.ident.span()));
+            }
+        } else {
+            for generic in &segment.generics {
+                generics.push(self.resolve_type(generic)?);
+            }
+        }
+
+        self.assert_generic_length(generics.len(), expected, path.span)?;
+
+        let instance = hir::FunctionInstance {
+            function,
+            generics,
+            span: path.span,
+        };
+
+        Ok(Some(instance))
+    }
+
+    pub fn resolve_constant(
         &self,
         path: &ast::Path,
     ) -> Result<Option<hir::FunctionInstance>, Diagnostic> {
         if let Some(function) = self.resolve_method(path)? {
+            return Ok(Some(function));
+        }
+
+        if let Some(function) = self.resolve_function(path)? {
             return Ok(Some(function));
         }
 

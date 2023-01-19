@@ -1,5 +1,7 @@
+use ritec_core::UnaryOp;
+use ritec_error::Diagnostic;
 use ritec_hir as hir;
-use ritec_infer::{Error as InferError, InferenceTable};
+use ritec_infer::{InferenceTable, Modification, Modifications};
 use ritec_mir as mir;
 
 use crate::thir;
@@ -17,7 +19,7 @@ impl<'a> ThirBuilder<'a> {
         program: &'a hir::Program,
         hir: &'a hir::Body,
         table: InferenceTable,
-    ) -> Result<Self, InferError> {
+    ) -> Result<Self, Diagnostic> {
         Ok(Self {
             program,
             hir,
@@ -26,7 +28,7 @@ impl<'a> ThirBuilder<'a> {
         })
     }
 
-    pub fn build(&mut self) -> Result<thir::Body, InferError> {
+    pub fn build(&mut self) -> Result<thir::Body, Diagnostic> {
         for (local_id, local) in self.hir.locals.iter() {
             let local = mir::Local {
                 ident: Some(local.ident.clone()),
@@ -43,7 +45,7 @@ impl<'a> ThirBuilder<'a> {
         Ok(self.thir.clone())
     }
 
-    pub fn build_block(&mut self, block: &hir::Block) -> Result<thir::BlockId, InferError> {
+    pub fn build_block(&mut self, block: &hir::Block) -> Result<thir::BlockId, Diagnostic> {
         let mut thir = thir::Block::new();
 
         let block_id = self.thir.blocks.reserve();
@@ -56,14 +58,14 @@ impl<'a> ThirBuilder<'a> {
         Ok(block_id)
     }
 
-    pub fn build_stmt(&mut self, stmt: &hir::Stmt) -> Result<thir::Stmt, InferError> {
+    pub fn build_stmt(&mut self, stmt: &hir::Stmt) -> Result<thir::Stmt, Diagnostic> {
         match stmt {
             hir::Stmt::Let(stmt) => self.build_let_stmt(stmt),
             hir::Stmt::Expr(stmt) => self.build_expr_stmt(stmt),
         }
     }
 
-    pub fn build_let_stmt(&mut self, stmt: &hir::LetStmt) -> Result<thir::Stmt, InferError> {
+    pub fn build_let_stmt(&mut self, stmt: &hir::LetStmt) -> Result<thir::Stmt, Diagnostic> {
         let init = if let Some(init) = stmt.init {
             Some(self.build_expr(&self.hir.exprs[init])?)
         } else {
@@ -77,7 +79,7 @@ impl<'a> ThirBuilder<'a> {
         }))
     }
 
-    pub fn build_expr_stmt(&mut self, stmt: &hir::ExprStmt) -> Result<thir::Stmt, InferError> {
+    pub fn build_expr_stmt(&mut self, stmt: &hir::ExprStmt) -> Result<thir::Stmt, Diagnostic> {
         let expr = self.build_expr(&self.hir.exprs[stmt.expr])?;
 
         Ok(thir::Stmt::Expr(thir::ExprStmt {
@@ -86,8 +88,60 @@ impl<'a> ThirBuilder<'a> {
         }))
     }
 
-    pub fn build_expr(&mut self, expr: &hir::Expr) -> Result<thir::ExprId, InferError> {
-        let expr = match expr {
+    pub fn apply_ref(&mut self, expr: thir::Expr) -> thir::Expr {
+        let ty = mir::Type::pointer(expr.ty().clone());
+        let id = self.thir.exprs.push(expr);
+
+        thir::Expr::Unary(thir::UnaryExpr {
+            operator: UnaryOp::Ref,
+            operand: id,
+            ty,
+            span: self.thir.exprs[id].span(),
+        })
+    }
+
+    pub fn apply_deref(&mut self, expr: thir::Expr) -> thir::Expr {
+        let mir::Type::Pointer(ty) = expr.ty().clone() else {
+            unreachable!("expected pointer type");
+        };
+
+        let id = self.thir.exprs.push(expr);
+
+        thir::Expr::Unary(thir::UnaryExpr {
+            operator: UnaryOp::Deref,
+            operand: id,
+            span: self.thir.exprs[id].span(),
+            ty: *ty.pointee,
+        })
+    }
+
+    pub fn apply_modification(
+        &mut self,
+        expr: thir::Expr,
+        modification: Modification,
+    ) -> thir::Expr {
+        match modification {
+            Modification::Ref => self.apply_ref(expr),
+            Modification::Deref => self.apply_deref(expr),
+        }
+    }
+
+    pub fn apply_modifications(
+        &mut self,
+        mut expr: thir::Expr,
+        modifications: &Modifications,
+    ) -> thir::Expr {
+        for modification in modifications.iter() {
+            expr = self.apply_modification(expr, modification.clone());
+        }
+
+        expr
+    }
+
+    pub fn build_expr(&mut self, expr: &hir::Expr) -> Result<thir::ExprId, Diagnostic> {
+        let hir_id = expr.id();
+
+        let mut expr = match expr {
             hir::Expr::Local(expr) => self.build_local_expr(expr)?,
             hir::Expr::Literal(expr) => self.build_literal_expr(expr)?,
             hir::Expr::Function(expr) => self.build_function_expr(expr)?,
@@ -95,6 +149,7 @@ impl<'a> ThirBuilder<'a> {
             hir::Expr::Field(expr) => self.build_field_expr(expr)?,
             hir::Expr::Bitcast(expr) => self.build_bitcast_expr(expr)?,
             hir::Expr::Call(expr) => self.build_call_expr(expr)?,
+            hir::Expr::MethodCall(expr) => self.build_method_call_expr(expr)?,
             hir::Expr::Unary(expr) => self.build_unary_expr(expr)?,
             hir::Expr::Binary(expr) => self.build_binary_expr(expr)?,
             hir::Expr::Assign(expr) => self.build_assign_expr(expr)?,
@@ -105,10 +160,14 @@ impl<'a> ThirBuilder<'a> {
             hir::Expr::Loop(expr) => self.build_loop_expr(expr)?,
         };
 
+        if let Some(modifications) = self.table.get_modifications(hir_id) {
+            expr = self.apply_modifications(expr, &modifications.clone());
+        }
+
         Ok(self.thir.exprs.push(expr))
     }
 
-    pub fn build_local_expr(&mut self, expr: &hir::LocalExpr) -> Result<thir::Expr, InferError> {
+    pub fn build_local_expr(&mut self, expr: &hir::LocalExpr) -> Result<thir::Expr, Diagnostic> {
         Ok(thir::Expr::Local(thir::LocalExpr {
             local: expr.local.cast(),
             ty: self.thir.locals[expr.local.cast()].ty.clone(),
@@ -119,7 +178,7 @@ impl<'a> ThirBuilder<'a> {
     pub fn build_literal_expr(
         &mut self,
         expr: &hir::LiteralExpr,
-    ) -> Result<thir::Expr, InferError> {
+    ) -> Result<thir::Expr, Diagnostic> {
         Ok(thir::Expr::Literal(thir::LiteralExpr {
             literal: expr.literal.clone(),
             ty: self.table.resolve_mir(expr.id)?,
@@ -130,11 +189,10 @@ impl<'a> ThirBuilder<'a> {
     pub fn build_function_expr(
         &mut self,
         expr: &hir::FunctionExpr,
-    ) -> Result<thir::Expr, InferError> {
+    ) -> Result<thir::Expr, Diagnostic> {
         let mut generics = Vec::new();
 
-        for i in 0..expr.instance.generics.len() {
-            let ty = self.table.get_generic(expr.id, i).unwrap();
+        for ty in self.table.get_generics(expr.id) {
             generics.push(self.table.resolve_mir_type(ty)?);
         }
 
@@ -148,11 +206,11 @@ impl<'a> ThirBuilder<'a> {
         Ok(thir::Expr::Function(expr))
     }
 
-    pub fn build_init_expr(&mut self, expr: &hir::InitExpr) -> Result<thir::Expr, InferError> {
+    pub fn build_init_expr(&mut self, expr: &hir::InitExpr) -> Result<thir::Expr, Diagnostic> {
         let ty = self.table.resolve_mir(expr.id)?;
 
         let mir::Type::Class(class) = ty.clone() else {
-            unreachable!();
+            unreachable!("init expr must be a class");
         };
 
         let mut fields = Vec::new();
@@ -170,20 +228,19 @@ impl<'a> ThirBuilder<'a> {
         }))
     }
 
-    pub fn build_field_expr(&mut self, expr: &hir::FieldExpr) -> Result<thir::Expr, InferError> {
+    pub fn build_field_expr(&mut self, expr: &hir::FieldExpr) -> Result<thir::Expr, Diagnostic> {
         let base = self.build_expr(&self.hir.exprs[expr.class])?;
-        let class = self.table.resolve_mir(self.hir.exprs[expr.class].id())?;
         let ty = self.table.resolve_mir(expr.id)?;
 
-        let mir::Type::Class(class) = class.clone() else {
-            unreachable!();
-        };
-        let class = &self.program.classes[class.class.cast()];
-        let field = class.find_field(&expr.field).unwrap();
+        let field = self
+            .table
+            .get_field(self.hir[expr.class].id())
+            .unwrap()
+            .cast();
 
         Ok(thir::Expr::Field(thir::FieldExpr {
             class: base,
-            field: field.cast(),
+            field,
             ty,
             span: expr.span,
         }))
@@ -192,7 +249,7 @@ impl<'a> ThirBuilder<'a> {
     pub fn build_bitcast_expr(
         &mut self,
         expr: &hir::BitcastExpr,
-    ) -> Result<thir::Expr, InferError> {
+    ) -> Result<thir::Expr, Diagnostic> {
         let expr = thir::BitcastExpr {
             expr: self.build_expr(&self.hir.exprs[expr.expr])?,
             ty: self.table.resolve_mir(expr.id)?,
@@ -202,7 +259,7 @@ impl<'a> ThirBuilder<'a> {
         Ok(thir::Expr::Bitcast(expr))
     }
 
-    pub fn build_call_expr(&mut self, expr: &hir::CallExpr) -> Result<thir::Expr, InferError> {
+    pub fn build_call_expr(&mut self, expr: &hir::CallExpr) -> Result<thir::Expr, Diagnostic> {
         let callee = self.build_expr(&self.hir[expr.callee])?;
 
         let mut arguments = Vec::new();
@@ -220,7 +277,45 @@ impl<'a> ThirBuilder<'a> {
         Ok(thir::Expr::Call(expr))
     }
 
-    pub fn build_unary_expr(&mut self, expr: &hir::UnaryExpr) -> Result<thir::Expr, InferError> {
+    pub fn build_method_call_expr(
+        &mut self,
+        expr: &hir::MethodCallExpr,
+    ) -> Result<thir::Expr, Diagnostic> {
+        let callee = self.build_expr(&self.hir[expr.callee])?;
+
+        let mir::Type::Class(class_type) = self.thir[callee].ty().deref().clone() else {
+            unreachable!("method call expr must be a class");
+        };
+
+        let class = &self.program.classes[class_type.class.cast()];
+        let method = self.table.get_method(self.hir[expr.callee].id()).unwrap();
+        let method = &class[method];
+
+        let mut arguments = Vec::new();
+        arguments.push(callee);
+
+        for &argument in expr.arguments.iter() {
+            arguments.push(self.build_expr(&self.hir[argument])?);
+        }
+
+        let mut generics = class_type.generics.clone();
+
+        for ty in self.table.get_generics(self.hir[expr.callee].id()) {
+            generics.push(self.table.resolve_mir_type(ty)?);
+        }
+
+        let expr = thir::StaticCallExpr {
+            callee: method.function,
+            generics,
+            arguments,
+            ty: self.table.resolve_mir(expr.id)?,
+            span: expr.span,
+        };
+
+        Ok(thir::Expr::StaticCall(expr))
+    }
+
+    pub fn build_unary_expr(&mut self, expr: &hir::UnaryExpr) -> Result<thir::Expr, Diagnostic> {
         let expr = thir::UnaryExpr {
             operator: expr.operator,
             operand: self.build_expr(&self.hir[expr.operand])?,
@@ -231,7 +326,7 @@ impl<'a> ThirBuilder<'a> {
         Ok(thir::Expr::Unary(expr))
     }
 
-    pub fn build_binary_expr(&mut self, expr: &hir::BinaryExpr) -> Result<thir::Expr, InferError> {
+    pub fn build_binary_expr(&mut self, expr: &hir::BinaryExpr) -> Result<thir::Expr, Diagnostic> {
         let expr = thir::BinaryExpr {
             operator: expr.operator,
             lhs: self.build_expr(&self.hir[expr.lhs])?,
@@ -243,7 +338,7 @@ impl<'a> ThirBuilder<'a> {
         Ok(thir::Expr::Binary(expr))
     }
 
-    pub fn build_assign_expr(&mut self, expr: &hir::AssignExpr) -> Result<thir::Expr, InferError> {
+    pub fn build_assign_expr(&mut self, expr: &hir::AssignExpr) -> Result<thir::Expr, Diagnostic> {
         let lhs = self.build_expr(&self.hir[expr.lhs])?;
         let rhs = self.build_expr(&self.hir[expr.rhs])?;
 
@@ -255,7 +350,7 @@ impl<'a> ThirBuilder<'a> {
         }))
     }
 
-    pub fn build_return_expr(&mut self, expr: &hir::ReturnExpr) -> Result<thir::Expr, InferError> {
+    pub fn build_return_expr(&mut self, expr: &hir::ReturnExpr) -> Result<thir::Expr, Diagnostic> {
         let value = if let Some(value) = expr.value {
             Some(self.build_expr(&self.hir[value])?)
         } else {
@@ -269,14 +364,14 @@ impl<'a> ThirBuilder<'a> {
         }))
     }
 
-    pub fn build_break_expr(&mut self, expr: &hir::BreakExpr) -> Result<thir::Expr, InferError> {
+    pub fn build_break_expr(&mut self, expr: &hir::BreakExpr) -> Result<thir::Expr, Diagnostic> {
         Ok(thir::Expr::Break(thir::BreakExpr {
             ty: self.table.resolve_mir(expr.id)?,
             span: expr.span,
         }))
     }
 
-    pub fn build_block_expr(&mut self, expr: &hir::BlockExpr) -> Result<thir::Expr, InferError> {
+    pub fn build_block_expr(&mut self, expr: &hir::BlockExpr) -> Result<thir::Expr, Diagnostic> {
         let expr = thir::BlockExpr {
             block: self.build_block(&self.hir[expr.block])?,
             ty: self.table.resolve_mir(expr.id)?,
@@ -286,7 +381,7 @@ impl<'a> ThirBuilder<'a> {
         Ok(thir::Expr::Block(expr))
     }
 
-    pub fn build_if_expr(&mut self, expr: &hir::IfExpr) -> Result<thir::Expr, InferError> {
+    pub fn build_if_expr(&mut self, expr: &hir::IfExpr) -> Result<thir::Expr, Diagnostic> {
         let condition = self.build_expr(&self.hir[expr.condition])?;
         let then_block = self.build_expr(&self.hir[expr.then_expr])?;
         let else_block = if let Some(else_block) = expr.else_expr {
@@ -304,7 +399,7 @@ impl<'a> ThirBuilder<'a> {
         }))
     }
 
-    pub fn build_loop_expr(&mut self, expr: &hir::LoopExpr) -> Result<thir::Expr, InferError> {
+    pub fn build_loop_expr(&mut self, expr: &hir::LoopExpr) -> Result<thir::Expr, Diagnostic> {
         let block = self.build_block(&self.hir[expr.block])?;
 
         Ok(thir::Expr::Loop(thir::LoopExpr {

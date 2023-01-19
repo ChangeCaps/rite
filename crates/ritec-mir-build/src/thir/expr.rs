@@ -15,6 +15,7 @@ pub enum Expr {
     Field(FieldExpr),
     Bitcast(BitcastExpr),
     Call(CallExpr),
+    StaticCall(StaticCallExpr),
     Unary(UnaryExpr),
     Binary(BinaryExpr),
     Assign(AssignExpr),
@@ -35,6 +36,7 @@ impl Expr {
             Expr::Field(expr) => &expr.ty,
             Expr::Bitcast(expr) => &expr.ty,
             Expr::Call(expr) => &expr.ty,
+            Expr::StaticCall(expr) => &expr.ty,
             Expr::Unary(expr) => &expr.ty,
             Expr::Binary(expr) => &expr.ty,
             Expr::Assign(expr) => &expr.ty,
@@ -55,6 +57,7 @@ impl Expr {
             Expr::Field(expr) => expr.span,
             Expr::Bitcast(expr) => expr.span,
             Expr::Call(expr) => expr.span,
+            Expr::StaticCall(expr) => expr.span,
             Expr::Unary(expr) => expr.span,
             Expr::Binary(expr) => expr.span,
             Expr::Assign(expr) => expr.span,
@@ -115,6 +118,15 @@ pub struct BitcastExpr {
 #[derive(Clone, Debug, PartialEq)]
 pub struct CallExpr {
     pub callee: ExprId,
+    pub arguments: Vec<ExprId>,
+    pub ty: Type,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct StaticCallExpr {
+    pub callee: FunctionId,
+    pub generics: Vec<Type>,
     pub arguments: Vec<ExprId>,
     pub ty: Type,
     pub span: Span,

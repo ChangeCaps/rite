@@ -1,12 +1,11 @@
 use ritec_core::{Literal, UnaryOp};
+use ritec_error::Diagnostic;
 use ritec_hir as hir;
 
-use crate::{
-    Error, InferType, Instance, ItemId, Projection, Solver, TypeProjection, TypeVariableKind,
-};
+use crate::{InferType, Instance, ItemId, Projection, Solver, TypeProjection, TypeVariableKind};
 
 impl<'a> Solver<'a> {
-    pub fn solve_body(&mut self, body: &hir::Body) -> Result<(), Error> {
+    pub fn solve_body(&mut self, body: &hir::Body) -> Result<(), Diagnostic> {
         for local in body.locals.values() {
             let ty = self.table_mut().infer_hir(&local.ty, &Instance::empty());
             self.table_mut().register_type(local.id, ty);
@@ -19,7 +18,7 @@ impl<'a> Solver<'a> {
         Ok(())
     }
 
-    pub fn solve_block(&mut self, body: &hir::Body, block: &hir::Block) -> Result<(), Error> {
+    pub fn solve_block(&mut self, body: &hir::Body, block: &hir::Block) -> Result<(), Diagnostic> {
         for stmt in block.stmts.iter() {
             self.solve_stmt(body, stmt)?;
         }
@@ -27,14 +26,14 @@ impl<'a> Solver<'a> {
         Ok(())
     }
 
-    pub fn solve_stmt(&mut self, body: &hir::Body, stmt: &hir::Stmt) -> Result<(), Error> {
+    pub fn solve_stmt(&mut self, body: &hir::Body, stmt: &hir::Stmt) -> Result<(), Diagnostic> {
         match stmt {
             hir::Stmt::Let(stmt) => self.solve_let_stmt(body, stmt),
             hir::Stmt::Expr(stmt) => self.solve_expr_stmt(body, stmt),
         }
     }
 
-    fn solve_let_stmt(&mut self, body: &hir::Body, stmt: &hir::LetStmt) -> Result<(), Error> {
+    fn solve_let_stmt(&mut self, body: &hir::Body, stmt: &hir::LetStmt) -> Result<(), Diagnostic> {
         let local = &body.locals[stmt.local];
         let ty = self.register_type(local.id, &local.ty);
 
@@ -46,13 +45,21 @@ impl<'a> Solver<'a> {
         Ok(())
     }
 
-    fn solve_expr_stmt(&mut self, body: &hir::Body, stmt: &hir::ExprStmt) -> Result<(), Error> {
+    fn solve_expr_stmt(
+        &mut self,
+        body: &hir::Body,
+        stmt: &hir::ExprStmt,
+    ) -> Result<(), Diagnostic> {
         self.solve_expr(body, &body.exprs[stmt.expr])?;
 
         Ok(())
     }
 
-    pub fn solve_expr(&mut self, body: &hir::Body, expr: &hir::Expr) -> Result<InferType, Error> {
+    pub fn solve_expr(
+        &mut self,
+        body: &hir::Body,
+        expr: &hir::Expr,
+    ) -> Result<InferType, Diagnostic> {
         let ty = match expr {
             hir::Expr::Local(expr) => self.solve_local_expr(body, expr)?,
             hir::Expr::Literal(expr) => self.solve_literal_expr(body, expr)?,
@@ -61,6 +68,7 @@ impl<'a> Solver<'a> {
             hir::Expr::Field(expr) => self.solve_field_expr(body, expr)?,
             hir::Expr::Bitcast(expr) => self.solve_bitcast_expr(body, expr)?,
             hir::Expr::Call(expr) => self.solve_call_expr(body, expr)?,
+            hir::Expr::MethodCall(expr) => self.solve_method_call_expr(body, expr)?,
             hir::Expr::Unary(expr) => self.solve_unary_expr(body, expr)?,
             hir::Expr::Binary(expr) => self.solve_binary_expr(body, expr)?,
             hir::Expr::Assign(expr) => self.solve_assign_expr(body, expr)?,
@@ -80,7 +88,7 @@ impl<'a> Solver<'a> {
         &mut self,
         body: &hir::Body,
         expr: &hir::LocalExpr,
-    ) -> Result<InferType, Error> {
+    ) -> Result<InferType, Diagnostic> {
         let local = &body.locals[expr.local];
         let ty = self.register_type(local.id, &local.ty);
 
@@ -91,7 +99,7 @@ impl<'a> Solver<'a> {
         &mut self,
         _body: &hir::Body,
         expr: &hir::LiteralExpr,
-    ) -> Result<InferType, Error> {
+    ) -> Result<InferType, Diagnostic> {
         match expr.literal {
             Literal::Null(_) => {
                 let var = self.table_mut().new_variable(None);
@@ -117,11 +125,11 @@ impl<'a> Solver<'a> {
         &mut self,
         _body: &hir::Body,
         expr: &hir::FunctionExpr,
-    ) -> Result<InferType, Error> {
+    ) -> Result<InferType, Diagnostic> {
         let mut generics = Vec::new();
-        for (i, generic) in expr.instance.generics.iter().enumerate() {
+        for generic in expr.instance.generics.iter() {
             let ty = self.table_mut().infer_hir(generic, &Instance::empty());
-            self.table_mut().register_generic(expr.id, i, ty.clone());
+            self.table_mut().register_generic(expr.id, ty.clone());
             generics.push(ty);
         }
 
@@ -136,7 +144,7 @@ impl<'a> Solver<'a> {
         &mut self,
         body: &hir::Body,
         expr: &hir::InitExpr,
-    ) -> Result<InferType, Error> {
+    ) -> Result<InferType, Diagnostic> {
         let class = &self.program()[expr.class.class];
 
         let mut generics = Vec::new();
@@ -166,11 +174,11 @@ impl<'a> Solver<'a> {
         &mut self,
         body: &hir::Body,
         expr: &hir::FieldExpr,
-    ) -> Result<InferType, Error> {
-        let class = self.solve_expr(body, &body.exprs[expr.class])?;
+    ) -> Result<InferType, Diagnostic> {
+        let class = self.solve_expr(body, &body[expr.class])?;
         let proj = TypeProjection {
             base: Box::new(class),
-            proj: Projection::Field(expr.field.clone()),
+            proj: Projection::Field(body[expr.class].id(), expr.field.clone()),
         };
 
         Ok(InferType::Proj(proj))
@@ -180,7 +188,7 @@ impl<'a> Solver<'a> {
         &mut self,
         body: &hir::Body,
         expr: &hir::BitcastExpr,
-    ) -> Result<InferType, Error> {
+    ) -> Result<InferType, Diagnostic> {
         self.solve_expr(body, &body.exprs[expr.expr])?;
         Ok(self.table_mut().infer_hir(&expr.ty, &Instance::empty()))
     }
@@ -189,8 +197,44 @@ impl<'a> Solver<'a> {
         &mut self,
         body: &hir::Body,
         expr: &hir::CallExpr,
-    ) -> Result<InferType, Error> {
+    ) -> Result<InferType, Diagnostic> {
         let function = self.solve_expr(body, &body.exprs[expr.callee])?;
+
+        let return_type = InferType::Var(self.table_mut().new_variable(None));
+
+        let mut arguments = Vec::new();
+        for &argument in expr.arguments.iter() {
+            let argument_ty = self.solve_expr(body, &body.exprs[argument])?;
+            arguments.push(argument_ty);
+        }
+
+        arguments.push(return_type.clone());
+
+        self.unify(
+            function,
+            InferType::apply(ItemId::Function, arguments, expr.span),
+        )?;
+
+        Ok(return_type)
+    }
+
+    pub fn solve_method_call_expr(
+        &mut self,
+        body: &hir::Body,
+        expr: &hir::MethodCallExpr,
+    ) -> Result<InferType, Diagnostic> {
+        let mut generics = Vec::new();
+        for generic in expr.generics.iter() {
+            generics.push(self.table_mut().infer_hir(generic, &Instance::empty()));
+        }
+
+        let class = self.solve_expr(body, &body.exprs[expr.callee])?;
+        let proj = TypeProjection {
+            base: Box::new(class),
+            proj: Projection::Method(body[expr.callee].id(), expr.method.clone(), generics),
+        };
+
+        let function = InferType::Proj(proj);
 
         let return_type = InferType::Var(self.table_mut().new_variable(None));
 
@@ -214,7 +258,7 @@ impl<'a> Solver<'a> {
         &mut self,
         body: &hir::Body,
         expr: &hir::UnaryExpr,
-    ) -> Result<InferType, Error> {
+    ) -> Result<InferType, Diagnostic> {
         match expr.operator {
             UnaryOp::Ref => self.solve_ref_expr(body, expr),
             UnaryOp::Deref => self.solve_deref_expr(body, expr),
@@ -227,7 +271,7 @@ impl<'a> Solver<'a> {
         &mut self,
         body: &hir::Body,
         expr: &hir::UnaryExpr,
-    ) -> Result<InferType, Error> {
+    ) -> Result<InferType, Diagnostic> {
         assert_eq!(expr.operator, UnaryOp::Ref);
 
         let ty = self.solve_expr(body, &body.exprs[expr.operand])?;
@@ -241,7 +285,7 @@ impl<'a> Solver<'a> {
         &mut self,
         body: &hir::Body,
         expr: &hir::UnaryExpr,
-    ) -> Result<InferType, Error> {
+    ) -> Result<InferType, Diagnostic> {
         assert_eq!(expr.operator, UnaryOp::Deref);
 
         let pointer = self.solve_expr(body, &body.exprs[expr.operand])?;
@@ -259,7 +303,7 @@ impl<'a> Solver<'a> {
         &mut self,
         body: &hir::Body,
         expr: &hir::UnaryExpr,
-    ) -> Result<InferType, Error> {
+    ) -> Result<InferType, Diagnostic> {
         assert_eq!(expr.operator, UnaryOp::Neg);
 
         self.solve_expr(body, &body.exprs[expr.operand])
@@ -269,7 +313,7 @@ impl<'a> Solver<'a> {
         &mut self,
         body: &hir::Body,
         expr: &hir::UnaryExpr,
-    ) -> Result<InferType, Error> {
+    ) -> Result<InferType, Diagnostic> {
         assert_eq!(expr.operator, UnaryOp::Not);
 
         let ty = self.solve_expr(body, &body.exprs[expr.operand])?;
@@ -282,7 +326,7 @@ impl<'a> Solver<'a> {
         &mut self,
         body: &hir::Body,
         expr: &hir::BinaryExpr,
-    ) -> Result<InferType, Error> {
+    ) -> Result<InferType, Diagnostic> {
         let lhs = self.solve_expr(body, &body.exprs[expr.lhs])?;
         let rhs = self.solve_expr(body, &body.exprs[expr.rhs])?;
         self.unify(lhs.clone(), rhs.clone())?;
@@ -300,7 +344,7 @@ impl<'a> Solver<'a> {
         &mut self,
         body: &hir::Body,
         expr: &hir::AssignExpr,
-    ) -> Result<InferType, Error> {
+    ) -> Result<InferType, Diagnostic> {
         let lhs = self.solve_expr(body, &body.exprs[expr.lhs])?;
         let rhs = self.solve_expr(body, &body.exprs[expr.rhs])?;
         self.unify(lhs.clone(), rhs)?;
@@ -312,7 +356,7 @@ impl<'a> Solver<'a> {
         &mut self,
         body: &hir::Body,
         expr: &hir::ReturnExpr,
-    ) -> Result<InferType, Error> {
+    ) -> Result<InferType, Diagnostic> {
         let ty = if let Some(value) = expr.value {
             self.solve_expr(body, &body.exprs[value])?
         } else {
@@ -327,7 +371,7 @@ impl<'a> Solver<'a> {
         &mut self,
         _body: &hir::Body,
         expr: &hir::BreakExpr,
-    ) -> Result<InferType, Error> {
+    ) -> Result<InferType, Diagnostic> {
         Ok(InferType::void(expr.span))
     }
 
@@ -335,7 +379,7 @@ impl<'a> Solver<'a> {
         &mut self,
         body: &hir::Body,
         expr: &hir::BlockExpr,
-    ) -> Result<InferType, Error> {
+    ) -> Result<InferType, Diagnostic> {
         self.solve_block(body, &body[expr.block])?;
         Ok(InferType::void(expr.span))
     }
@@ -344,7 +388,7 @@ impl<'a> Solver<'a> {
         &mut self,
         body: &hir::Body,
         expr: &hir::IfExpr,
-    ) -> Result<InferType, Error> {
+    ) -> Result<InferType, Diagnostic> {
         let condition = self.solve_expr(body, &body.exprs[expr.condition])?;
         self.unify(condition, InferType::apply(ItemId::Bool, vec![], expr.span))?;
 
@@ -361,7 +405,7 @@ impl<'a> Solver<'a> {
         &mut self,
         body: &hir::Body,
         expr: &hir::LoopExpr,
-    ) -> Result<InferType, Error> {
+    ) -> Result<InferType, Diagnostic> {
         self.solve_block(body, &body[expr.block])?;
         Ok(InferType::void(expr.span))
     }
