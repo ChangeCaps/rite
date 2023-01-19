@@ -1,4 +1,5 @@
 mod module;
+mod vec;
 
 class Vec<T> {
 	len: usize,
@@ -6,12 +7,13 @@ class Vec<T> {
 	ptr: *T,
 
 	fn push(&self, item: T) {
-		*self.ptr = item;
+		self.ptr = bitcast(&self.len);
+		self.ptr = null;
 	}
 }
 
 fn main(argc: i32, argv: **i8) -> i32 {
-	let v = Vec<i32> {};
+	let v = Vec {};
 
 	v.push(4);
 

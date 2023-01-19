@@ -38,7 +38,9 @@ impl InferenceTable {
 
                 Ok(self.resolve_mir_apply(&apply.item, args))
             }
-            InferType::Proj(_) => todo!(),
+            InferType::Proj(proj) => {
+                unreachable!("projection types should be normalized {:?}", proj)
+            }
         }
     }
 
