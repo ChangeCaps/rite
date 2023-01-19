@@ -48,7 +48,6 @@ impl<'a> Unifier<'a> {
             }
 
             (InferType::Var(a), InferType::Var(b)) => self.unify_var_var(a, b),
-            (InferType::Var(a), b) | (b, InferType::Var(a)) => self.unify_var_ty(a, b),
         }
     }
 
@@ -112,26 +111,36 @@ impl<'a> Unifier<'a> {
         Ok(())
     }
 
+    fn normalize_projections(&mut self, ty: &InferType) {
+        if let Some(ty) = self.table.normalize_shallow(ty) {
+            self.normalize_projections(&ty);
+            return;
+        }
+
+        match ty {
+            InferType::Var(_) => {}
+            InferType::Apply(apply) => {
+                for arg in apply.arguments.iter() {
+                    self.normalize_projections(arg);
+                }
+            }
+            InferType::Proj(proj) => {
+                let var = InferType::Var(self.table.new_variable(None));
+                self.unify_proj_ty(proj, &var).unwrap();
+            }
+        }
+    }
+
     pub fn unify_apply_var(
         &mut self,
         a: &TypeApplication,
         b: &TypeVariable,
     ) -> Result<(), Diagnostic> {
-        let mut arguments = Vec::new();
-
-        for _ in 0..a.arguments.len() {
-            let var = InferType::Var(self.table.new_variable(None));
-            arguments.push(var);
+        for argument in a.arguments.iter() {
+            self.normalize_projections(argument);
         }
 
-        let apply = TypeApplication {
-            item: a.item.clone(),
-            arguments,
-            span: a.span,
-        };
-        self.unify_apply_apply(a, &apply)?;
-
-        self.unify_var_ty(b, &InferType::Apply(apply))?;
+        (self.table).substitute(InferType::Var(b.clone()), InferType::Apply(a.clone()));
 
         Ok(())
     }
