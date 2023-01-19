@@ -42,6 +42,23 @@ pub struct Field {
     pub span: Span,
 }
 
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum SelfArgument {
+    Owned,
+    Pointer,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct Method {
+    pub ident: Ident,
+    pub generics: Generics,
+    pub self_argument: Option<SelfArgument>,
+    pub arguments: Vec<FunctionArgument>,
+    pub return_type: Option<Type>,
+    pub body: Block,
+    pub span: Span,
+}
+
 pub type ClassId = Id<Class>;
 
 #[derive(Clone, Debug, PartialEq)]
@@ -50,6 +67,7 @@ pub struct Class {
     pub ident: Ident,
     pub generics: Generics,
     pub fields: Vec<Field>,
+    pub methods: Vec<Method>,
     pub span: Span,
 }
 

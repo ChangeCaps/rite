@@ -144,6 +144,18 @@ impl<'a> BodyLowerer<'a> {
             }
         }
 
+        if expr.path.is_self() {
+            if let Some(local) = self.find_local(&Ident::new("self", expr.span)) {
+                let local_expr = hir::LocalExpr {
+                    local,
+                    id: self.body.next_id(),
+                    span: expr.span,
+                };
+
+                return Ok(hir::Expr::Local(local_expr));
+            }
+        }
+
         if let Some(instance) = self.resolver.resolve_function(&expr.path)? {
             let function_expr = hir::FunctionExpr {
                 instance,

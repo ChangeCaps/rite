@@ -4,14 +4,16 @@ class Vec<T> {
 	len: usize,
 	cap: usize,
 	ptr: *T,
+
+	fn push(&self, item: T) {
+		*(*self).ptr = item;
+	}
 }
 
 fn main(argc: i32, argv: **i8) -> i32 {
-	let v = Vec<_> {
-		ptr: null,
-	};
-
-	let x = v;
+	let v = Vec<i32> {};
+	
+	Vec::push(&v, 1);
 
 	return *v.ptr;
 }

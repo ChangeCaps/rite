@@ -25,6 +25,10 @@ impl Generics {
     pub fn get_ident(&self, ident: &Ident) -> Option<&Generic> {
         self.params.iter().find(|g| g.ident == *ident)
     }
+
+    pub fn instance(&self) -> Vec<Type> {
+        self.params.iter().cloned().map(Type::Generic).collect()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]

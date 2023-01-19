@@ -43,8 +43,12 @@ impl<'a> FunctionBuilder<'a> {
         self.mir.locals = self.thir.locals.clone();
 
         let entry_block = self.thir.blocks.values().next().unwrap();
-        let block_id = self.mir.blocks.push(mir::Block::new());
-        self.build_block(block_id, entry_block);
+        let mut block = self.mir.blocks.push(mir::Block::new());
+        block = self.build_block(block, entry_block);
+
+        if !self[block].is_terminated() {
+            self[block].terminate(mir::Terminator::Return(mir::Operand::VOID));
+        }
 
         self.mir.clone()
     }

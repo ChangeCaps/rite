@@ -21,6 +21,15 @@ pub struct Normalize {
     pub expected: InferType,
 }
 
+impl Normalize {
+    pub fn new(proj: impl Into<TypeProjection>, expected: impl Into<InferType>) -> Self {
+        Self {
+            proj: proj.into(),
+            expected: expected.into(),
+        }
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub enum Constraint {
     Unify(Unify),

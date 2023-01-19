@@ -25,6 +25,7 @@ pub type MethodId = Id<Method>;
 pub struct Method {
     pub ident: Ident,
     pub function: FunctionId,
+    pub self_argument: Option<SelfArgument>,
     pub span: Span,
 }
 
@@ -47,6 +48,14 @@ impl Class {
             .find(|(_, field)| field.ident == *ident)
             .map(|(id, _)| id)
     }
+
+    pub fn find_method(&self, ident: &Ident) -> Option<MethodId> {
+        self.methods
+            .iter()
+            .rev()
+            .find(|(_, method)| method.ident == *ident)
+            .map(|(id, _)| id)
+    }
 }
 
 impl Index<FieldId> for Class {
@@ -54,5 +63,13 @@ impl Index<FieldId> for Class {
 
     fn index(&self, id: FieldId) -> &Self::Output {
         &self.fields[id]
+    }
+}
+
+impl Index<MethodId> for Class {
+    type Output = Method;
+
+    fn index(&self, id: MethodId) -> &Self::Output {
+        &self.methods[id]
     }
 }

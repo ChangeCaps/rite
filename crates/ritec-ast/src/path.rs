@@ -61,11 +61,26 @@ impl Path {
             return None;
         }
 
-        self.segments.last().map(|s| match s {
-            PathSegment::Item(item) => &item.ident,
-            PathSegment::SuperSegment(_) => todo!(),
-            PathSegment::SelfSegment(_) => todo!(),
-        })
+        match self.segments.last() {
+            Some(PathSegment::Item(item)) => Some(&item.ident),
+            _ => None,
+        }
+    }
+
+    pub fn is_self(&self) -> bool {
+        if self.is_absolute() {
+            return false;
+        }
+
+        if self.segments.len() != 1 {
+            return false;
+        }
+
+        match self.segments.last() {
+            Some(PathSegment::SelfSegment(_)) => true,
+            Some(_) => false,
+            None => false,
+        }
     }
 }
 

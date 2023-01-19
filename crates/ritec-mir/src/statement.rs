@@ -40,8 +40,8 @@ impl Display for Place {
 
         for proj in &self.proj {
             match proj {
-                Projection::Deref => out = format!("*{}", out),
-                Projection::Field(field) => out = format!("{}.{}", out, field.as_raw_index()),
+                Projection::Deref => out = format!("*({})", out),
+                Projection::Field(field) => out = format!("({}).{}", out, field.as_raw_index()),
             }
         }
 

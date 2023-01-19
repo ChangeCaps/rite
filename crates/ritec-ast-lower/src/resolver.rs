@@ -27,6 +27,19 @@ impl<'a> Resolver<'a> {
         }
     }
 
+    fn get_class(&self, parent: hir::ModuleId, ident: &Ident) -> Result<hir::ClassId, Diagnostic> {
+        let module = &self.program[parent];
+
+        if let Some(&class) = module.classes.get(&ident) {
+            Ok(class)
+        } else {
+            let err = Diagnostic::error("class not found")
+                .with_msg_span(format!("class '{}' not found", ident), ident.span());
+
+            Err(err)
+        }
+    }
+
     fn assert_generic_length(
         &self,
         actual: usize,
@@ -45,54 +58,101 @@ impl<'a> Resolver<'a> {
         }
     }
 
+    fn resolve_module(&self, segments: &[ast::PathSegment]) -> Result<hir::ModuleId, Diagnostic> {
+        let mut module = self.module;
+
+        for segment in segments {
+            match segment {
+                ast::PathSegment::Item(item) => {
+                    self.assert_generic_length(item.generics.len(), 0, item.ident.span())?;
+
+                    module = self.get_module(module, &item.ident)?;
+                }
+                ast::PathSegment::SuperSegment(span) => {
+                    let err = Diagnostic::error("invalid path")
+                        .with_msg_span("cannot use `super` in the root module", *span);
+
+                    return Err(err);
+                }
+                ast::PathSegment::SelfSegment(_) => {}
+            }
+        }
+
+        Ok(module)
+    }
+
+    fn resolve_method(
+        &self,
+        path: &ast::Path,
+    ) -> Result<Option<hir::FunctionInstance>, Diagnostic> {
+        let len = path.segments.len();
+        if len < 2 {
+            return Ok(None);
+        }
+
+        let ast::PathSegment::Item(ref class_segment) = path.segments[len - 2] else {
+            return Ok(None);
+        };
+        let ast::PathSegment::Item(ref method_segment) = path.segments[len - 1] else {
+            return Ok(None);
+        };
+
+        let module = self.resolve_module(&path.segments[..len - 2])?;
+        let Ok(class) = self.get_class(module, &class_segment.ident) else {
+            return Ok(None);
+        };
+
+        let class = &self.program[class];
+
+        if let Some(method) = class.find_method(&method_segment.ident) {
+            let mut generics = Vec::new();
+
+            if class_segment.generics.len() == 0 {
+                for _ in 0..class.generics.params.len() {
+                    generics.push(hir::Type::inferred(class_segment.ident.span()));
+                }
+            } else {
+                for generic in &class_segment.generics {
+                    generics.push(self.resolve_type(generic)?);
+                }
+            }
+
+            let function = &self.program[class[method].function];
+            let expected = function.generics.params.len();
+
+            if method_segment.generics.len() == 0 {
+                for _ in 0..expected - class.generics.params.len() {
+                    generics.push(hir::Type::inferred(method_segment.ident.span()));
+                }
+            } else {
+                for generic in &method_segment.generics {
+                    generics.push(self.resolve_type(generic)?);
+                }
+            }
+
+            self.assert_generic_length(generics.len(), expected, path.span)?;
+
+            let instance = hir::FunctionInstance {
+                function: class[method].function,
+                generics,
+                span: path.span,
+            };
+
+            Ok(Some(instance))
+        } else {
+            Ok(None)
+        }
+    }
+
     pub fn resolve_function(
         &self,
         path: &ast::Path,
     ) -> Result<Option<hir::FunctionInstance>, Diagnostic> {
-        let mut module_id = self.module;
-
-        let mut iter = path.segments.iter().peekable();
-        loop {
-            let segment = iter.next().unwrap();
-
-            match segment {
-                ast::PathSegment::Item(item) => {
-                    let module = &self.program[module_id];
-
-                    if iter.peek().is_some() {
-                        module_id = self.get_module(module_id, &item.ident)?;
-                        continue;
-                    }
-
-                    let Some(&function) = module.functions.get(&item.ident) else {
-                        return Ok(None);
-                    };
-
-                    let expected_len = self.program[function].generics.params.len();
-
-                    let mut generics = Vec::new();
-                    for generic in item.generics.iter() {
-                        generics.push(self.resolve_type(generic)?);
-                    }
-
-                    if generics.len() == 0 {
-                        for _ in 0..expected_len {
-                            generics.push(hir::Type::inferred(path.span));
-                        }
-                    }
-
-                    self.assert_generic_length(generics.len(), expected_len, path.span)?;
-
-                    return Ok(Some(hir::FunctionInstance {
-                        function,
-                        generics,
-                        span: path.span,
-                    }));
-                }
-                ast::PathSegment::SuperSegment(_) => todo!(),
-                ast::PathSegment::SelfSegment(_) => todo!(),
-            }
+        if let Some(function) = self.resolve_method(path)? {
+            return Ok(Some(function));
         }
+
+        Ok(None)
     }
 
     pub fn resolve_type(&self, ty: &ast::Type) -> Result<hir::Type, Diagnostic> {
@@ -206,63 +266,49 @@ impl<'a> Resolver<'a> {
     }
 
     pub fn resolve_path_type(&self, ty: &ast::PathType) -> Result<hir::Type, Diagnostic> {
+        // resolve generics
         if let Some(ident) = ty.path.get_ident() {
-            if let Some(generic) = self.generics.get_ident(ident) {
-                return Ok(hir::Type::Generic(generic.clone()));
-            }
-        }
-
-        let mut module_id = self.module;
-
-        let mut iter = ty.path.segments.iter().peekable();
-
-        loop {
-            let segment = iter.next().unwrap();
-
-            match segment {
-                ast::PathSegment::Item(item) => {
-                    let module = &self.program[module_id];
-
-                    if iter.peek().is_some() {
-                        module_id = self.get_module(module_id, &item.ident)?;
-                        continue;
-                    }
-
-                    let Some(&class) = module.classes.get(&item.ident) else {
-                        break;
-                    };
-
-                    let expected_len = self.program[class].generics.params.len();
-
-                    let mut generics = Vec::new();
-                    for generic in &item.generics {
-                        generics.push(self.resolve_type(generic)?);
-                    }
-
-                    if generics.len() == 0 {
-                        for _ in 0..expected_len {
-                            generics.push(hir::Type::Inferred(hir::InferredType { span: ty.span }));
-                        }
-                    }
-
-                    self.assert_generic_length(expected_len, generics.len(), ty.span)?;
-
-                    let class_type = hir::ClassType {
-                        class,
-                        ident: item.ident.clone(),
-                        generics,
-                        span: ty.span,
-                    };
-
-                    return Ok(hir::Type::Class(class_type));
+            for generic in self.generics.params.iter() {
+                if generic.ident == *ident {
+                    return Ok(hir::Type::Generic(generic.clone()));
                 }
-                ast::PathSegment::SuperSegment(_) => todo!(),
-                ast::PathSegment::SelfSegment(_) => todo!(),
             }
         }
 
-        let err = Diagnostic::error(format!("'{}' not defined", ty.path)).with_span(ty.span);
+        // resolve class
+        let len = ty.path.segments.len();
+        let module = self.resolve_module(&ty.path.segments[..len - 1])?;
 
-        Err(err)
+        let ast::PathSegment::Item(segment) = &ty.path.segments[len - 1] else {
+            let err = Diagnostic::error("expected item");    
+            return Err(err);
+        };
+
+        let Some(&class) = self.program[module].classes.get(&segment.ident) else {
+            let err = Diagnostic::error(format!("'{}' not defined", ty.path)).with_span(ty.span);
+            return Err(err);
+        };
+
+        let expected = self.program[class].generics.params.len();
+
+        let mut generics = Vec::new();
+        for generic in &segment.generics {
+            generics.push(self.resolve_type(generic)?);
+        }
+
+        if generics.len() == 0 {
+            for _ in 0..expected {
+                generics.push(hir::Type::Inferred(hir::InferredType { span: ty.span }));
+            }
+        }
+
+        let class_type = hir::ClassType {
+            class,
+            ident: segment.ident.clone(),
+            generics,
+            span: ty.span,
+        };
+
+        Ok(hir::Type::Class(class_type))
     }
 }
