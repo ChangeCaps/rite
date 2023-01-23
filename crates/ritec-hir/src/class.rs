@@ -10,6 +10,7 @@ pub type FieldId = Id<Field>;
 pub struct Field {
     pub ident: Ident,
     pub ty: Type,
+    pub init: Option<FunctionId>,
     pub span: Span,
 }
 

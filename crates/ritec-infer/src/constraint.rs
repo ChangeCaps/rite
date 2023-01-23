@@ -31,14 +31,42 @@ impl Normalize {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct As {
+    pub ty: InferType,
+    pub expected: InferType,
+}
+
+impl As {
+    pub fn new(a: impl Into<InferType>, b: impl Into<InferType>) -> Self {
+        Self {
+            ty: a.into(),
+            expected: b.into(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub enum Constraint {
     Unify(Unify),
     Normalize(Normalize),
+    As(As),
 }
 
 impl From<Unify> for Constraint {
     fn from(value: Unify) -> Self {
         Self::Unify(value)
+    }
+}
+
+impl From<Normalize> for Constraint {
+    fn from(value: Normalize) -> Self {
+        Self::Normalize(value)
+    }
+}
+
+impl From<As> for Constraint {
+    fn from(value: As) -> Self {
+        Self::As(value)
     }
 }
 

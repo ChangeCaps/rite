@@ -154,6 +154,12 @@ pub enum InferType {
 }
 
 impl InferType {
+    pub const USIZE: Self = Self::Apply(TypeApplication {
+        item: ItemId::Int(mir::IntType::USIZE),
+        arguments: Vec::new(),
+        span: Span::DUMMY,
+    });
+
     pub const fn void(span: Span) -> Self {
         Self::Apply(TypeApplication {
             item: ItemId::Void,

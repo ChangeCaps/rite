@@ -4,7 +4,7 @@ use inkwell::{
     basic_block::BasicBlock,
     builder::Builder,
     context::Context,
-    types::{BasicType, BasicTypeEnum, FunctionType},
+    types::{BasicType, BasicTypeEnum, FloatType, FunctionType, IntType, PointerType},
     values::{BasicValueEnum, CallableValue, FunctionValue, PointerValue},
     AddressSpace, FloatPredicate, IntPredicate,
 };
@@ -55,11 +55,29 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
         self.void_type().const_zero()
     }
 
-    pub fn null_value(&self) -> BasicValueEnum<'c> {
-        self.void_type()
-            .ptr_type(AddressSpace::Generic)
-            .const_null()
-            .into()
+    pub fn usize_type(&self) -> IntType<'c> {
+        self.cx().ptr_sized_int_type(&self.cx.target_data(), None)
+    }
+
+    pub fn int_type(&self, ty: mir::IntType) -> IntType<'c> {
+        if let Some(size) = ty.size {
+            (self.cx().custom_width_int_type(size.bit_width() as u32)).into()
+        } else {
+            self.usize_type().into()
+        }
+    }
+
+    pub fn float_type(&self, ty: mir::FloatType) -> FloatType<'c> {
+        match ty.size {
+            FloatSize::F16 => self.cx().f16_type(),
+            FloatSize::F32 => self.cx().f32_type(),
+            FloatSize::F64 => self.cx().f64_type(),
+        }
+    }
+
+    pub fn pointer_type(&self, ty: &mir::PointerType) -> PointerType<'c> {
+        let ty = self.build_type(ty.pointee());
+        ty.ptr_type(AddressSpace::Generic).into()
     }
 
     pub fn build_function_type(&self, ty: &mir::FunctionType) -> FunctionType<'c> {
@@ -81,22 +99,9 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
         match ty {
             mir::Type::Void => self.cx().struct_type(&[], false).into(),
             mir::Type::Bool => self.cx().bool_type().into(),
-            mir::Type::Int(ty) => {
-                if let Some(size) = ty.size {
-                    (self.cx().custom_width_int_type(size.bit_width() as u32)).into()
-                } else {
-                    (self.cx().ptr_sized_int_type(&self.cx.target_data(), None)).into()
-                }
-            }
-            mir::Type::Float(ty) => match ty.size {
-                FloatSize::F16 => self.cx().f16_type().into(),
-                FloatSize::F32 => self.cx().f32_type().into(),
-                FloatSize::F64 => self.cx().f64_type().into(),
-            },
-            mir::Type::Pointer(ty) => self
-                .build_type(&ty.pointee)
-                .ptr_type(AddressSpace::Generic)
-                .into(),
+            mir::Type::Int(ty) => self.int_type(ty.clone()).into(),
+            mir::Type::Float(ty) => self.float_type(ty.clone()).into(),
+            mir::Type::Pointer(ty) => self.pointer_type(ty).into(),
             mir::Type::Array(ty) => self
                 .build_type(&ty.element)
                 .array_type(ty.size as u32)
@@ -144,7 +149,12 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
     pub fn build(&mut self) -> FunctionValue<'c> {
         // add function
         let function = &self.cx.program[self.function];
-        let function_name = format!("{}", function.ident);
+        let generics: Vec<_> = self.generics.iter().map(mir::Type::to_string).collect();
+        let function_name = if !generics.is_empty() {
+            format!("{}<{}>", function.ident, generics.join(", "))
+        } else {
+            format!("{}", function.ident)
+        };
 
         let fn_type = self.build_function_type(&function.ty());
         let fn_value = self.cx.module.add_function(&function_name, fn_type, None);
@@ -257,7 +267,11 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
     pub fn build_constant(&mut self, constant: &mir::Constant) -> BasicValueEnum<'c> {
         match constant {
             mir::Constant::Void => self.void_value(),
-            mir::Constant::Null => self.null_value(),
+            mir::Constant::Null(ty) => self
+                .build_type(ty)
+                .ptr_type(AddressSpace::Generic)
+                .const_zero()
+                .into(),
             mir::Constant::Function(id, generics) => {
                 let generic_map = GenericMap::new(&self.function().generics, &self.generics);
 
@@ -309,8 +323,8 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
                 }
             },
             mir::Value::BinaryOp(op, lhs, rhs) => self.build_binary_op(*op, lhs, rhs),
-            mir::Value::Cast(cast, value) => self.build_cast(cast, value),
             mir::Value::Call(callee, args) => self.build_call(callee, args),
+            mir::Value::Intrinsic(intrinsic) => self.build_intrinsic(intrinsic),
         }
     }
 
@@ -484,13 +498,131 @@ impl<'a, 'c> FunctionBuilder<'a, 'c> {
         }
     }
 
-    pub fn build_cast(&mut self, cast: &mir::Cast, value: &mir::Operand) -> BasicValueEnum<'c> {
-        let value = self.build_operand(value);
-
-        match cast {
-            mir::Cast::Bit(ty) => {
+    pub fn build_intrinsic(&mut self, intrinsic: &mir::Intrinsic) -> BasicValueEnum<'c> {
+        match intrinsic {
+            mir::Intrinsic::Sizeof(ty) => {
                 let ty = self.build_type(ty);
-                self.builder.build_bitcast(value, ty, "cast").into()
+                ty.size_of().unwrap().into()
+            }
+            mir::Intrinsic::Alignof(ty) => {
+                let ty = self.build_type(ty);
+
+                let align = match ty {
+                    BasicTypeEnum::ArrayType(ty) => ty.get_alignment(),
+                    BasicTypeEnum::FloatType(ty) => ty.get_alignment(),
+                    BasicTypeEnum::IntType(ty) => ty.get_alignment(),
+                    BasicTypeEnum::PointerType(ty) => ty.get_alignment(),
+                    BasicTypeEnum::StructType(ty) => ty.get_alignment(),
+                    BasicTypeEnum::VectorType(ty) => ty.get_alignment(),
+                };
+
+                align.into()
+            }
+            mir::Intrinsic::Bitcast(operand, ty) => {
+                let operand = self.build_operand(operand);
+                let ty = self.build_type(ty);
+                self.builder.build_bitcast(operand, ty, "bitcast").into()
+            }
+            mir::Intrinsic::Malloc(size, ty) => {
+                let size = self.build_operand(size);
+                let ptr = self.builder.build_array_malloc(
+                    self.build_type(ty),
+                    size.into_int_value(),
+                    "malloc",
+                );
+                ptr.unwrap().into()
+            }
+            mir::Intrinsic::Free(ptr) => {
+                let ptr = self.build_operand(ptr);
+                self.builder.build_free(ptr.into_pointer_value());
+                self.void_value()
+            }
+            mir::Intrinsic::Memcpy(dst, src, size) => {
+                let dst = self.build_operand(dst);
+                let src = self.build_operand(src);
+                let size = self.build_operand(size);
+                let res = self.builder.build_memcpy(
+                    dst.into_pointer_value(),
+                    1,
+                    src.into_pointer_value(),
+                    1,
+                    size.into_int_value(),
+                );
+                res.unwrap();
+                self.void_value()
+            }
+            mir::Intrinsic::PtrToInt(ptr, _, to) => {
+                let ptr = self.build_operand(ptr);
+                let ptr = ptr.into_pointer_value();
+
+                let to = self.int_type(to.clone());
+
+                let ptr = self.builder.build_ptr_to_int(ptr, to, "ptrtoint");
+                self.builder.build_int_cast(ptr, to, "intcast").into()
+            }
+            mir::Intrinsic::IntToPtr(int, _, to) => {
+                let int = self.build_operand(int);
+                let int = int.into_int_value();
+
+                let to = self.pointer_type(to);
+
+                self.builder.build_int_to_ptr(int, to, "inttoptr").into()
+            }
+            mir::Intrinsic::PtrToPtr(ptr, _, to) => {
+                let ptr = self.build_operand(ptr);
+                let ptr = ptr.into_pointer_value();
+
+                let to = self.pointer_type(to);
+
+                self.builder.build_pointer_cast(ptr, to, "ptrtoptr").into()
+            }
+            mir::Intrinsic::IntToInt(int, _, to) => {
+                let int = self.build_operand(int);
+                let int = int.into_int_value();
+
+                let to = self.int_type(to.clone());
+
+                self.builder.build_int_cast(int, to, "intcast").into()
+            }
+            mir::Intrinsic::FloatToFloat(float, _, to) => {
+                let float = self.build_operand(float);
+                let float = float.into_float_value();
+
+                let to = self.float_type(to.clone());
+
+                self.builder.build_float_cast(float, to, "floatcast").into()
+            }
+            mir::Intrinsic::FloatToInt(float, _, to) => {
+                let float = self.build_operand(float);
+                let float = float.into_float_value();
+
+                let ty = self.int_type(to.clone());
+
+                if to.signed {
+                    self.builder
+                        .build_float_to_signed_int(float, ty, "floattoint")
+                        .into()
+                } else {
+                    self.builder
+                        .build_float_to_unsigned_int(float, ty, "floattoint")
+                        .into()
+                }
+            }
+            mir::Intrinsic::IntToFloat(int, from, to) => {
+                let int = self.build_operand(int);
+                let int = int.into_int_value();
+
+                let to = self.float_type(to.clone());
+
+                if from.signed {
+                    self.builder
+                        .build_signed_int_to_float(int, to, "inttofloat")
+                        .into()
+                } else {
+                    self.builder
+                        .build_unsigned_int_to_float(int, to, "inttofloat")
+                        .into()
+                }
             }
         }
     }

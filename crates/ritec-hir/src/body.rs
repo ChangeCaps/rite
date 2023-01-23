@@ -6,8 +6,8 @@ use std::{
 use ritec_core::{Arena, Ident, Span};
 
 use crate::{
-    BitcastExpr, Block, BlockId, BreakExpr, Expr, ExprId, ExprStmt, IfExpr, Local, LocalExpr,
-    LocalId, ReturnExpr, Stmt, Type,
+    AlignofExpr, BitcastExpr, Block, BlockId, BreakExpr, Expr, ExprId, ExprStmt, FreeExpr, IfExpr,
+    Local, LocalExpr, LocalId, MallocExpr, MemcpyExpr, ReturnExpr, SizeofExpr, Stmt, Type,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -79,6 +79,54 @@ impl Body {
             span: Span::DUMMY,
         };
         self.exprs.push(Expr::Bitcast(expr))
+    }
+
+    pub fn sizeof_expr(&mut self, ty: impl Into<Type>) -> ExprId {
+        let expr = SizeofExpr {
+            ty: ty.into(),
+            id: self.next_id(),
+            span: Span::DUMMY,
+        };
+        self.exprs.push(Expr::Sizeof(expr))
+    }
+
+    pub fn alignof_expr(&mut self, ty: impl Into<Type>) -> ExprId {
+        let expr = AlignofExpr {
+            ty: ty.into(),
+            id: self.next_id(),
+            span: Span::DUMMY,
+        };
+        self.exprs.push(Expr::Alignof(expr))
+    }
+
+    pub fn malloc_expr(&mut self, item: impl Into<Type>, count: ExprId) -> ExprId {
+        let expr = MallocExpr {
+            ty: item.into(),
+            count,
+            id: self.next_id(),
+            span: Span::DUMMY,
+        };
+        self.exprs.push(Expr::Malloc(expr))
+    }
+
+    pub fn free_expr(&mut self, ptr: ExprId) -> ExprId {
+        let expr = FreeExpr {
+            expr: ptr,
+            id: self.next_id(),
+            span: Span::DUMMY,
+        };
+        self.exprs.push(Expr::Free(expr))
+    }
+
+    pub fn memcpy_expr(&mut self, dst: ExprId, src: ExprId, size: ExprId) -> ExprId {
+        let expr = MemcpyExpr {
+            dst,
+            src,
+            size,
+            id: self.next_id(),
+            span: Span::DUMMY,
+        };
+        self.exprs.push(Expr::Memcpy(expr))
     }
 
     pub fn return_expr(&mut self, value: Option<ExprId>) -> ExprId {

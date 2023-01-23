@@ -98,8 +98,9 @@ impl<'a> BodyLowerer<'a> {
             ast::Expr::Paren(expr) => return self.lower_paren_expr(expr),
             ast::Expr::Path(expr) => self.lower_path_expr(expr)?,
             ast::Expr::Literal(expr) => self.lower_literal_expr(expr)?,
-            ast::Expr::Init(expr) => self.lower_init_expr(expr)?,
+            ast::Expr::ClassInit(expr) => self.lower_init_expr(expr)?,
             ast::Expr::Field(expr) => self.lower_field_expr(expr)?,
+            ast::Expr::As(expr) => self.lower_as_expr(expr)?,
             ast::Expr::Call(expr) => self.lower_call_expr(expr)?,
             ast::Expr::Unary(expr) => self.lower_unary_expr(expr)?,
             ast::Expr::Binary(expr) => self.lower_binary_expr(expr)?,
@@ -182,7 +183,7 @@ impl<'a> BodyLowerer<'a> {
         Ok(hir::Expr::Literal(literal_expr))
     }
 
-    pub fn lower_init_expr(&mut self, expr: &ast::InitExpr) -> Result<hir::Expr, Diagnostic> {
+    pub fn lower_init_expr(&mut self, expr: &ast::ClassInitExpr) -> Result<hir::Expr, Diagnostic> {
         let ty = self.resolver.resolve_path_type(&expr.class)?;
 
         let hir::Type::Class(class_type) = ty else {
@@ -208,14 +209,14 @@ impl<'a> BodyLowerer<'a> {
             fields.push((field_id, field_init));
         }
 
-        let init_expr = hir::InitExpr {
+        let init_expr = hir::ClassInitExpr {
             class: class_type,
             fields,
             id: self.body.next_id(),
             span: expr.span,
         };
 
-        Ok(hir::Expr::Init(init_expr))
+        Ok(hir::Expr::ClassInit(init_expr))
     }
 
     pub fn lower_field_expr(&mut self, expr: &ast::FieldExpr) -> Result<hir::Expr, Diagnostic> {
@@ -227,6 +228,19 @@ impl<'a> BodyLowerer<'a> {
         };
 
         Ok(hir::Expr::Field(field_expr))
+    }
+
+    pub fn lower_as_expr(&mut self, expr: &ast::AsExpr) -> Result<hir::Expr, Diagnostic> {
+        let ty = self.resolver.resolve_type(&expr.ty)?;
+
+        let as_expr = hir::AsExpr {
+            expr: self.lower_expr(&expr.expr)?,
+            ty,
+            id: self.body.next_id(),
+            span: expr.span,
+        };
+
+        Ok(hir::Expr::As(as_expr))
     }
 
     pub fn lower_call_expr(&mut self, expr: &ast::CallExpr) -> Result<hir::Expr, Diagnostic> {

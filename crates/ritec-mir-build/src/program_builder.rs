@@ -74,7 +74,7 @@ impl<'a> ProgramBuilder<'a> {
         let mut thir_builder = thir::ThirBuilder::new(&self.hir, &function.body, solver.finish()?)?;
         let thir = thir_builder.build()?;
 
-        let function_builder = FunctionBuilder::new(&thir);
+        let function_builder = FunctionBuilder::new(&thir, &self.hir.classes);
         let mir = function_builder.build();
 
         let mut params = Vec::new();

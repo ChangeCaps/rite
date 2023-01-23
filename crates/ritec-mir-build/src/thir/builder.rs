@@ -145,9 +145,15 @@ impl<'a> ThirBuilder<'a> {
             hir::Expr::Local(expr) => self.build_local_expr(expr)?,
             hir::Expr::Literal(expr) => self.build_literal_expr(expr)?,
             hir::Expr::Function(expr) => self.build_function_expr(expr)?,
-            hir::Expr::Init(expr) => self.build_init_expr(expr)?,
+            hir::Expr::ClassInit(expr) => self.build_init_expr(expr)?,
             hir::Expr::Field(expr) => self.build_field_expr(expr)?,
+            hir::Expr::As(expr) => self.build_as_expr(expr)?,
             hir::Expr::Bitcast(expr) => self.build_bitcast_expr(expr)?,
+            hir::Expr::Sizeof(expr) => self.build_sizeof_expr(expr)?,
+            hir::Expr::Alignof(expr) => self.build_alignof_expr(expr)?,
+            hir::Expr::Malloc(expr) => self.build_malloc_expr(expr)?,
+            hir::Expr::Free(expr) => self.build_free_expr(expr)?,
+            hir::Expr::Memcpy(expr) => self.build_memcpy_expr(expr)?,
             hir::Expr::Call(expr) => self.build_call_expr(expr)?,
             hir::Expr::MethodCall(expr) => self.build_method_call_expr(expr)?,
             hir::Expr::Unary(expr) => self.build_unary_expr(expr)?,
@@ -206,7 +212,7 @@ impl<'a> ThirBuilder<'a> {
         Ok(thir::Expr::Function(expr))
     }
 
-    pub fn build_init_expr(&mut self, expr: &hir::InitExpr) -> Result<thir::Expr, Diagnostic> {
+    pub fn build_init_expr(&mut self, expr: &hir::ClassInitExpr) -> Result<thir::Expr, Diagnostic> {
         let ty = self.table.resolve_mir(expr.id)?;
 
         let mir::Type::Class(class) = ty.clone() else {
@@ -220,7 +226,7 @@ impl<'a> ThirBuilder<'a> {
             fields.push((field.cast(), expr));
         }
 
-        Ok(thir::Expr::Init(thir::InitExpr {
+        Ok(thir::Expr::ClassInit(thir::ClassInitExpr {
             class,
             fields,
             ty,
@@ -246,6 +252,17 @@ impl<'a> ThirBuilder<'a> {
         }))
     }
 
+    pub fn build_as_expr(&mut self, expr: &hir::AsExpr) -> Result<thir::Expr, Diagnostic> {
+        let into = self.table.get_generics(expr.id)[0].clone();
+
+        Ok(thir::Expr::As(thir::AsExpr {
+            expr: self.build_expr(&self.hir.exprs[expr.expr])?,
+            into: self.table.resolve_mir_type(&into)?,
+            ty: self.table.resolve_mir(expr.id)?,
+            span: expr.span,
+        }))
+    }
+
     pub fn build_bitcast_expr(
         &mut self,
         expr: &hir::BitcastExpr,
@@ -257,6 +274,62 @@ impl<'a> ThirBuilder<'a> {
         };
 
         Ok(thir::Expr::Bitcast(expr))
+    }
+
+    pub fn build_sizeof_expr(&mut self, expr: &hir::SizeofExpr) -> Result<thir::Expr, Diagnostic> {
+        let item = self.table.get_generics(expr.id)[0].clone();
+
+        Ok(thir::Expr::Sizeof(thir::SizeofExpr {
+            item: self.table.resolve_mir_type(&item)?,
+            ty: self.table.resolve_mir(expr.id)?,
+            span: expr.span,
+        }))
+    }
+
+    pub fn build_alignof_expr(
+        &mut self,
+        expr: &hir::AlignofExpr,
+    ) -> Result<thir::Expr, Diagnostic> {
+        let item = self.table.get_generics(expr.id)[0].clone();
+
+        Ok(thir::Expr::Alignof(thir::AlignofExpr {
+            item: self.table.resolve_mir_type(&item)?,
+            ty: self.table.resolve_mir(expr.id)?,
+            span: expr.span,
+        }))
+    }
+
+    pub fn build_malloc_expr(&mut self, expr: &hir::MallocExpr) -> Result<thir::Expr, Diagnostic> {
+        let item = self.table.get_generics(expr.id)[0].clone();
+
+        Ok(thir::Expr::Malloc(thir::MallocExpr {
+            item: self.table.resolve_mir_type(&item)?,
+            count: self.build_expr(&self.hir.exprs[expr.count])?,
+            ty: self.table.resolve_mir(expr.id)?,
+            span: expr.span,
+        }))
+    }
+
+    pub fn build_free_expr(&mut self, expr: &hir::FreeExpr) -> Result<thir::Expr, Diagnostic> {
+        let expr = thir::FreeExpr {
+            expr: self.build_expr(&self.hir.exprs[expr.expr])?,
+            ty: mir::Type::Void,
+            span: expr.span,
+        };
+
+        Ok(thir::Expr::Free(expr))
+    }
+
+    pub fn build_memcpy_expr(&mut self, expr: &hir::MemcpyExpr) -> Result<thir::Expr, Diagnostic> {
+        let expr = thir::MemcpyExpr {
+            dst: self.build_expr(&self.hir.exprs[expr.dst])?,
+            src: self.build_expr(&self.hir.exprs[expr.src])?,
+            size: self.build_expr(&self.hir.exprs[expr.size])?,
+            ty: mir::Type::Void,
+            span: expr.span,
+        };
+
+        Ok(thir::Expr::Memcpy(expr))
     }
 
     pub fn build_call_expr(&mut self, expr: &hir::CallExpr) -> Result<thir::Expr, Diagnostic> {

@@ -20,11 +20,20 @@ impl Parse for ast::Field {
         let ident = parser.parse()?;
         parser.expect(&SymbolKind::Colon)?;
         let ty = parser.parse()?;
+
+        let init = if parser.is(&SymbolKind::Equal) {
+            parser.expect(&SymbolKind::Equal)?;
+            Some(parser.parse()?)
+        } else {
+            None
+        };
+
         parser.expect(&SymbolKind::Comma)?;
 
         Ok(ast::Field {
             ident,
             ty,
+            init,
             span: parser.span(),
         })
     }

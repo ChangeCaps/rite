@@ -18,26 +18,38 @@ impl<'a> Resolver<'a> {
         let module = &self.program[parent];
 
         if let Some(&module) = module.modules.get(&ident) {
-            Ok(module)
-        } else {
-            let err = Diagnostic::error("module not found")
-                .with_msg_span(format!("module '{}' not found", ident), ident.span());
-
-            Err(err)
+            return Ok(module);
         }
+
+        let auto_include = &self.program[self.program.auto_include];
+
+        if let Some(&module) = auto_include.modules.get(&ident) {
+            return Ok(module);
+        }
+
+        let err = Diagnostic::error("module not found")
+            .with_msg_span(format!("module '{}' not found", ident), ident.span());
+
+        Err(err)
     }
 
     fn get_class(&self, parent: hir::ModuleId, ident: &Ident) -> Result<hir::ClassId, Diagnostic> {
         let module = &self.program[parent];
 
         if let Some(&class) = module.classes.get(&ident) {
-            Ok(class)
-        } else {
-            let err = Diagnostic::error("class not found")
-                .with_msg_span(format!("class '{}' not found", ident), ident.span());
-
-            Err(err)
+            return Ok(class);
         }
+
+        let auto_include = &self.program[self.program.auto_include];
+
+        if let Some(&class) = auto_include.classes.get(&ident) {
+            return Ok(class);
+        }
+
+        let err = Diagnostic::error("class not found")
+            .with_msg_span(format!("class '{}' not found", ident), ident.span());
+
+        Err(err)
     }
 
     fn get_function(
@@ -48,13 +60,19 @@ impl<'a> Resolver<'a> {
         let module = &self.program[parent];
 
         if let Some(&function) = module.functions.get(&ident) {
-            Ok(function)
-        } else {
-            let err = Diagnostic::error("function not found")
-                .with_msg_span(format!("function '{}' not found", ident), ident.span());
-
-            Err(err)
+            return Ok(function);
         }
+
+        let auto_include = &self.program[self.program.auto_include];
+
+        if let Some(&function) = auto_include.functions.get(&ident) {
+            return Ok(function);
+        }
+
+        let err = Diagnostic::error("function not found")
+            .with_msg_span(format!("function '{}' not found", ident), ident.span());
+
+        Err(err)
     }
 
     fn assert_generic_length(

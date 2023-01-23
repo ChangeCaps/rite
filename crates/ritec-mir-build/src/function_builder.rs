@@ -1,5 +1,7 @@
 use std::ops::{Index, IndexMut};
 
+use ritec_core::Arena;
+use ritec_hir as hir;
 use ritec_mir as mir;
 
 use crate::thir;
@@ -27,14 +29,16 @@ macro_rules! unpack {
 pub struct FunctionBuilder<'a> {
     pub thir: &'a thir::Body,
     pub mir: mir::Body,
+    pub classes: &'a Arena<hir::Class>,
     pub break_block: Option<mir::BlockId>,
 }
 
 impl<'a> FunctionBuilder<'a> {
-    pub fn new(thir: &'a thir::Body) -> Self {
+    pub fn new(thir: &'a thir::Body, classes: &'a Arena<hir::Class>) -> Self {
         Self {
             thir,
             mir: mir::Body::new(),
+            classes,
             break_block: None,
         }
     }
@@ -47,6 +51,7 @@ impl<'a> FunctionBuilder<'a> {
         block = self.build_block(block, entry_block);
 
         if !self[block].is_terminated() {
+            self.drop_stack(block);
             self[block].terminate(mir::Terminator::Return(mir::Operand::VOID));
         }
 
@@ -63,6 +68,12 @@ impl<'a> FunctionBuilder<'a> {
         }
 
         block_id
+    }
+
+    pub fn drop_stack(&mut self, block: mir::BlockId) {
+        for id in self.thir.locals.keys() {
+            self[block].push_drop(mir::Operand::Move(mir::Place::local(id)));
+        }
     }
 
     pub fn new_block(&mut self) -> mir::BlockId {

@@ -2,11 +2,16 @@ use std::ops::{Index, IndexMut};
 
 use ritec_core::Arena;
 
-use crate::{build_intrinsic_bitcast, Class, ClassId, Function, FunctionId, Module, ModuleId};
+use crate::{
+    build_intrinsic_alignof, build_intrinsic_bitcast, build_intrinsic_free, build_intrinsic_malloc,
+    build_intrinsic_memcpy, build_intrinsic_sizeof, Class, ClassId, Function, FunctionId, Module,
+    ModuleId,
+};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Program {
     pub root_module: ModuleId,
+    pub auto_include: ModuleId,
     pub modules: Arena<Module>,
     pub classes: Arena<Class>,
     pub functions: Arena<Function>,
@@ -19,9 +24,11 @@ impl Program {
         let functions = Arena::new();
 
         let root_module = modules.push(Module::new());
+        let auto_include = modules.push(Module::new());
 
         Self {
             root_module,
+            auto_include,
             modules,
             classes,
             functions,
@@ -31,12 +38,17 @@ impl Program {
     pub fn add_function(&mut self, function: Function) -> FunctionId {
         let ident = function.ident.clone();
         let id = self.functions.push(function);
-        self.modules[self.root_module].functions.insert(ident, id);
+        self.modules[self.auto_include].functions.insert(ident, id);
         id
     }
 
     pub fn add_intrinsics(&mut self) {
         self.add_function(build_intrinsic_bitcast());
+        self.add_function(build_intrinsic_sizeof());
+        self.add_function(build_intrinsic_alignof());
+        self.add_function(build_intrinsic_malloc());
+        self.add_function(build_intrinsic_free());
+        self.add_function(build_intrinsic_memcpy());
     }
 }
 

@@ -1,6 +1,6 @@
 use ritec_core::{Id, Ident, Span};
 
-use crate::{Block, Generics, ModuleId, Type};
+use crate::{Block, Expr, Generics, ModuleId, Type};
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Item {
@@ -39,6 +39,7 @@ impl Items {
 pub struct Field {
     pub ident: Ident,
     pub ty: Type,
+    pub init: Option<Expr>,
     pub span: Span,
 }
 

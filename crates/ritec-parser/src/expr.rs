@@ -68,14 +68,14 @@ impl Parse for ast::InitField {
     }
 }
 
-impl Parse for ast::InitExpr {
+impl Parse for ast::ClassInitExpr {
     fn parse(parser: ParseStream) -> ParseResult<Self> {
         let span = parser.span();
         let path = parser.parse()?;
         let mut contents = parser.delim(Delimiter::Brace)?;
         let fields = contents.parse_comma_separated()?;
 
-        Ok(ast::InitExpr {
+        Ok(ast::ClassInitExpr {
             class: path,
             fields,
             span,
@@ -228,7 +228,7 @@ impl Parse for ast::WhileExpr {
 
 fn parse_term(parser: ParseStream) -> ParseResult<ast::Expr> {
     if let Some(expr) = parser.try_parse() {
-        Ok(ast::Expr::Init(expr))
+        Ok(ast::Expr::ClassInit(expr))
     } else if let Some(expr) = parser.try_parse() {
         Ok(ast::Expr::Path(expr))
     } else if let Some(literal) = parser.try_parse::<ast::LiteralExpr>() {
@@ -289,8 +289,24 @@ fn parse_unary(parser: ParseStream) -> ParseResult<ast::Expr> {
     }
 }
 
+fn parse_as(parser: ParseStream) -> ParseResult<ast::Expr> {
+    let mut expr = parse_unary(parser)?;
+
+    while parser.is(&KeywordKind::As) {
+        parser.next();
+        let ty = parser.parse()?;
+        expr = ast::Expr::As(ast::AsExpr {
+            expr: Box::new(expr),
+            ty,
+            span: parser.span(),
+        });
+    }
+
+    Ok(expr)
+}
+
 fn parse_binary(parser: ParseStream) -> ParseResult<ast::Expr> {
-    let lhs = parse_unary(parser)?;
+    let lhs = parse_as(parser)?;
 
     if let Some(operator) = parser.try_parse::<BinOp>() {
         let rhs = parse_binary(parser)?;

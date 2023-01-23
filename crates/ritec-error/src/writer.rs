@@ -14,6 +14,6 @@ impl<'a> ErrorWriter<'a> {
     }
 
     pub fn write(&self, writer: &mut dyn Write, error: &Diagnostic) -> io::Result<()> {
-        todo!()
+        Ok(())
     }
 }

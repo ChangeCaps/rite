@@ -140,6 +140,11 @@ impl<'a> Unifier<'a> {
             self.normalize_projections(argument);
         }
 
+        if !b.can_unify_with_apply(&a) {
+            let err = Diagnostic::error("cannot unify types");
+            return Err(err);
+        }
+
         (self.table).substitute(InferType::Var(b.clone()), InferType::Apply(a.clone()));
 
         Ok(())

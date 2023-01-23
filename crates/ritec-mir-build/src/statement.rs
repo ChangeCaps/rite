@@ -32,7 +32,7 @@ impl<'a> FunctionBuilder<'a> {
         let value = unpack!(block = self.as_value(block, expr));
 
         if !expr.ty().is_void() || matches!(expr, thir::Expr::Call(_) | thir::Expr::StaticCall(_)) {
-            self[block].terminate_drop(value);
+            self[block].push_drop(value);
         }
 
         block

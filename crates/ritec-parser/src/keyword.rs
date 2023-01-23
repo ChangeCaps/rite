@@ -67,6 +67,7 @@ keyword! {
     "let" => Let,
     "fn" => Fn,
     "if" => If,
+    "as" => As,
     "else" => Else,
     "return" => Return,
     "break" => Break,

@@ -6,8 +6,8 @@ use ritec_hir as hir;
 use ritec_mir as mir;
 
 use crate::{
-    Constraint, InferType, InferenceTable, Instance, ItemId, Modification, Normalize, Projection,
-    Solution, TypeProjection, TypeVariable, Unify,
+    As, Constraint, InferType, InferenceTable, Instance, ItemId, Modification, Normalize,
+    Projection, Solution, TypeProjection, TypeVariable, Unify,
 };
 
 #[allow(dead_code)]
@@ -218,21 +218,31 @@ impl<'a> Solver<'a> {
             return Ok(Some(ty));
         }
 
-        if let Some(ty) = self.table.normalize_shallow(&proj.base) {
-            let proj = TypeProjection {
+        if let Some(ty) = self.normalize(&proj.base)? {
+            let res = self.normalize_projection(&TypeProjection {
                 base: Box::new(ty),
                 proj: proj.proj.clone(),
-            };
+            })?;
 
-            return self.normalize_projection(&proj);
-        }
-
-        match proj.proj {
-            Projection::Field(id, ref field) => self.normalize_field(id, &proj.base, field),
-            Projection::Method(id, ref method, ref generics) => {
-                self.normalize_method(id, &proj.base, method, generics)
+            if let Some(ty) = res.clone() {
+                (self.table).substitute(InferType::Proj(proj.clone()), ty);
             }
+
+            return Ok(res);
         }
+
+        let res = match proj.proj {
+            Projection::Field(id, ref field) => self.normalize_field(id, &proj.base, field)?,
+            Projection::Method(id, ref method, ref generics) => {
+                self.normalize_method(id, &proj.base, method, generics)?
+            }
+        };
+
+        if let Some(res) = res.clone() {
+            self.table.substitute(InferType::Proj(proj.clone()), res);
+        }
+
+        Ok(res)
     }
 
     fn solve_normalize(&mut self, norm: Normalize) -> Result<Solution, Diagnostic> {
@@ -245,8 +255,74 @@ impl<'a> Solver<'a> {
             });
         };
 
-        (self.table).substitute(InferType::Proj(norm.proj), ty.clone());
         self.unify(ty, norm.expected)
+    }
+
+    fn solve_as(&mut self, ty: &InferType, expected: &InferType) -> Result<Solution, Diagnostic> {
+        trace!("as: {:?} as {:?}", ty, expected);
+
+        // always apply substitutions
+        if let Some(ty) = self.normalize(&ty)? {
+            return self.solve_as(&ty, expected);
+        } else if let Some(expected) = self.normalize(&expected)? {
+            return self.solve_as(ty, &expected);
+        }
+
+        // if ty == expected, we're done
+        if ty == expected {
+            return Ok(Solution {
+                is_solved: true,
+                constraint: Constraint::As(As::new(ty.clone(), expected.clone())),
+            });
+        }
+
+        let (InferType::Apply(ty), InferType::Apply(expected)) = (ty, expected) else {
+            return Ok(Solution {
+                is_solved: false,
+                constraint: Constraint::As(As::new(ty.clone(), expected.clone())),
+            });
+        };
+
+        match (&ty.item, &expected.item) {
+            /* pointer to pointer */
+            (ItemId::Pointer, ItemId::Pointer) => {}
+
+            /* pointer to int */
+            (ItemId::Int(_), ItemId::Pointer) => {}
+            (ItemId::Pointer, ItemId::Int(_)) => {}
+
+            /* int to int */
+            (ItemId::Int(_), ItemId::Int(_)) => {}
+
+            /* float to int */
+            (ItemId::Float(_), ItemId::Int(_)) => {}
+            (ItemId::Int(_), ItemId::Float(_)) => {}
+
+            /* float to float */
+            (ItemId::Float(_), ItemId::Float(_)) => {}
+            _ => {
+                let err = Diagnostic::error("invalid type cast")
+                    .with_msg_span("type cast on non-class type", Span::DUMMY);
+
+                return Err(err);
+            }
+        }
+
+        Ok(Solution {
+            is_solved: true,
+            constraint: Constraint::As(As::new(ty.clone(), expected.clone())),
+        })
+    }
+
+    fn normalize(&mut self, ty: &InferType) -> Result<Option<InferType>, Diagnostic> {
+        if let Some(ty) = self.table.normalize_shallow(&ty) {
+            return Ok(Some(ty));
+        }
+
+        match ty {
+            InferType::Proj(proj) => self.normalize_projection(proj),
+            _ => Ok(None),
+        }
     }
 
     pub fn solve(&mut self, constraint: impl Into<Constraint>) -> Result<Solution, Diagnostic> {
@@ -264,6 +340,7 @@ impl<'a> Solver<'a> {
         let result = match constraint {
             Constraint::Unify(unify) => self.solve_unify(unify),
             Constraint::Normalize(norm) => self.solve_normalize(norm),
+            Constraint::As(as_) => self.solve_as(&as_.ty, &as_.expected),
         };
 
         self.stack.pop().unwrap();
@@ -271,7 +348,7 @@ impl<'a> Solver<'a> {
         let solution = result?;
 
         if !solution.is_solved {
-            self.constraints.push_front(solution.constraint.clone());
+            self.constraints.push_back(solution.constraint.clone());
         }
 
         Ok(solution)
@@ -279,11 +356,7 @@ impl<'a> Solver<'a> {
 
     pub fn solve_all(&mut self) -> Result<(), Diagnostic> {
         while let Some(constraint) = self.constraints.pop_front() {
-            let solution = self.solve(constraint)?;
-
-            if !solution.is_solved {
-                self.constraints.push_back(solution.constraint);
-            }
+            self.solve(constraint)?;
         }
 
         Ok(())
@@ -295,14 +368,6 @@ impl<'a> Solver<'a> {
         b: impl Into<InferType>,
     ) -> Result<Solution, Diagnostic> {
         self.solve(Constraint::Unify(Unify::new(a, b)))
-    }
-
-    pub fn normalize(
-        &mut self,
-        proj: impl Into<TypeProjection>,
-        expected: impl Into<InferType>,
-    ) -> Result<Solution, Diagnostic> {
-        self.solve(Constraint::Normalize(Normalize::new(proj, expected)))
     }
 
     pub fn register_type(&mut self, id: hir::HirId, hir: &hir::Type) -> InferType {

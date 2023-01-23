@@ -14,14 +14,45 @@ impl<'a> FunctionBuilder<'a> {
 
                 BlockAnd::new(block, place)
             }
-            thir::Expr::Init(expr) => {
+            thir::Expr::ClassInit(expr) => {
+                let class = &self.classes[expr.class.class.cast()];
+
                 let place = self.push_temp(expr.ty.clone());
 
+                let mut fields = Vec::new();
+
                 for (field, init) in expr.fields.iter() {
+                    if fields.contains(&field.cast()) {
+                        continue;
+                    }
+
                     let mut place = place.clone();
                     place.proj.push(mir::Projection::Field(*field));
 
                     let value = unpack!(block = self.as_value(block, &self.thir[*init]));
+                    self[block].push_assign(place, value);
+
+                    fields.push(*field);
+                }
+
+                for (id, field) in class.fields.iter() {
+                    if fields.contains(&id.cast()) {
+                        continue;
+                    }
+
+                    let Some(init) = field.init else {
+                        continue;
+                    };
+
+                    let mut place = place.clone();
+                    place.proj.push(mir::Projection::Field(id.cast()));
+
+                    let init = mir::Operand::Constant(mir::Constant::Function(
+                        init.cast(),
+                        expr.class.generics.clone(),
+                    ));
+                    let value = mir::Value::Call(init, vec![]);
+
                     self[block].push_assign(place, value);
                 }
 
@@ -50,7 +81,13 @@ impl<'a> FunctionBuilder<'a> {
             }
             thir::Expr::Literal(_)
             | thir::Expr::Function(_)
+            | thir::Expr::As(_)
             | thir::Expr::Bitcast(_)
+            | thir::Expr::Sizeof(_)
+            | thir::Expr::Alignof(_)
+            | thir::Expr::Malloc(_)
+            | thir::Expr::Free(_)
+            | thir::Expr::Memcpy(_)
             | thir::Expr::Call(_)
             | thir::Expr::StaticCall(_)
             | thir::Expr::Unary(_)

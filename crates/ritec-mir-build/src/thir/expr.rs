@@ -11,9 +11,15 @@ pub enum Expr {
     Local(LocalExpr),
     Literal(LiteralExpr),
     Function(FunctionExpr),
-    Init(InitExpr),
+    ClassInit(ClassInitExpr),
     Field(FieldExpr),
+    As(AsExpr),
     Bitcast(BitcastExpr),
+    Sizeof(SizeofExpr),
+    Alignof(AlignofExpr),
+    Malloc(MallocExpr),
+    Free(FreeExpr),
+    Memcpy(MemcpyExpr),
     Call(CallExpr),
     StaticCall(StaticCallExpr),
     Unary(UnaryExpr),
@@ -32,9 +38,15 @@ impl Expr {
             Expr::Local(expr) => &expr.ty,
             Expr::Literal(expr) => &expr.ty,
             Expr::Function(expr) => &expr.ty,
-            Expr::Init(expr) => &expr.ty,
+            Expr::ClassInit(expr) => &expr.ty,
             Expr::Field(expr) => &expr.ty,
+            Expr::As(expr) => &expr.ty,
             Expr::Bitcast(expr) => &expr.ty,
+            Expr::Sizeof(expr) => &expr.ty,
+            Expr::Alignof(expr) => &expr.ty,
+            Expr::Malloc(expr) => &expr.ty,
+            Expr::Free(expr) => &expr.ty,
+            Expr::Memcpy(expr) => &expr.ty,
             Expr::Call(expr) => &expr.ty,
             Expr::StaticCall(expr) => &expr.ty,
             Expr::Unary(expr) => &expr.ty,
@@ -53,9 +65,15 @@ impl Expr {
             Expr::Local(expr) => expr.span,
             Expr::Literal(expr) => expr.span,
             Expr::Function(expr) => expr.span,
-            Expr::Init(expr) => expr.span,
+            Expr::ClassInit(expr) => expr.span,
             Expr::Field(expr) => expr.span,
+            Expr::As(expr) => expr.span,
             Expr::Bitcast(expr) => expr.span,
+            Expr::Sizeof(expr) => expr.span,
+            Expr::Alignof(expr) => expr.span,
+            Expr::Malloc(expr) => expr.span,
+            Expr::Free(expr) => expr.span,
+            Expr::Memcpy(expr) => expr.span,
             Expr::Call(expr) => expr.span,
             Expr::StaticCall(expr) => expr.span,
             Expr::Unary(expr) => expr.span,
@@ -93,7 +111,7 @@ pub struct FunctionExpr {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct InitExpr {
+pub struct ClassInitExpr {
     pub class: ClassType,
     pub fields: Vec<(FieldId, ExprId)>,
     pub ty: Type,
@@ -109,8 +127,54 @@ pub struct FieldExpr {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+pub struct AsExpr {
+    pub expr: ExprId,
+    pub into: Type,
+    pub ty: Type,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
 pub struct BitcastExpr {
     pub expr: ExprId,
+    pub ty: Type,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct SizeofExpr {
+    pub item: Type,
+    pub ty: Type,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct AlignofExpr {
+    pub item: Type,
+    pub ty: Type,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct MallocExpr {
+    pub item: Type,
+    pub count: ExprId,
+    pub ty: Type,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct FreeExpr {
+    pub expr: ExprId,
+    pub ty: Type,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct MemcpyExpr {
+    pub dst: ExprId,
+    pub src: ExprId,
+    pub size: ExprId,
     pub ty: Type,
     pub span: Span,
 }

@@ -16,7 +16,12 @@ impl<'a> FunctionBuilder<'a> {
         match expr {
             thir::Expr::Literal(expr) => match &expr.literal {
                 Literal::Null(_) => {
-                    let value = mir::Operand::Constant(mir::Constant::Null);
+                    let mir::Type::Pointer(ref ty) = expr.ty else {
+                        unreachable!("expected pointer type");
+                    };
+
+                    let null = mir::Constant::Null(ty.pointee().clone());
+                    let value = mir::Operand::Constant(null);
                     BlockAnd::new(block, value)
                 }
                 Literal::Bool(lit) => {
@@ -24,8 +29,8 @@ impl<'a> FunctionBuilder<'a> {
                     BlockAnd::new(block, constant)
                 }
                 Literal::Int(lit) => {
-                    let mir::Type::Int(ty) = &expr.ty else {
-                        unreachable!()
+                    let mir::Type::Int(ref ty) = expr.ty else {
+                        unreachable!("{}", expr.ty);
                     };
 
                     let constant = mir::Operand::Constant(mir::Constant::Integer(
@@ -35,7 +40,7 @@ impl<'a> FunctionBuilder<'a> {
                     BlockAnd::new(block, constant)
                 }
                 Literal::Float(lit) => {
-                    let mir::Type::Float(ty) = &expr.ty else {
+                    let mir::Type::Float(ref ty) = expr.ty else {
                         unreachable!("{}", expr.ty)
                     };
 
@@ -91,9 +96,15 @@ impl<'a> FunctionBuilder<'a> {
                 BlockAnd::new(exit_block, mir::Operand::VOID)
             }
             thir::Expr::Local(_)
-            | thir::Expr::Init(_)
+            | thir::Expr::ClassInit(_)
             | thir::Expr::Field(_)
+            | thir::Expr::As(_)
             | thir::Expr::Bitcast(_)
+            | thir::Expr::Sizeof(_)
+            | thir::Expr::Alignof(_)
+            | thir::Expr::Malloc(_)
+            | thir::Expr::Free(_)
+            | thir::Expr::Memcpy(_)
             | thir::Expr::Call(_)
             | thir::Expr::StaticCall(_)
             | thir::Expr::Unary(_)

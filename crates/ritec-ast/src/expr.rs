@@ -7,8 +7,9 @@ pub enum Expr {
     Paren(ParenExpr),
     Path(PathExpr),
     Literal(LiteralExpr),
-    Init(InitExpr),
+    ClassInit(ClassInitExpr),
     Field(FieldExpr),
+    As(AsExpr),
     Call(CallExpr),
     Unary(UnaryExpr),
     Binary(BinaryExpr),
@@ -27,8 +28,9 @@ impl Expr {
             Self::Paren(expr) => expr.span,
             Self::Path(expr) => expr.span,
             Self::Literal(expr) => expr.span,
-            Self::Init(expr) => expr.span,
+            Self::ClassInit(expr) => expr.span,
             Self::Field(expr) => expr.span,
+            Self::As(expr) => expr.span,
             Self::Call(expr) => expr.span,
             Self::Unary(expr) => expr.span,
             Self::Binary(expr) => expr.span,
@@ -76,7 +78,7 @@ pub struct InitField {
 }
 
 #[derive(Clone, Debug, PartialEq)]
-pub struct InitExpr {
+pub struct ClassInitExpr {
     pub class: PathType,
     pub fields: Vec<InitField>,
     pub span: Span,
@@ -87,6 +89,13 @@ pub struct FieldExpr {
     pub class: Box<Expr>,
     pub field: Ident,
     pub generics: Vec<Type>,
+    pub span: Span,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct AsExpr {
+    pub expr: Box<Expr>,
+    pub ty: Type,
     pub span: Span,
 }
 

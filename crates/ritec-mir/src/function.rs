@@ -47,7 +47,12 @@ impl Display for Function {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let generics: Vec<_> = self.generics.iter().map(Generic::to_string).collect();
 
-        write!(f, "fn {}<{}>(", self.ident, generics.join(", "))?;
+        write!(f, "fn {}", self.ident)?;
+        if generics.is_empty() {
+            write!(f, "(")?;
+        } else {
+            write!(f, "<{}>(", generics.join(", "))?;
+        }
 
         for (i, arg) in self.arguments.iter().enumerate() {
             if i > 0 {

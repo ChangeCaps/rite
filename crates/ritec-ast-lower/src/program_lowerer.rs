@@ -169,18 +169,26 @@ impl<'a> ProgramLowerer<'a> {
     ) -> Result<(), Diagnostic> {
         let mut class = self.program[id].clone();
         let module = self.cast_module(item.module);
-        let resolver = Resolver {
-            program: &self.program,
-            generics: &class.generics,
-            module,
-        };
 
         for field in item.fields.iter() {
+            let resolver = Resolver {
+                program: &self.program,
+                generics: &class.generics,
+                module,
+            };
+
             let ty = resolver.resolve_type(&field.ty)?;
+
+            let init = if field.init.is_some() {
+                Some(self.program.functions.reserve())
+            } else {
+                None
+            };
 
             let field = hir::Field {
                 ident: field.ident.clone(),
                 ty,
+                init,
                 span: field.span,
             };
 
@@ -479,6 +487,14 @@ impl<'a> ProgramLowerer<'a> {
     pub fn complete_methods(&mut self, id: hir::ClassId, class: &ast::Class) -> Result<(), ()> {
         let mut has_failed = false;
 
+        for (i, field) in class.fields.iter().enumerate() {
+            let field_id = hir::FieldId::from_raw_index(i);
+            if let Err(err) = self.complete_field(id, field_id, class, field) {
+                self.emitter.emit(err.into());
+                has_failed = true;
+            }
+        }
+
         for (i, method) in class.methods.iter().enumerate() {
             let function_id = self.program[id].methods[hir::MethodId::from_raw_index(i)].function;
 
@@ -493,6 +509,51 @@ impl<'a> ProgramLowerer<'a> {
         } else {
             Ok(())
         }
+    }
+
+    pub fn complete_field(
+        &mut self,
+        class_id: hir::ClassId,
+        field_id: hir::FieldId,
+        class: &ast::Class,
+        field: &ast::Field,
+    ) -> Result<(), Diagnostic> {
+        let Some(ref init) = field.init else {
+            return Ok(());
+        };
+
+        let module = self.cast_module(class.module);
+        let hir_class = &self.program[class_id];
+
+        let resolver = Resolver {
+            program: self.program,
+            generics: &hir_class.generics,
+            module,
+        };
+
+        let mut body = hir::Body::new();
+        let mut body_lowerer = BodyLowerer::new(&mut body, resolver);
+
+        let init = body_lowerer.lower_expr(init)?;
+        let expr = body.return_expr(Some(init));
+        body.expr_stmt(expr);
+
+        let function = hir::Function {
+            ident: Ident::new(
+                format!("{}__{}__init", class.ident, field.ident),
+                field.ident.span(),
+            ),
+            generics: hir_class.generics.clone(),
+            arguments: Vec::new(),
+            return_type: hir_class[field_id].ty.clone(),
+            body,
+            span: field.span,
+        };
+
+        let init = hir_class[field_id].init.unwrap();
+        self.program.functions.insert(init, function);
+
+        Ok(())
     }
 
     pub fn complete_function(

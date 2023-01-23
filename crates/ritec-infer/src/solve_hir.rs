@@ -2,7 +2,9 @@ use ritec_core::{Literal, UnaryOp};
 use ritec_error::Diagnostic;
 use ritec_hir as hir;
 
-use crate::{InferType, Instance, ItemId, Projection, Solver, TypeProjection, TypeVariableKind};
+use crate::{
+    As, InferType, Instance, ItemId, Projection, Solver, TypeProjection, TypeVariableKind,
+};
 
 impl<'a> Solver<'a> {
     pub fn solve_body(&mut self, body: &hir::Body) -> Result<(), Diagnostic> {
@@ -64,9 +66,15 @@ impl<'a> Solver<'a> {
             hir::Expr::Local(expr) => self.solve_local_expr(body, expr)?,
             hir::Expr::Literal(expr) => self.solve_literal_expr(body, expr)?,
             hir::Expr::Function(expr) => self.solve_function_expr(body, expr)?,
-            hir::Expr::Init(expr) => self.solve_init_expr(body, expr)?,
+            hir::Expr::ClassInit(expr) => self.solve_init_expr(body, expr)?,
             hir::Expr::Field(expr) => self.solve_field_expr(body, expr)?,
+            hir::Expr::As(expr) => self.solve_as_expr(body, expr)?,
             hir::Expr::Bitcast(expr) => self.solve_bitcast_expr(body, expr)?,
+            hir::Expr::Sizeof(expr) => self.solve_sizeof_expr(body, expr)?,
+            hir::Expr::Alignof(expr) => self.solve_alignof_expr(body, expr)?,
+            hir::Expr::Malloc(expr) => self.solve_malloc_expr(body, expr)?,
+            hir::Expr::Free(expr) => self.solve_free_expr(body, expr)?,
+            hir::Expr::Memcpy(expr) => self.solve_memcpy_expr(body, expr)?,
             hir::Expr::Call(expr) => self.solve_call_expr(body, expr)?,
             hir::Expr::MethodCall(expr) => self.solve_method_call_expr(body, expr)?,
             hir::Expr::Unary(expr) => self.solve_unary_expr(body, expr)?,
@@ -143,7 +151,7 @@ impl<'a> Solver<'a> {
     pub fn solve_init_expr(
         &mut self,
         body: &hir::Body,
-        expr: &hir::InitExpr,
+        expr: &hir::ClassInitExpr,
     ) -> Result<InferType, Diagnostic> {
         let class = &self.program()[expr.class.class];
 
@@ -184,6 +192,20 @@ impl<'a> Solver<'a> {
         Ok(InferType::Proj(proj))
     }
 
+    pub fn solve_as_expr(
+        &mut self,
+        body: &hir::Body,
+        expr: &hir::AsExpr,
+    ) -> Result<InferType, Diagnostic> {
+        let ty = self.table_mut().infer_hir(&expr.ty, &Instance::empty());
+        self.table_mut().register_generic(expr.id, ty.clone());
+
+        let expr = self.solve_expr(body, &body[expr.expr])?;
+        self.solve(As::new(expr, ty.clone()))?;
+
+        Ok(ty)
+    }
+
     pub fn solve_bitcast_expr(
         &mut self,
         body: &hir::Body,
@@ -191,6 +213,71 @@ impl<'a> Solver<'a> {
     ) -> Result<InferType, Diagnostic> {
         self.solve_expr(body, &body.exprs[expr.expr])?;
         Ok(self.table_mut().infer_hir(&expr.ty, &Instance::empty()))
+    }
+
+    pub fn solve_sizeof_expr(
+        &mut self,
+        _body: &hir::Body,
+        expr: &hir::SizeofExpr,
+    ) -> Result<InferType, Diagnostic> {
+        let ty = self.table_mut().infer_hir(&expr.ty, &Instance::empty());
+        self.table_mut().register_generic(expr.id, ty.clone());
+        Ok(InferType::USIZE)
+    }
+
+    pub fn solve_alignof_expr(
+        &mut self,
+        _body: &hir::Body,
+        expr: &hir::AlignofExpr,
+    ) -> Result<InferType, Diagnostic> {
+        let ty = self.table_mut().infer_hir(&expr.ty, &Instance::empty());
+        self.table_mut().register_generic(expr.id, ty.clone());
+        Ok(InferType::USIZE)
+    }
+
+    pub fn solve_malloc_expr(
+        &mut self,
+        body: &hir::Body,
+        expr: &hir::MallocExpr,
+    ) -> Result<InferType, Diagnostic> {
+        let count = self.solve_expr(body, &body.exprs[expr.count])?;
+        self.unify(count, InferType::USIZE)?;
+
+        let ty = self.table_mut().infer_hir(&expr.ty, &Instance::empty());
+        self.table_mut().register_generic(expr.id, ty.clone());
+
+        Ok(InferType::apply(ItemId::Pointer, [ty], expr.span))
+    }
+
+    pub fn solve_free_expr(
+        &mut self,
+        body: &hir::Body,
+        expr: &hir::FreeExpr,
+    ) -> Result<InferType, Diagnostic> {
+        let ptr = self.solve_expr(body, &body.exprs[expr.expr])?;
+
+        let var = InferType::Var(self.table_mut().new_variable(None));
+        self.unify(ptr, InferType::apply(ItemId::Pointer, [var], expr.span))?;
+
+        Ok(InferType::void(expr.span))
+    }
+
+    pub fn solve_memcpy_expr(
+        &mut self,
+        body: &hir::Body,
+        expr: &hir::MemcpyExpr,
+    ) -> Result<InferType, Diagnostic> {
+        let dst = self.solve_expr(body, &body.exprs[expr.dst])?;
+        let src = self.solve_expr(body, &body.exprs[expr.src])?;
+        let count = self.solve_expr(body, &body.exprs[expr.size])?;
+
+        let var = InferType::Var(self.table_mut().new_variable(None));
+        self.unify(dst.clone(), src)?;
+        self.unify(dst, InferType::apply(ItemId::Pointer, [var], expr.span))?;
+
+        self.unify(count, InferType::USIZE)?;
+
+        Ok(InferType::void(expr.span))
     }
 
     pub fn solve_call_expr(

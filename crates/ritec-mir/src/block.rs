@@ -49,6 +49,10 @@ impl Block {
         self.push(Statement::Assign(assign));
     }
 
+    pub fn push_drop(&mut self, value: impl Into<Value>) {
+        self.push(Statement::Drop(value.into()));
+    }
+
     pub fn terminate_return(&mut self, value: impl Into<Operand>) {
         self.terminate(Terminator::Return(value.into()));
     }
@@ -59,10 +63,6 @@ impl Block {
 
     pub fn terminate_switch(&mut self, value: impl Into<Operand>, targets: SwitchTargets) {
         self.terminate(Terminator::Switch(value.into(), targets));
-    }
-
-    pub fn terminate_drop(&mut self, value: impl Into<Value>) {
-        self.push(Statement::Drop(value.into()));
     }
 }
 

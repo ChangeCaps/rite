@@ -1,1 +1,43 @@
+class Vec<T> {
+	len: usize = 0,
+	cap: usize = 0,
+	ptr: *T = null,
 
+	fn grow_exact(&self, additional: usize) {
+		let new_cap = self.cap + additional;
+		
+		if self.cap == 0 {
+			self.ptr = malloc(new_cap);
+		} else {
+			let new_ptr = malloc(new_cap);
+			memcpy(new_ptr, self.ptr, self.len * sizeof<T>());
+			free(self.ptr);
+
+			self.ptr = new_ptr;
+		}
+
+		self.cap = new_cap;
+	}
+
+	fn grow(&self) {
+		if self.cap == 0 {
+			self.grow_exact(1);
+		} else {
+			self.grow_exact(self.cap);
+		}
+	}
+
+	fn get(&self, index: usize) -> *T {	
+		let offset = index * sizeof<T>();
+		return (self.ptr as usize + offset) as *T;
+	}
+
+	fn push(&self, item: T) {
+		if self.len == self.cap {
+			self.grow();
+		}
+
+		*self.get(self.len) = item;
+		self.len = self.len + 1;
+	}
+}

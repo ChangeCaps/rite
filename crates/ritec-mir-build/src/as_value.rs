@@ -6,12 +6,69 @@ use crate::{thir, unpack, BlockAnd, FunctionBuilder};
 impl<'a> FunctionBuilder<'a> {
     pub fn as_value(&mut self, mut block: mir::BlockId, expr: &thir::Expr) -> BlockAnd<mir::Value> {
         match expr {
+            thir::Expr::As(expr) => {
+                let value = unpack!(block = self.as_operand(block, &self.thir[expr.expr]));
+                let from = self.thir[expr.expr].ty();
+                let to = expr.ty.clone();
+
+                let intrinsic = match (from, &to) {
+                    (_, _) if *from == to => return BlockAnd::new(block, mir::Value::Use(value)),
+                    (mir::Type::Pointer(from), mir::Type::Pointer(to)) => {
+                        mir::Intrinsic::PtrToPtr(value, from.clone(), to.clone())
+                    }
+                    (mir::Type::Pointer(from), mir::Type::Int(to)) => {
+                        mir::Intrinsic::PtrToInt(value, from.clone(), to.clone())
+                    }
+                    (mir::Type::Int(from), mir::Type::Pointer(to)) => {
+                        mir::Intrinsic::IntToPtr(value, from.clone(), to.clone())
+                    }
+                    (mir::Type::Int(from), mir::Type::Int(to)) => {
+                        mir::Intrinsic::IntToInt(value, from.clone(), to.clone())
+                    }
+                    (mir::Type::Float(from), mir::Type::Float(to)) => {
+                        mir::Intrinsic::FloatToFloat(value, from.clone(), to.clone())
+                    }
+                    (mir::Type::Float(from), mir::Type::Int(to)) => {
+                        mir::Intrinsic::FloatToInt(value, from.clone(), to.clone())
+                    }
+                    (mir::Type::Int(from), mir::Type::Float(to)) => {
+                        mir::Intrinsic::IntToFloat(value, from.clone(), to.clone())
+                    }
+                    _ => unreachable!(),
+                };
+
+                let value = mir::Value::Intrinsic(intrinsic);
+                BlockAnd::new(block, value)
+            }
             thir::Expr::Bitcast(expr) => {
                 let value = unpack!(block = self.as_operand(block, &self.thir[expr.expr]));
-                BlockAnd::new(
-                    block,
-                    mir::Value::Cast(mir::Cast::Bit(expr.ty.clone()), value),
-                )
+                let bitcast = mir::Intrinsic::Bitcast(value, expr.ty.clone());
+                BlockAnd::new(block, mir::Value::Intrinsic(bitcast))
+            }
+            thir::Expr::Sizeof(expr) => {
+                let size = mir::Intrinsic::Sizeof(expr.ty.clone());
+                BlockAnd::new(block, mir::Value::Intrinsic(size))
+            }
+            thir::Expr::Alignof(expr) => {
+                let align = mir::Intrinsic::Alignof(expr.ty.clone());
+                BlockAnd::new(block, mir::Value::Intrinsic(align))
+            }
+            thir::Expr::Malloc(expr) => {
+                let count = unpack!(block = self.as_operand(block, &self.thir[expr.count]));
+                let malloc = mir::Intrinsic::Malloc(count, expr.item.clone());
+                BlockAnd::new(block, mir::Value::Intrinsic(malloc))
+            }
+            thir::Expr::Free(expr) => {
+                let ptr = unpack!(block = self.as_operand(block, &self.thir[expr.expr]));
+                let free = mir::Intrinsic::Free(ptr);
+                BlockAnd::new(block, mir::Value::Intrinsic(free))
+            }
+            thir::Expr::Memcpy(expr) => {
+                let dst = unpack!(block = self.as_operand(block, &self.thir[expr.dst]));
+                let src = unpack!(block = self.as_operand(block, &self.thir[expr.src]));
+                let size = unpack!(block = self.as_operand(block, &self.thir[expr.size]));
+                let memcpy = mir::Intrinsic::Memcpy(dst, src, size);
+                BlockAnd::new(block, mir::Value::Intrinsic(memcpy))
             }
             thir::Expr::Unary(expr) if expr.operator == UnaryOp::Ref => {
                 let place = unpack!(block = self.as_place(block, &self.thir[expr.operand]));
@@ -96,7 +153,7 @@ impl<'a> FunctionBuilder<'a> {
             thir::Expr::Local(_)
             | thir::Expr::Literal(_)
             | thir::Expr::Function(_)
-            | thir::Expr::Init(_)
+            | thir::Expr::ClassInit(_)
             | thir::Expr::Field(_)
             | thir::Expr::Unary(_)
             | thir::Expr::Assign(_)
