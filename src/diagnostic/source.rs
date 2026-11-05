@@ -8,7 +8,7 @@ pub struct SourceId {
 
 #[derive(Clone, Debug)]
 pub struct Source {
-    pub path: PathBuf,
+    pub path:     PathBuf,
     pub contents: String,
 }
 

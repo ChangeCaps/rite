@@ -1,14 +1,14 @@
 use core::fmt;
 
 use crate::{
-    diagnostic::{Diagnostic, Reporter, Span},
+    diagnostic::{self, Diagnostic, Reporter, Span},
     parse::{Token, Tokens},
 };
 
 pub struct Parser<'a> {
     reporter: &'a dyn Reporter,
-    tokens: &'a Tokens,
-    index: usize,
+    tokens:   &'a Tokens,
+    index:    usize,
 }
 
 impl<'a> Parser<'a> {
@@ -42,9 +42,51 @@ impl<'a> Parser<'a> {
         span
     }
 
+    pub fn consume_while(&mut self, f: impl Fn(Token) -> bool) {
+        while f(self.peek()) {
+            self.consume();
+        }
+    }
+
+    pub fn consume_all(&mut self, token: Token) {
+        self.consume_while(|actual| actual == token);
+    }
+
+    pub fn expect(&mut self, token: Token) -> Span {
+        if self.peek() == token {
+            self.consume()
+        } else {
+            self.expected(token)
+        }
+    }
+
+    pub fn expect_any<const LEN: usize>(&mut self, tokens: [Token; LEN]) -> Span {
+        if tokens.iter().any(|token| self.peek() == *token) {
+            self.consume()
+        } else {
+            let token = self.peek();
+            let span = self.consume();
+
+            let diagnostic = Diagnostic::error(format!(
+                "expected any of {}",
+                tokens
+                    .iter()
+                    .map(Token::to_string)
+                    .map(|token| format!("`{token}`"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            ))
+            .label(span, format!("found `{token}`"));
+
+            self.reporter.report(diagnostic);
+
+            span
+        }
+    }
+
     pub fn expected(&mut self, expected: impl fmt::Display) -> Span {
         let token = self.peek();
-        let span = self.span();
+        let span = self.consume();
 
         let diagnostic = Diagnostic::error(format!("expected `{expected}`"))
             .label(span, format!("found `{token}`"));

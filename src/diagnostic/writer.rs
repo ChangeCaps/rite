@@ -3,13 +3,13 @@ use std::{
     path::PathBuf,
 };
 
-use crate::diagnostic::{Diagnostic, Label, Sources, Span};
+use crate::diagnostic::{Diagnostic, Label, Sources};
 
 use super::Severity;
 
 pub struct DiagnosticWriter<'a, W> {
     sources: &'a Sources,
-    writer: W,
+    writer:  W,
 }
 
 impl<'a, W> DiagnosticWriter<'a, W>
@@ -65,7 +65,11 @@ where
             label.column,
         )?;
 
-        writeln!(self.writer, "{}{BLUE}{BOLD}|", " ".repeat(indent + 1))?;
+        writeln!(
+            self.writer,
+            "{}{BLUE}{BOLD}|",
+            " ".repeat(indent + 1)
+        )?;
 
         let number = label.line.to_string();
 
@@ -77,7 +81,12 @@ where
             " ".repeat(indent - number.len() + 1),
         )?;
 
-        let highlight = line[label.line_start..label.line_end].chars().count();
+        let highlight = line
+            .get(label.line_start..label.line_end)
+            .into_iter()
+            .flat_map(str::chars)
+            .count()
+            .max(1);
 
         writeln!(
             self.writer,
@@ -122,10 +131,13 @@ where
                 line += 1;
             }
 
-            if offset > start {
+            if offset >= start {
                 if lines.is_empty() {
-                    let from_end = offset - start - 1;
-                    line_start = s.len() - from_end;
+                    line_start = s
+                        .len()
+                        .saturating_sub((offset - start).saturating_sub(1))
+                        .min(s.len());
+
                     column = s[..line_start].chars().count() + 1;
                 }
 
@@ -133,7 +145,7 @@ where
             }
 
             if offset >= end {
-                line_end = s.len() - (offset - end - 1);
+                line_end = s.len().saturating_sub(offset - end) + 1;
                 break;
             }
         }
@@ -152,13 +164,13 @@ where
 
 #[derive(Debug)]
 struct ResolvedLabel {
-    path: PathBuf,
-    line: usize,
-    column: usize,
+    path:       PathBuf,
+    line:       usize,
+    column:     usize,
     line_start: usize,
-    line_end: usize,
-    lines: Vec<String>,
-    message: String,
+    line_end:   usize,
+    lines:      Vec<String>,
+    message:    String,
 }
 
 impl ResolvedLabel {

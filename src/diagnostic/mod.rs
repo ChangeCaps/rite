@@ -21,7 +21,7 @@ pub struct Diagnostic {
     location: &'static Location<'static>,
 
     severity: Severity,
-    message: String,
+    message:  String,
 
     labels: Vec<Label>,
 }
@@ -29,7 +29,7 @@ pub struct Diagnostic {
 #[derive(Debug)]
 pub struct Label {
     message: String,
-    span: Span,
+    span:    Span,
 }
 
 impl Diagnostic {

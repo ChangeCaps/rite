@@ -6,27 +6,49 @@ pub enum Token {
     Other(String),
 
     /* special */
+    Newline,
     Eof,
 
     /* keywords */
     Let,
 
-    /* symbols */
-    Equals,
+    /* two-character symbols */
+    ColonColon,
+    Arrow,
+
+    /* one-character symbols */
+    Under,
+    Equal,
     Backslash,
+    Star,
+    Slash,
+    Colon,
+    Semi,
     Dot,
 }
 
 impl Token {
     fn as_str(&self) -> &str {
         match self {
-            Token::Ident(ident) => ident,
-            Token::Other(other) => other,
-            Token::Eof => "end of file",
-            Token::Let => "let",
-            Token::Equals => "=",
-            Token::Backslash => "\\",
-            Token::Dot => ".",
+            Self::Ident(ident) => ident,
+            Self::Other(other) => other,
+            Self::Newline => "newline",
+            Self::Eof => "end of file",
+            Self::Let => "let",
+
+            /* two-character symbols */
+            Self::ColonColon => "::",
+            Self::Arrow => "->",
+
+            /* one-character symbols */
+            Self::Under => "_",
+            Self::Equal => "=",
+            Self::Backslash => "\\",
+            Self::Star => "*",
+            Self::Slash => "/",
+            Self::Colon => ":",
+            Self::Semi => ";",
+            Self::Dot => ".",
         }
     }
 }

@@ -1,25 +1,29 @@
 mod expr;
 mod item;
+mod stmt;
+mod ty;
 
 pub use expr::*;
 pub use item::*;
+pub use stmt::*;
+pub use ty::*;
 
 pub trait Phase {
-    type Name;
+    type Var;
     type Type;
 }
 
 pub struct Parse;
 
 impl Phase for Parse {
-    type Name = String;
+    type Var = String;
     type Type = ();
 }
 
 pub struct Rename;
 
 impl Phase for Rename {
-    type Name = ItemId;
+    type Var = Var;
     type Type = ();
 }
 

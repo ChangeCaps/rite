@@ -3,8 +3,8 @@ use crate::diagnostic::SourceId;
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct Span {
     pub source: SourceId,
-    pub start: u32,
-    pub end: u32,
+    pub start:  u32,
+    pub end:    u32,
 }
 
 impl Span {
@@ -17,8 +17,8 @@ impl Span {
 
         Self {
             source: self.source,
-            start: self.start.min(other.start),
-            end: self.end.max(other.end),
+            start:  self.start.min(other.start),
+            end:    self.end.max(other.end),
         }
     }
 }

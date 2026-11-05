@@ -11,7 +11,11 @@ pub fn lex(reporter: &dyn Reporter, source: SourceId, input: &str) -> Tokens {
         tokens.push(token);
     }
 
-    let eof = Span::new(source, lexer.offset as u32, lexer.offset as u32);
+    let eof = Span::new(
+        source,
+        lexer.offset as u32,
+        lexer.offset as u32,
+    );
 
     Tokens {
         tokens: tokens.into(),
@@ -21,12 +25,16 @@ pub fn lex(reporter: &dyn Reporter, source: SourceId, input: &str) -> Tokens {
 
 pub struct Tokens {
     tokens: Box<[(Token, Span)]>,
-    eof: Span,
+    eof:    Span,
 }
 
 impl Tokens {
     pub fn len(&self) -> usize {
         self.tokens.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.tokens.is_empty()
     }
 
     pub fn nth(&self, n: usize) -> (Token, Span) {
@@ -39,9 +47,9 @@ impl Tokens {
 
 struct Lexer<'a> {
     reporter: &'a dyn Reporter,
-    source: SourceId,
-    input: &'a str,
-    offset: usize,
+    source:   SourceId,
+    input:    &'a str,
+    offset:   usize,
 }
 
 impl<'a> Lexer<'a> {
@@ -102,20 +110,26 @@ impl<'a> Lexer<'a> {
 
         let c = self.peek()?;
 
-        if let Some(token) = self.ident(c).or_else(|| self.symbol(c)) {
+        if let Some(token) = self
+            .ident(c)
+            .or_else(|| self.two_character_symbol())
+            .or_else(|| self.one_character_symbol(c))
+        {
             return Some(token);
         }
 
         let span = self.consume();
 
-        let diagnostic = Diagnostic::error("invalid token").label(span, "found here");
+        let diagnostic =
+            Diagnostic::error(format!("unexpected character `{c}`")).label(span, "found here");
+
         self.reporter.report(diagnostic);
 
         Some((Token::Other(c.into()), span))
     }
 
     fn whitespace(&mut self) {
-        self.consume_while(char::is_whitespace);
+        self.consume_while(|c| c.is_whitespace() && c != '\n');
     }
 
     fn ident(&mut self, c: char) -> Option<(Token, Span)> {
@@ -133,11 +147,29 @@ impl<'a> Lexer<'a> {
         Some((token, span))
     }
 
-    fn symbol(&mut self, c: char) -> Option<(Token, Span)> {
+    fn two_character_symbol(&mut self) -> Option<(Token, Span)> {
+        let token = match self.remaining().get(..2).unwrap_or("") {
+            "::" => Token::ColonColon,
+            "->" => Token::Arrow,
+            _ => return None,
+        };
+
+        let span = self.consume().join(self.consume());
+
+        Some((token, span))
+    }
+
+    fn one_character_symbol(&mut self, c: char) -> Option<(Token, Span)> {
         let token = match c {
-            '.' => Token::Dot,
-            '=' => Token::Equals,
+            '\n' => Token::Newline,
             '\\' => Token::Backslash,
+            '_' => Token::Under,
+            '=' => Token::Equal,
+            '*' => Token::Star,
+            '/' => Token::Slash,
+            ':' => Token::Colon,
+            ';' => Token::Semi,
+            '.' => Token::Dot,
             _ => return None,
         };
 
