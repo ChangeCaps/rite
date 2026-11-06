@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Expr, Phase, Ty},
+    ast::{Expr, Phase, TypeLit},
     diagnostic::Span,
 };
 
@@ -26,7 +26,7 @@ where
     P: Phase,
 {
     pub var:  P::Var,
-    pub ty:   Ty<P>,
+    pub ty:   TypeLit<P>,
     pub span: Span,
 }
 

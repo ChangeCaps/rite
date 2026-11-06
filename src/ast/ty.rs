@@ -1,6 +1,6 @@
 use crate::{ast::Phase, diagnostic::Span};
 
-pub enum Ty<P>
+pub enum TypeLit<P>
 where
     P: Phase,
 {
@@ -27,8 +27,8 @@ pub struct LamTy<P>
 where
     P: Phase,
 {
-    pub input:  Box<Ty<P>>,
-    pub output: Box<Ty<P>>,
+    pub input:  Box<TypeLit<P>>,
+    pub output: Box<TypeLit<P>>,
     pub span:   Span,
 }
 
@@ -36,8 +36,8 @@ pub struct AppTy<P>
 where
     P: Phase,
 {
-    pub lambda: Box<Ty<P>>,
-    pub input:  Box<Ty<P>>,
+    pub lambda: Box<TypeLit<P>>,
+    pub input:  Box<TypeLit<P>>,
     pub span:   Span,
 }
 
@@ -45,17 +45,17 @@ pub struct ErrorTy {
     pub span: Span,
 }
 
-impl<P> Ty<P>
+impl<P> TypeLit<P>
 where
     P: Phase,
 {
     pub fn span(&self) -> Span {
         match self {
-            Ty::Ty(ty) => ty.span,
-            Ty::Var(ty) => ty.span,
-            Ty::Lam(ty) => ty.span,
-            Ty::App(ty) => ty.span,
-            Ty::Error(ty) => ty.span,
+            TypeLit::Ty(ty) => ty.span,
+            TypeLit::Var(ty) => ty.span,
+            TypeLit::Lam(ty) => ty.span,
+            TypeLit::App(ty) => ty.span,
+            TypeLit::Error(ty) => ty.span,
         }
     }
 }

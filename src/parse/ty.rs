@@ -1,5 +1,5 @@
 use crate::{
-    ast::{AppTy, ErrorTy, LamTy, Parse, Ty, TyTy, VarTy},
+    ast::{AppTy, ErrorTy, LamTy, Parse, TyTy, TypeLit, VarTy},
     parse::{Parser, Token},
 };
 
@@ -7,11 +7,11 @@ pub fn is_ty(token: Token) -> bool {
     matches!(token, Token::Ident(..) | Token::Star)
 }
 
-pub fn ty(parser: &mut Parser<'_>) -> Ty<Parse> {
+pub fn ty(parser: &mut Parser<'_>) -> TypeLit<Parse> {
     lambda_ty(parser)
 }
 
-pub fn lambda_ty(parser: &mut Parser<'_>) -> Ty<Parse> {
+pub fn lambda_ty(parser: &mut Parser<'_>) -> TypeLit<Parse> {
     let mut ty = apply_ty(parser);
 
     while parser.peek() == Token::Arrow {
@@ -20,7 +20,7 @@ pub fn lambda_ty(parser: &mut Parser<'_>) -> Ty<Parse> {
         let output = apply_ty(parser);
         let span = ty.span().join(output.span());
 
-        ty = Ty::Lam(LamTy {
+        ty = TypeLit::Lam(LamTy {
             input: Box::new(ty),
             output: Box::new(output),
             span,
@@ -30,14 +30,14 @@ pub fn lambda_ty(parser: &mut Parser<'_>) -> Ty<Parse> {
     ty
 }
 
-pub fn apply_ty(parser: &mut Parser<'_>) -> Ty<Parse> {
+pub fn apply_ty(parser: &mut Parser<'_>) -> TypeLit<Parse> {
     let mut ty = term_ty(parser);
 
     while is_ty(parser.peek()) {
         let input = term_ty(parser);
         let span = ty.span().join(input.span());
 
-        ty = Ty::App(AppTy {
+        ty = TypeLit::App(AppTy {
             lambda: Box::new(ty),
             input: Box::new(input),
             span,
@@ -47,15 +47,15 @@ pub fn apply_ty(parser: &mut Parser<'_>) -> Ty<Parse> {
     ty
 }
 
-pub fn term_ty(parser: &mut Parser<'_>) -> Ty<Parse> {
+pub fn term_ty(parser: &mut Parser<'_>) -> TypeLit<Parse> {
     match parser.peek() {
-        Token::Ident(name) => Ty::Var(var_ty(parser, name)),
+        Token::Ident(name) => TypeLit::Var(var_ty(parser, name)),
 
-        Token::Star => Ty::Ty(ty_ty(parser)),
+        Token::Star => TypeLit::Ty(ty_ty(parser)),
 
         _ => {
             let span = parser.expected("type");
-            Ty::Error(ErrorTy { span })
+            TypeLit::Error(ErrorTy { span })
         }
     }
 }

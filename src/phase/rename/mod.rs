@@ -1,20 +1,25 @@
 use crate::{
     ast::{
-        AppExpr, AppTy, AscribeStmt, AssignStmt, ErrorExpr, Expr, LamExpr, LamTy, LetExpr, Parse,
-        Rename, Stmt, Ty, Unique, Var, VarExpr, VarTy,
+        AppExpr, AppTy, AscribeStmt, AssignStmt, Assignment, ErrorExpr, Expr, LamExpr, LamTy,
+        LetExpr, Parse, Rename, RenamedModule, Stmt, TypeLit, Unique, Var, VarExpr, VarTy,
     },
     diagnostic::{Diagnostic, Reporter},
 };
 
-pub fn rename(reporter: &dyn Reporter, stmts: Vec<Stmt<Parse>>) -> Vec<Stmt<Rename>> {
+pub fn rename(reporter: &dyn Reporter, stmts: Vec<Stmt<Parse>>) -> RenamedModule {
     let mut state = State::new(reporter);
-    state.stmts(stmts)
+    state.stmts(stmts);
+
+    RenamedModule {
+        assignments: state.assignments,
+    }
 }
 
 struct State<'a> {
-    reporter: &'a dyn Reporter,
-    vars:     Vec<Var>,
-    tys:      Vec<Var>,
+    reporter:    &'a dyn Reporter,
+    vars:        Vec<Var>,
+    tys:         Vec<Var>,
+    assignments: Vec<Assignment<Rename>>,
 }
 
 impl<'a> State<'a> {
@@ -23,6 +28,7 @@ impl<'a> State<'a> {
             reporter,
             vars: Vec::new(),
             tys: Vec::new(),
+            assignments: Vec::new(),
         }
     }
 
@@ -46,23 +52,49 @@ impl<'a> State<'a> {
         self.tys.iter().rev().find(|var| var.ident == name)
     }
 
-    fn stmts(&mut self, stmts: Vec<Stmt<Parse>>) -> Vec<Stmt<Rename>> {
-        stmts.into_iter().map(|stmt| self.stmt(stmt)).collect()
-    }
+    fn stmts(&mut self, stmts: Vec<Stmt<Parse>>) {
+        let (assign, ascribe) = stmts.into_iter().fold(
+            (Vec::new(), Vec::new()),
+            |(mut assign, mut ascribe), stmt| {
+                match stmt {
+                    Stmt::Assign(stmt) => assign.push(stmt),
+                    Stmt::Ascribe(stmt) => ascribe.push(stmt),
+                    Stmt::Error(..) => {}
+                }
 
-    fn stmt(&mut self, stmt: Stmt<Parse>) -> Stmt<Rename> {
-        match stmt {
-            Stmt::Ascribe(stmt) => self.ascribe_stmt(stmt),
-            Stmt::Assign(stmt) => self.assign_stmt(stmt),
-            Stmt::Error(stmt) => Stmt::Error(stmt),
+                (assign, ascribe)
+            },
+        );
+
+        for stmt in assign {
+            self.assign_stmt(stmt);
+        }
+
+        for stmt in ascribe {
+            self.ascribe_stmt(stmt);
         }
     }
 
-    fn ascribe_stmt(&mut self, _stmt: AscribeStmt<Parse>) -> Stmt<Rename> {
-        todo!()
+    fn ascribe_stmt(&mut self, stmt: AscribeStmt<Parse>) {
+        let ty = self.ty(stmt.ty);
+
+        let Some(var) = self.find_var(&stmt.var) else {
+            let diagnostic = Diagnostic::error("undefined variable").label(stmt.span, "found here");
+            self.reporter.report(diagnostic);
+            return;
+        };
+
+        let unique = var.unique;
+        let assignment = self
+            .assignments
+            .iter_mut()
+            .find(|assignment| assignment.var.unique == unique)
+            .unwrap();
+
+        assignment.ty = Some(ty);
     }
 
-    fn assign_stmt(&mut self, stmt: AssignStmt<Parse>) -> Stmt<Rename> {
+    fn assign_stmt(&mut self, stmt: AssignStmt<Parse>) {
         let var = Var {
             ident:  stmt.var,
             unique: Unique::new(),
@@ -73,11 +105,12 @@ impl<'a> State<'a> {
 
         let expr = self.expr(stmt.expr);
 
-        Stmt::Assign(AssignStmt {
+        self.assignments.push(Assignment {
+            ty: None,
             var,
             expr,
             span: stmt.span,
-        })
+        });
     }
 
     fn expr(&mut self, expr: Expr<Parse>) -> Expr<Rename> {
@@ -179,19 +212,19 @@ impl<'a> State<'a> {
         })
     }
 
-    fn ty(&mut self, ty: Ty<Parse>) -> Ty<Rename> {
+    fn ty(&mut self, ty: TypeLit<Parse>) -> TypeLit<Rename> {
         match ty {
-            Ty::Ty(ty) => Ty::Ty(ty),
-            Ty::Var(ty) => self.var_ty(ty),
-            Ty::Lam(ty) => self.lam_ty(ty),
-            Ty::App(ty) => self.app_ty(ty),
-            Ty::Error(ty) => Ty::Error(ty),
+            TypeLit::Ty(ty) => TypeLit::Ty(ty),
+            TypeLit::Var(ty) => self.var_ty(ty),
+            TypeLit::Lam(ty) => self.lam_ty(ty),
+            TypeLit::App(ty) => self.app_ty(ty),
+            TypeLit::Error(ty) => TypeLit::Error(ty),
         }
     }
 
-    fn var_ty(&mut self, ty: VarTy<Parse>) -> Ty<Rename> {
+    fn var_ty(&mut self, ty: VarTy<Parse>) -> TypeLit<Rename> {
         match self.find_ty(&ty.var) {
-            Some(var) => Ty::Var(VarTy {
+            Some(var) => TypeLit::Var(VarTy {
                 var:  var.clone(),
                 span: ty.span,
             }),
@@ -205,27 +238,27 @@ impl<'a> State<'a> {
 
                 self.tys.push(var.clone());
 
-                Ty::Var(VarTy { var, span: ty.span })
+                TypeLit::Var(VarTy { var, span: ty.span })
             }
         }
     }
 
-    fn lam_ty(&mut self, ty: LamTy<Parse>) -> Ty<Rename> {
+    fn lam_ty(&mut self, ty: LamTy<Parse>) -> TypeLit<Rename> {
         let input = self.ty(*ty.input);
         let output = self.ty(*ty.output);
 
-        Ty::Lam(LamTy {
+        TypeLit::Lam(LamTy {
             input:  Box::new(input),
             output: Box::new(output),
             span:   ty.span,
         })
     }
 
-    fn app_ty(&mut self, ty: AppTy<Parse>) -> Ty<Rename> {
+    fn app_ty(&mut self, ty: AppTy<Parse>) -> TypeLit<Rename> {
         let lambda = self.ty(*ty.lambda);
         let input = self.ty(*ty.input);
 
-        Ty::App(AppTy {
+        TypeLit::App(AppTy {
             lambda: Box::new(lambda),
             input:  Box::new(input),
             span:   ty.span,
