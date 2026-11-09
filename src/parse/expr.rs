@@ -1,23 +1,136 @@
 use crate::{
-    ast::{AppExpr, ErrorExpr, Expr, LamExpr, LetExpr, Parse, VarExpr},
-    parse::{Parser, Token},
+    ast::{AppExpr, BinExpr, ErrorExpr, Expr, LamExpr, LetExpr, MatchArm, MatchExpr, VarExpr},
+    parse::{Parser, Token, operator, pat, precedence},
 };
 
 pub fn is_expr(parser: &Parser<'_>) -> bool {
     matches!(
         parser.peek(),
-        Token::Ident(..) | Token::Let | Token::Backslash,
+        Token::Ident(..) | Token::Match | Token::Let | Token::Backslash | Token::LParen,
     )
 }
 
-pub fn expr(parser: &mut Parser<'_>) -> Expr<Parse> {
+pub fn expr(parser: &mut Parser<'_>) -> Expr {
     match parser.peek() {
-        Token::Let => Expr::Let(let_expr(parser)),
-        _ => apply_expr(parser),
+        Token::Match => Expr::Match(match_expr(parser)),
+        Token::Newline => block_expr(parser),
+
+        _ => bin_expr(parser),
     }
 }
 
-pub fn apply_expr(parser: &mut Parser<'_>) -> Expr<Parse> {
+pub fn block_expr(parser: &mut Parser<'_>) -> Expr {
+    parser.expect(Token::Newline);
+    parser.consume_all(Token::Newline);
+    parser.expect(Token::Indent);
+
+    let expr = block(parser);
+
+    parser.consume_all(Token::Newline);
+    parser.expect(Token::Dedent);
+
+    expr
+}
+
+pub fn block(parser: &mut Parser<'_>) -> Expr {
+    match parser.peek() {
+        Token::Let => block_let(parser),
+        _ => expr(parser),
+    }
+}
+
+pub fn block_let(parser: &mut Parser<'_>) -> Expr {
+    let span = parser.expect(Token::Let);
+    let var = parser.expect_ident();
+
+    parser.expect(Token::Equal);
+
+    let input = expr(parser);
+
+    parser.consume_all(Token::Newline);
+
+    let output = block(parser);
+
+    Expr::Let(LetExpr {
+        var,
+        input: Box::new(input),
+        output: Box::new(output),
+        span,
+    })
+}
+
+pub fn match_expr(parser: &mut Parser<'_>) -> MatchExpr {
+    let span = parser.expect(Token::Match);
+    let input = expr(parser);
+
+    parser.expect(Token::Newline);
+    parser.consume_all(Token::Newline);
+    parser.expect(Token::Indent);
+
+    let mut arms = Vec::new();
+
+    while parser.peek() != Token::Dedent {
+        arms.push(match_arm(parser));
+        parser.consume_all(Token::Newline);
+    }
+
+    parser.expect(Token::Dedent);
+
+    MatchExpr {
+        input: Box::new(input),
+        arms,
+        span,
+    }
+}
+
+pub fn match_arm(parser: &mut Parser<'_>) -> MatchArm {
+    let pat = pat(parser);
+
+    parser.expect(Token::RArrow);
+
+    let output = expr(parser);
+    let span = pat.span().join(output.span());
+
+    MatchArm { pat, output, span }
+}
+
+pub fn bin_expr(parser: &mut Parser<'_>) -> Expr {
+    let lhs = app_expr(parser);
+
+    let Some(op) = operator(parser) else {
+        return lhs;
+    };
+
+    let rhs = bin_expr(parser);
+
+    let span = lhs.span().join(rhs.span());
+
+    if let Expr::Bin(ref right) = rhs
+        && precedence(&op) > precedence(&right.op)
+        && let Expr::Bin(rhs) = rhs
+    {
+        return Expr::Bin(BinExpr {
+            op:   rhs.op,
+            lhs:  Box::new(Expr::Bin(BinExpr {
+                op,
+                lhs: Box::new(lhs),
+                rhs: rhs.lhs,
+                span,
+            })),
+            rhs:  rhs.rhs,
+            span: rhs.span,
+        });
+    }
+
+    Expr::Bin(BinExpr {
+        op,
+        lhs: Box::new(lhs),
+        rhs: Box::new(rhs),
+        span,
+    })
+}
+
+pub fn app_expr(parser: &mut Parser<'_>) -> Expr {
     let mut expr = term_expr(parser);
 
     while is_expr(parser) {
@@ -27,7 +140,6 @@ pub fn apply_expr(parser: &mut Parser<'_>) -> Expr<Parse> {
         expr = Expr::App(AppExpr {
             lambda: Box::new(expr),
             input: Box::new(input),
-            ty: (),
             span,
         });
     }
@@ -35,79 +147,50 @@ pub fn apply_expr(parser: &mut Parser<'_>) -> Expr<Parse> {
     expr
 }
 
-pub fn term_expr(parser: &mut Parser<'_>) -> Expr<Parse> {
+pub fn term_expr(parser: &mut Parser<'_>) -> Expr {
     match parser.peek() {
-        Token::Ident(name) => Expr::Var(item_expr(parser, name)),
+        Token::Ident(..) => Expr::Var(item_expr(parser)),
         Token::Backslash => Expr::Lam(lambda_expr(parser)),
+        Token::LParen => paren_expr(parser),
 
         _ => {
             let span = parser.expected("expression");
-            Expr::Error(ErrorExpr { ty: (), span })
+            Expr::Error(ErrorExpr { span })
         }
     }
 }
 
-pub fn let_expr(parser: &mut Parser<'_>) -> LetExpr<Parse> {
-    let span = parser.expect(Token::Let);
-    let name = name(parser);
+pub fn paren_expr(parser: &mut Parser<'_>) -> Expr {
+    parser.expect(Token::LParen);
 
-    parser.expect(Token::Equal);
+    let expr = match operator(parser) {
+        Some(operator) => Expr::Var(VarExpr {
+            span: operator.span(),
+            var:  Some(operator),
+        }),
+        None => expr(parser),
+    };
 
-    let input = Box::new(expr(parser));
+    parser.expect(Token::RParen);
 
-    parser.expect_any([Token::Semi, Token::Newline]);
-    parser.consume_all(Token::Newline);
-
-    let output = Box::new(expr(parser));
-
-    let span = span.join(input.span());
-
-    LetExpr {
-        var: name,
-        input,
-        output,
-        ty: (),
-        span,
-    }
+    expr
 }
 
-pub fn lambda_expr(parser: &mut Parser<'_>) -> LamExpr<Parse> {
+pub fn lambda_expr(parser: &mut Parser<'_>) -> LamExpr {
     let span = parser.expect(Token::Backslash);
-    let input = name(parser);
+    let var = parser.expect_ident();
 
     parser.expect(Token::Dot);
 
     let output = Box::new(expr(parser));
     let span = span.join(output.span());
 
-    LamExpr {
-        var: input,
-        output,
-        ty: (),
-        span,
-    }
+    LamExpr { var, output, span }
 }
 
-pub fn item_expr(parser: &mut Parser<'_>, name: String) -> VarExpr<Parse> {
-    let span = parser.consume();
+pub fn item_expr(parser: &mut Parser<'_>) -> VarExpr {
+    let span = parser.span();
+    let var = parser.expect_ident();
 
-    VarExpr {
-        var: name,
-        ty: (),
-        span,
-    }
-}
-
-pub fn name(parser: &mut Parser<'_>) -> String {
-    match parser.peek() {
-        Token::Ident(name) => {
-            parser.consume();
-            name
-        }
-
-        _ => {
-            parser.expected("identifier");
-            String::new()
-        }
-    }
+    VarExpr { var, span }
 }

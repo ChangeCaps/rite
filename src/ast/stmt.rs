@@ -1,33 +1,64 @@
 use crate::{
-    ast::{Expr, Phase, TypeLit},
+    ast::{Expr, Kind, Ty},
     diagnostic::Span,
+    var::Ident,
 };
 
-pub enum Stmt<P>
-where
-    P: Phase,
-{
-    Assign(AssignStmt<P>),
-    Ascribe(AscribeStmt<P>),
+pub enum Stmt {
+    Define(DefineStmt),
+    Ascribe(AscribeStmt),
+    Type(TypeStmt),
+    Trait(TraitStmt),
+    Impl(ImplStmt),
     Error(ErrorStmt),
 }
 
-pub struct AssignStmt<P>
-where
-    P: Phase,
-{
-    pub var:  P::Var,
-    pub expr: Expr<P>,
+pub struct DefineStmt {
+    pub var:  Option<Ident>,
+    pub expr: Expr,
     pub span: Span,
 }
 
-pub struct AscribeStmt<P>
-where
-    P: Phase,
-{
-    pub var:  P::Var,
-    pub ty:   TypeLit<P>,
+pub struct AscribeStmt {
+    pub var:  Option<Ident>,
+    pub ty:   Ty,
     pub span: Span,
+}
+
+pub struct TypeStmt {
+    pub var:   Option<Ident>,
+    pub input: Vec<Option<Ident>>,
+    pub cons:  Vec<TypeCons>,
+    pub span:  Span,
+}
+
+pub struct TypeCons {
+    pub var:  Option<Ident>,
+    pub args: Vec<Ty>,
+    pub span: Span,
+}
+
+pub struct TraitStmt {
+    pub var:     Option<Ident>,
+    pub input:   Option<Ident>,
+    pub kind:    Option<Kind>,
+    pub members: Vec<TraitMember>,
+    pub span:    Span,
+}
+
+pub enum TraitMember {
+    Ascribe(AscribeStmt),
+}
+
+pub struct ImplStmt {
+    pub var:     Option<Ident>,
+    pub input:   Ty,
+    pub members: Vec<ImplMember>,
+    pub span:    Span,
+}
+
+pub enum ImplMember {
+    Assign(DefineStmt),
 }
 
 pub struct ErrorStmt {

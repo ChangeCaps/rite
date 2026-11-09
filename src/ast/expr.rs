@@ -1,74 +1,71 @@
-use crate::{ast::Phase, diagnostic::Span};
+use crate::{ast::Pat, diagnostic::Span, var::Ident};
 
-pub enum Expr<P>
-where
-    P: Phase,
-{
-    Let(LetExpr<P>),
-    Var(VarExpr<P>),
-    Lam(LamExpr<P>),
-    App(AppExpr<P>),
-    Error(ErrorExpr<P>),
+pub enum Expr {
+    Let(LetExpr),
+    Var(VarExpr),
+    Lam(LamExpr),
+    App(AppExpr),
+    Bin(BinExpr),
+    Match(MatchExpr),
+    Error(ErrorExpr),
 }
 
-pub struct LetExpr<P>
-where
-    P: Phase,
-{
-    pub var:    P::Var,
-    pub input:  Box<Expr<P>>,
-    pub output: Box<Expr<P>>,
-    pub ty:     P::Type,
+pub struct LetExpr {
+    pub var:    Option<Ident>,
+    pub input:  Box<Expr>,
+    pub output: Box<Expr>,
     pub span:   Span,
 }
 
-pub struct VarExpr<P>
-where
-    P: Phase,
-{
-    pub var:  P::Var,
-    pub ty:   P::Type,
+pub struct VarExpr {
+    pub var:  Option<Ident>,
     pub span: Span,
 }
 
-pub struct LamExpr<P>
-where
-    P: Phase,
-{
-    pub var:    P::Var,
-    pub output: Box<Expr<P>>,
-    pub ty:     P::Type,
+pub struct LamExpr {
+    pub var:    Option<Ident>,
+    pub output: Box<Expr>,
     pub span:   Span,
 }
 
-pub struct AppExpr<P>
-where
-    P: Phase,
-{
-    pub lambda: Box<Expr<P>>,
-    pub input:  Box<Expr<P>>,
-    pub ty:     P::Type,
+pub struct AppExpr {
+    pub lambda: Box<Expr>,
+    pub input:  Box<Expr>,
     pub span:   Span,
 }
 
-pub struct ErrorExpr<P>
-where
-    P: Phase,
-{
-    pub ty:   P::Type,
+pub struct BinExpr {
+    pub op:   Ident,
+    pub lhs:  Box<Expr>,
+    pub rhs:  Box<Expr>,
     pub span: Span,
 }
 
-impl<P> Expr<P>
-where
-    P: Phase,
-{
+pub struct MatchExpr {
+    pub input: Box<Expr>,
+    pub arms:  Vec<MatchArm>,
+    pub span:  Span,
+}
+
+pub struct MatchArm {
+    pub pat:    Pat,
+    pub output: Expr,
+    pub span:   Span,
+}
+
+pub struct ErrorExpr {
+    pub span: Span,
+}
+
+impl Expr {
     pub fn span(&self) -> Span {
         match self {
             Self::Let(expr) => expr.span,
             Self::Var(expr) => expr.span,
             Self::Lam(expr) => expr.span,
             Self::App(expr) => expr.span,
+            Self::Bin(expr) => expr.span,
+            Self::Match(expr) => expr.span,
             Self::Error(expr) => expr.span,
         }
     }

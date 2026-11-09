@@ -90,7 +90,7 @@ where
 
         writeln!(
             self.writer,
-            "{}{BLUE}{BOLD}|{}{RED}{} {}",
+            "{}{BLUE}{BOLD}|{}{RED}{} {}{RESET}",
             " ".repeat(indent + 1),
             " ".repeat(label.column),
             "^".repeat(highlight),
@@ -131,7 +131,7 @@ where
                 line += 1;
             }
 
-            if offset >= start {
+            if offset > start {
                 if lines.is_empty() {
                     line_start = s
                         .len()
@@ -144,7 +144,7 @@ where
                 lines.push(s.to_string());
             }
 
-            if offset >= end {
+            if offset > end {
                 line_end = s.len().saturating_sub(offset - end) + 1;
                 break;
             }

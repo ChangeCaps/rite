@@ -2,8 +2,11 @@ use std::{fs, io, path::PathBuf, sync::Mutex};
 
 use rite::{
     diagnostic::{DiagnosticWriter, Source, Sources},
+    lower,
     parse::{self, Parser},
-    phase,
+    rename,
+    runtime::Runtime,
+    typecheck,
 };
 
 fn main() {
@@ -19,10 +22,21 @@ fn main() {
     let tokens = parse::lex(&reporter, source, input);
     let mut parser = Parser::new(&reporter, &tokens);
     let stmts = parse::stmts(&mut parser);
-    let stmts = phase::rename(&reporter, stmts);
+
+    let module = rename::rename(&reporter, stmts);
+    let module = typecheck::typecheck(&reporter, module);
 
     let mut writer = DiagnosticWriter::new(&sources, io::stdout());
-    for diagnostic in reporter.into_inner().into_iter().flatten() {
-        writer.write(&diagnostic).unwrap();
+    for diagnostic in reporter.lock().as_deref().into_iter().flatten() {
+        writer.write(diagnostic).unwrap();
     }
+
+    let expr = lower::lower(module);
+
+    println!("{expr:?}");
+
+    let mut runtime = Runtime::new();
+    let output = runtime.run(&expr);
+
+    println!("{output:?}");
 }

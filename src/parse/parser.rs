@@ -1,8 +1,9 @@
 use core::fmt;
 
 use crate::{
-    diagnostic::{self, Diagnostic, Reporter, Span},
+    diagnostic::{Diagnostic, Reporter, Span},
     parse::{Token, Tokens},
+    var::Ident,
 };
 
 pub struct Parser<'a> {
@@ -57,6 +58,20 @@ impl<'a> Parser<'a> {
             self.consume()
         } else {
             self.expected(token)
+        }
+    }
+
+    pub fn expect_ident(&mut self) -> Option<Ident> {
+        match self.peek() {
+            Token::Ident(ident) => {
+                let span = self.consume();
+                Some(Ident::new(ident, span))
+            }
+
+            _ => {
+                self.expected("identifier");
+                None
+            }
         }
     }
 

@@ -1,2 +1,15 @@
-foo :: m a
-foo = foo
+trait add a
+  (+) :: a -> a -> a
+
+type nat = zero | succ nat
+
+impl add nat
+  (+) = \x. \y.
+    match x
+      zero -> y
+      succ x -> x + succ y
+
+one = succ zero
+two = one + one
+
+main = two + two

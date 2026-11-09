@@ -1,6 +1,8 @@
+use std::fmt;
+
 use crate::diagnostic::SourceId;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct Span {
     pub source: SourceId,
     pub start:  u32,
@@ -20,5 +22,11 @@ impl Span {
             start:  self.start.min(other.start),
             end:    self.end.max(other.end),
         }
+    }
+}
+
+impl fmt::Debug for Span {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}..{}", self.start, self.end)
     }
 }
