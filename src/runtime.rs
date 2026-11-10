@@ -8,10 +8,33 @@ use crate::{
 #[derive(Default)]
 pub struct Runtime {}
 
-#[derive(Clone, Debug)]
+#[derive(Clone)]
 pub enum Value<'a> {
     Lam(Env<'a>, &'a Var, &'a Expr),
     Cons(&'a Var, Vec<Thunk<'a>>),
+}
+
+impl fmt::Debug for Value<'_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            Self::Lam(..) => f.write_str("<lambda>"),
+            Self::Cons(cons, args) => {
+                if args.is_empty() {
+                    return cons.fmt(f);
+                }
+
+                f.write_str("(")?;
+                cons.fmt(f)?;
+
+                for arg in args {
+                    f.write_str(" ")?;
+                    arg.fmt(f)?;
+                }
+
+                f.write_str(")")
+            }
+        }
+    }
 }
 
 #[derive(Clone)]

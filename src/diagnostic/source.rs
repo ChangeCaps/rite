@@ -6,6 +6,10 @@ pub struct SourceId {
     data: u32,
 }
 
+impl SourceId {
+    pub const DUMMY: Self = Self { data: u32::MAX };
+}
+
 #[derive(Clone, Debug)]
 pub struct Source {
     pub path:     PathBuf,

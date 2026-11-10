@@ -144,7 +144,7 @@ impl fmt::Display for Var {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct Unique {
     data: u64,
 }
@@ -162,6 +162,12 @@ impl Unique {
         Self {
             data: NEXT.fetch_add(1, Ordering::SeqCst),
         }
+    }
+}
+
+impl fmt::Debug for Unique {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "u{}", self.data)
     }
 }
 

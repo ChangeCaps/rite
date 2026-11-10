@@ -20,7 +20,30 @@ where
         Self { sources, writer }
     }
 
-    pub fn write(&mut self, diagnostic: &Diagnostic) -> io::Result<()> {
+    pub fn write(&mut self, diagnostics: &[Diagnostic]) -> io::Result<()> {
+        let mut errors = 0;
+
+        for diagnostic in diagnostics {
+            match diagnostic.severity() {
+                Severity::Error => errors += 1,
+            }
+
+            self.diagnostic(diagnostic)?;
+        }
+
+        if errors > 0 {
+            let plural = if errors > 1 { "s" } else { "" };
+
+            writeln!(
+                self.writer,
+                "{RED}{BOLD}error{RESET}: failed to compile due to {errors} error{plural}",
+            )?;
+        }
+
+        Ok(())
+    }
+
+    fn diagnostic(&mut self, diagnostic: &Diagnostic) -> io::Result<()> {
         self.header(diagnostic)?;
 
         let labels = diagnostic
@@ -90,7 +113,7 @@ where
 
         writeln!(
             self.writer,
-            "{}{BLUE}{BOLD}|{}{RED}{} {}{RESET}",
+            "{}{BLUE}{BOLD}|{}{RED}{} {WHITE}{}{RESET}",
             " ".repeat(indent + 1),
             " ".repeat(label.column),
             "^".repeat(highlight),

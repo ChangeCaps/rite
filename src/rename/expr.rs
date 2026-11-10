@@ -1,13 +1,14 @@
 use crate::{
     ast,
     diagnostic::{Diagnostic, Span},
-    rename::{Pat, State, ValueKind},
+    rename::{Pat, Scope, State, Value, ValueKind, Vis},
     var::Var,
 };
 
 pub enum Expr {
     Let(LetExpr),
     Var(VarExpr),
+    Def(DefExpr),
     Cons(ConsExpr),
     Method(MethodExpr),
     Lam(LamExpr),
@@ -26,6 +27,12 @@ pub struct LetExpr {
 pub struct VarExpr {
     pub var:  Var,
     pub span: Span,
+}
+
+pub struct DefExpr {
+    pub var:      Var,
+    pub ascribed: bool,
+    pub span:     Span,
 }
 
 pub struct ConsExpr {
@@ -69,40 +76,62 @@ pub struct ErrorExpr {
 }
 
 impl State<'_> {
-    pub fn expr(&mut self, expr: ast::Expr) -> Expr {
+    pub fn expr(&mut self, scope: &Scope, expr: ast::Expr) -> Expr {
         match expr {
-            ast::Expr::Let(expr) => self.let_expr(expr),
-            ast::Expr::Var(expr) => self.var_expr(expr),
-            ast::Expr::Lam(expr) => self.lam_expr(expr),
-            ast::Expr::App(expr) => self.app_expr(expr),
-            ast::Expr::Bin(expr) => self.bin_expr(expr),
-            ast::Expr::Match(expr) => self.match_expr(expr),
-            ast::Expr::Error(expr) => self.error_expr(expr),
+            ast::Expr::Lit(expr) => self.lit_expr(scope, expr),
+            ast::Expr::Let(expr) => self.let_expr(scope, expr),
+            ast::Expr::Var(expr) => self.var_expr(scope, expr),
+            ast::Expr::Lam(expr) => self.lam_expr(scope, expr),
+            ast::Expr::App(expr) => self.app_expr(scope, expr),
+            ast::Expr::Bin(expr) => self.bin_expr(scope, expr),
+            ast::Expr::Match(expr) => self.match_expr(scope, expr),
+            ast::Expr::Error(expr) => self.error_expr(scope, expr),
         }
     }
 
-    fn let_expr(&mut self, expr: ast::LetExpr) -> Expr {
-        self.value_scope(|state| {
-            let input = Box::new(state.expr(*expr.input));
+    fn lit_expr(&mut self, _scope: &Scope, _expr: ast::LitExpr) -> Expr {
+        /*
+        let lit = match expr.lit {
+            ast::Lit::Str(_) => todo!(),
+            ast::Lit::Int(_) => todo!(),
+            ast::Lit::Real(_) => todo!(),
+        };
+        */
 
-            let name = Var::from(expr.var);
+        todo!()
+    }
 
-            state.values.push((name.clone(), ValueKind::Local));
+    fn let_expr(&mut self, scope: &Scope, expr: ast::LetExpr) -> Expr {
+        let input = self.expr(scope, *expr.input);
 
-            let output = Box::new(state.expr(*expr.output));
+        let mut scope = scope.clone();
+        let var = Var::from(expr.var);
 
-            Expr::Let(LetExpr {
-                var: name,
-                input,
-                output,
-                span: expr.span,
-            })
+        let value = Value {
+            vis:  Vis::Local,
+            var:  var.clone(),
+            kind: ValueKind::Local,
+        };
+
+        scope.values.push(value);
+
+        let output = self.expr(&scope, *expr.output);
+
+        Expr::Let(LetExpr {
+            var,
+            input: Box::new(input),
+            output: Box::new(output),
+            span: expr.span,
         })
     }
 
-    fn var_expr(&mut self, expr: ast::VarExpr) -> Expr {
-        if let Some((var, kind)) = self.find_value(expr.var.as_ref()) {
-            return self.var_to_expr(var.clone(), kind.clone(), expr.span);
+    fn var_expr(&mut self, scope: &Scope, expr: ast::VarExpr) -> Expr {
+        if let Some(value) = self.find_value(scope, expr.var.as_ref()) {
+            return self.var_to_expr(
+                value.var.clone(),
+                value.kind.clone(),
+                expr.span,
+            );
         }
 
         let diagnostic = Diagnostic::error("undefined variable").label(expr.span, "found here");
@@ -114,42 +143,64 @@ impl State<'_> {
 
     fn var_to_expr(&mut self, var: Var, kind: ValueKind, span: Span) -> Expr {
         match kind {
-            ValueKind::Local | ValueKind::Def => Expr::Var(VarExpr { var, span }),
+            ValueKind::Import(..) => todo!(),
+
+            ValueKind::Def => {
+                let def = self.defs.get(&var.unique()).unwrap();
+
+                Expr::Def(DefExpr {
+                    var,
+                    ascribed: def.ty.is_some(),
+                    span,
+                })
+            }
+
+            ValueKind::Local => Expr::Var(VarExpr { var, span }),
             ValueKind::Cons(type_) => Expr::Cons(ConsExpr { var, type_, span }),
             ValueKind::Method(trait_) => Expr::Method(MethodExpr { var, trait_, span }),
         }
     }
 
-    fn lam_expr(&mut self, expr: ast::LamExpr) -> Expr {
-        self.value_scope(|state| {
-            let input = Var::from(expr.var);
+    fn lam_expr(&mut self, scope: &Scope, expr: ast::LamExpr) -> Expr {
+        let var = Var::from(expr.var);
 
-            state.values.push((input.clone(), ValueKind::Local));
+        let value = Value {
+            vis:  Vis::Local,
+            var:  var.clone(),
+            kind: ValueKind::Local,
+        };
 
-            let output = Box::new(state.expr(*expr.output));
+        let mut scope = scope.clone();
+        scope.values.push(value);
 
-            Expr::Lam(LamExpr {
-                var: input,
-                output,
-                span: expr.span,
-            })
-        })
-    }
+        let output = self.expr(&scope, *expr.output);
 
-    fn app_expr(&mut self, expr: ast::AppExpr) -> Expr {
-        let lambda = Box::new(self.expr(*expr.lambda));
-        let input = Box::new(self.expr(*expr.input));
-
-        Expr::App(AppExpr {
-            lambda,
-            input,
+        Expr::Lam(LamExpr {
+            var,
+            output: Box::new(output),
             span: expr.span,
         })
     }
 
-    fn bin_expr(&mut self, expr: ast::BinExpr) -> Expr {
-        let op = match self.find_value(Some(&expr.op)) {
-            Some((var, kind)) => self.var_to_expr(var.clone(), kind.clone(), expr.span),
+    fn app_expr(&mut self, scope: &Scope, expr: ast::AppExpr) -> Expr {
+        let lambda = self.expr(scope, *expr.lambda);
+        let input = self.expr(scope, *expr.input);
+
+        Expr::App(AppExpr {
+            lambda: Box::new(lambda),
+            input:  Box::new(input),
+            span:   expr.span,
+        })
+    }
+
+    fn bin_expr(&mut self, scope: &Scope, expr: ast::BinExpr) -> Expr {
+        let op = match self.find_value(scope, Some(&expr.op)) {
+            Some(value) => self.var_to_expr(
+                value.var.clone(),
+                value.kind.clone(),
+                expr.span,
+            ),
+
             None => {
                 let diagnostic = Diagnostic::error("operator not defined").label(
                     expr.op.span(),
@@ -162,8 +213,8 @@ impl State<'_> {
             }
         };
 
-        let lhs = self.expr(*expr.lhs);
-        let rhs = self.expr(*expr.rhs);
+        let lhs = self.expr(scope, *expr.lhs);
+        let rhs = self.expr(scope, *expr.rhs);
 
         Expr::App(AppExpr {
             lambda: Box::new(Expr::App(AppExpr {
@@ -176,23 +227,23 @@ impl State<'_> {
         })
     }
 
-    fn match_expr(&mut self, expr: ast::MatchExpr) -> Expr {
-        let input = self.expr(*expr.input);
+    fn match_expr(&mut self, scope: &Scope, expr: ast::MatchExpr) -> Expr {
+        let input = self.expr(scope, *expr.input);
 
         let arms = expr
             .arms
             .into_iter()
             .map(|arm| {
-                self.value_scope(|state| {
-                    let pat = state.pat(arm.pat);
-                    let output = state.expr(arm.output);
+                let mut scope = scope.clone();
 
-                    MatchArm {
-                        pat,
-                        output,
-                        span: arm.span,
-                    }
-                })
+                let pat = self.pat(&mut scope, arm.pat);
+                let output = self.expr(&scope, arm.output);
+
+                MatchArm {
+                    pat,
+                    output,
+                    span: arm.span,
+                }
             })
             .collect();
 
@@ -203,7 +254,7 @@ impl State<'_> {
         })
     }
 
-    fn error_expr(&mut self, expr: ast::ErrorExpr) -> Expr {
+    fn error_expr(&mut self, _scope: &Scope, expr: ast::ErrorExpr) -> Expr {
         Expr::Error(ErrorExpr { span: expr.span })
     }
 }

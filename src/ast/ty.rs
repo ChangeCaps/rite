@@ -31,10 +31,10 @@ pub struct AppTy {
 
 #[derive(Debug)]
 pub struct WhereTy {
-    pub ty:    Box<Ty>,
-    pub input: Box<Ty>,
-    pub kind:  Kind,
-    pub span:  Span,
+    pub input:  Box<Ty>,
+    pub target: Box<Ty>,
+    pub kind:   Kind,
+    pub span:   Span,
 }
 
 #[derive(Debug)]

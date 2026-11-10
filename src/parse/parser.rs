@@ -61,6 +61,20 @@ impl<'a> Parser<'a> {
         }
     }
 
+    pub fn expect_str(&mut self) -> Option<String> {
+        match self.peek() {
+            Token::Str(str) => {
+                self.consume();
+                Some(str)
+            }
+
+            _ => {
+                self.expected("{str}");
+                None
+            }
+        }
+    }
+
     pub fn expect_ident(&mut self) -> Option<Ident> {
         match self.peek() {
             Token::Ident(ident) => {

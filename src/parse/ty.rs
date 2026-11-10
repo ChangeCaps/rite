@@ -28,8 +28,8 @@ pub fn where_ty(parser: &mut Parser<'_>) -> Ty {
         let span = ty.span().join(kind.span());
 
         ty = Ty::Where(WhereTy {
-            ty: Box::new(ty),
-            input: Box::new(input),
+            input: Box::new(ty),
+            target: Box::new(input),
             kind,
             span,
         });

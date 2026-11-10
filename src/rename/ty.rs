@@ -1,7 +1,7 @@
 use crate::{
     ast,
     diagnostic::Span,
-    rename::{Kind, State},
+    rename::{Kind, Scope, State},
     var::Var,
 };
 
@@ -9,6 +9,7 @@ pub enum Ty {
     Var(VarTy),
     Lam(LamTy),
     App(AppTy),
+    Prim(PrimTy),
     Where(WhereTy),
     Error(ErrorTy),
 }
@@ -30,11 +31,22 @@ pub struct AppTy {
     pub span:   Span,
 }
 
+pub struct PrimTy {
+    pub prim: TyPrim,
+    pub span: Span,
+}
+
+pub enum TyPrim {
+    Str,
+    Int,
+    Real,
+}
+
 pub struct WhereTy {
-    pub ty:    Box<Ty>,
-    pub input: Box<Ty>,
-    pub kind:  Kind,
-    pub span:  Span,
+    pub input:  Box<Ty>,
+    pub target: Box<Ty>,
+    pub kind:   Kind,
+    pub span:   Span,
 }
 
 pub struct ErrorTy {
@@ -42,18 +54,18 @@ pub struct ErrorTy {
 }
 
 impl State<'_> {
-    pub fn ty(&mut self, ty: ast::Ty) -> Ty {
+    pub fn ty(&self, scope: &mut Scope, ty: ast::Ty) -> Ty {
         match ty {
-            ast::Ty::Var(ty) => self.var_ty(ty),
-            ast::Ty::Lam(ty) => self.lam_ty(ty),
-            ast::Ty::App(ty) => self.app_ty(ty),
-            ast::Ty::Where(ty) => self.where_ty(ty),
-            ast::Ty::Error(ty) => self.error_ty(ty),
+            ast::Ty::Var(ty) => self.var_ty(scope, ty),
+            ast::Ty::Lam(ty) => self.lam_ty(scope, ty),
+            ast::Ty::App(ty) => self.app_ty(scope, ty),
+            ast::Ty::Where(ty) => self.where_ty(scope, ty),
+            ast::Ty::Error(ty) => self.error_ty(scope, ty),
         }
     }
 
-    fn var_ty(&mut self, ty: ast::VarTy) -> Ty {
-        match self.find_ty(ty.var.as_ref()) {
+    fn var_ty(&self, scope: &mut Scope, ty: ast::VarTy) -> Ty {
+        match self.find_ty(scope, ty.var.as_ref()) {
             Some(var) => Ty::Var(VarTy {
                 var:  var.clone(),
                 span: ty.span,
@@ -62,16 +74,16 @@ impl State<'_> {
             None => {
                 let var = Var::from(ty.var);
 
-                self.tys.push(var.clone());
+                scope.tys.push(var.clone());
 
                 Ty::Var(VarTy { var, span: ty.span })
             }
         }
     }
 
-    fn lam_ty(&mut self, ty: ast::LamTy) -> Ty {
-        let input = self.ty(*ty.input);
-        let output = self.ty(*ty.output);
+    fn lam_ty(&self, scope: &mut Scope, ty: ast::LamTy) -> Ty {
+        let input = self.ty(scope, *ty.input);
+        let output = self.ty(scope, *ty.output);
 
         Ty::Lam(LamTy {
             input:  Box::new(input),
@@ -80,9 +92,9 @@ impl State<'_> {
         })
     }
 
-    fn app_ty(&mut self, ty: ast::AppTy) -> Ty {
-        let lambda = self.ty(*ty.lambda);
-        let input = self.ty(*ty.input);
+    fn app_ty(&self, scope: &mut Scope, ty: ast::AppTy) -> Ty {
+        let lambda = self.ty(scope, *ty.lambda);
+        let input = self.ty(scope, *ty.input);
 
         Ty::App(AppTy {
             lambda: Box::new(lambda),
@@ -91,20 +103,20 @@ impl State<'_> {
         })
     }
 
-    fn where_ty(&mut self, where_ty: ast::WhereTy) -> Ty {
-        let ty = self.ty(*where_ty.ty);
-        let input = self.ty(*where_ty.input);
-        let kind = self.kind(where_ty.kind);
+    fn where_ty(&self, scope: &mut Scope, ty: ast::WhereTy) -> Ty {
+        let input = self.ty(scope, *ty.input);
+        let target = self.ty(scope, *ty.target);
+        let kind = self.kind(scope, ty.kind);
 
         Ty::Where(WhereTy {
-            ty: Box::new(ty),
             input: Box::new(input),
+            target: Box::new(target),
             kind,
-            span: where_ty.span,
+            span: ty.span,
         })
     }
 
-    fn error_ty(&mut self, ty: ast::ErrorTy) -> Ty {
+    fn error_ty(&self, _scope: &mut Scope, ty: ast::ErrorTy) -> Ty {
         Ty::Error(ErrorTy { span: ty.span })
     }
 }

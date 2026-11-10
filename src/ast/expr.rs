@@ -1,6 +1,7 @@
 use crate::{ast::Pat, diagnostic::Span, var::Ident};
 
 pub enum Expr {
+    Lit(LitExpr),
     Let(LetExpr),
     Var(VarExpr),
     Lam(LamExpr),
@@ -8,6 +9,17 @@ pub enum Expr {
     Bin(BinExpr),
     Match(MatchExpr),
     Error(ErrorExpr),
+}
+
+pub struct LitExpr {
+    pub lit:  Lit,
+    pub span: Span,
+}
+
+pub enum Lit {
+    Str(String),
+    Int(i64),
+    Real(f64),
 }
 
 pub struct LetExpr {
@@ -60,6 +72,7 @@ pub struct ErrorExpr {
 impl Expr {
     pub fn span(&self) -> Span {
         match self {
+            Self::Lit(expr) => expr.span,
             Self::Let(expr) => expr.span,
             Self::Var(expr) => expr.span,
             Self::Lam(expr) => expr.span,

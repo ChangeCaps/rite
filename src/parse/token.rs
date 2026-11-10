@@ -2,6 +2,9 @@ use std::fmt;
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Token {
+    Int(i64),
+    Real(f64),
+    Str(String),
     Ident(String),
     Other(String),
 
@@ -12,8 +15,11 @@ pub enum Token {
     Eof,
 
     /* keywords */
+    As,
     Impl,
+    Import,
     Let,
+    Local,
     Match,
     Trait,
     Type,
@@ -29,6 +35,7 @@ pub enum Token {
     LtPipe,
     RArrow,
     LArrow,
+    LtGt,
 
     /* one-character symbols */
     Under,
@@ -52,6 +59,10 @@ pub enum Token {
 impl Token {
     fn as_str(&self) -> &str {
         match self {
+            Self::Str(..) => "{str}",
+            Self::Int(..) => "{int}",
+            Self::Real(..) => "{real}",
+
             Self::Ident(ident) => ident,
             Self::Other(other) => other,
 
@@ -62,8 +73,11 @@ impl Token {
             Self::Eof => "end of file",
 
             /* keywords */
+            Self::As => "as",
             Self::Impl => "impl",
+            Self::Import => "import",
             Self::Let => "let",
+            Self::Local => "local",
             Self::Match => "match",
             Self::Trait => "trait",
             Self::Type => "type",
@@ -79,6 +93,7 @@ impl Token {
             Self::LtPipe => "<|",
             Self::RArrow => "->",
             Self::LArrow => "<-",
+            Self::LtGt => "<>",
 
             /* one-character symbols */
             Self::Under => "_",

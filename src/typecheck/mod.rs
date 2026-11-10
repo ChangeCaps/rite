@@ -21,16 +21,14 @@ pub use tycx::*;
 pub struct Module {
     pub tycx:    TyCx,
     pub kinds:   Kinds,
-    pub subst:   Subst,
     pub defs:    HashMap<Unique, Def>,
     pub methods: HashMap<Unique, TraitMethod>,
 }
 
 pub struct Def {
-    pub is_ascribed: bool,
-    pub var:         Var,
-    pub expr:        Expr,
-    pub span:        Span,
+    pub var:  Var,
+    pub expr: Expr,
+    pub span: Span,
 }
 
 pub struct TraitMethod {
@@ -39,7 +37,7 @@ pub struct TraitMethod {
     pub span:  Span,
 }
 
-pub fn typecheck(reporter: &dyn Reporter, module: rename::Module) -> Module {
+pub fn typecheck(reporter: &dyn Reporter, module: rename::Unit) -> Module {
     let state = State::new(reporter);
     state.module(module)
 }
@@ -48,7 +46,6 @@ struct State<'a> {
     reporter: &'a dyn Reporter,
     tycx:     TyCx,
     kinds:    Kinds,
-    subst:    Subst,
     defs:     HashMap<Unique, Def>,
     methods:  HashMap<Unique, TraitMethod>,
 }
@@ -59,13 +56,12 @@ impl<'a> State<'a> {
             reporter,
             tycx: TyCx::new(),
             kinds: Kinds::new(),
-            subst: Subst::new(),
             defs: HashMap::new(),
             methods: HashMap::new(),
         }
     }
 
-    fn module(mut self, module: rename::Module) -> Module {
+    fn module(mut self, mut module: rename::Unit) -> Module {
         for type_ in module.types.into_values() {
             self.add_type(type_);
         }
@@ -74,18 +70,27 @@ impl<'a> State<'a> {
             self.add_trait(trait_);
         }
 
+        for def in module.defs.values_mut() {
+            if let Some(rhs) = def.ty.take() {
+                let lhs = self.get_ty_var(def.var.clone());
+                let rhs = self.ty(rhs);
+
+                self.set_inferrable(&rhs, false);
+                self.unify(&lhs, &rhs, def.span);
+            }
+        }
+
         for impl_ in module.impls {
             self.add_impl(impl_);
         }
 
-        for assignment in module.assignments.into_values() {
-            self.add_assignment(assignment);
+        for def in module.defs.into_values() {
+            self.add_def(def);
         }
 
         Module {
             tycx:    self.tycx,
             kinds:   self.kinds,
-            subst:   self.subst,
             defs:    self.defs,
             methods: self.methods,
         }
@@ -137,12 +142,16 @@ impl<'a> State<'a> {
     fn add_trait(&mut self, trait_: rename::Trait) {
         let input = self.get_ty_var(trait_.input.clone());
 
-        let kind = Kind::Trait(trait_.var.clone());
-        self.unify_kind(&input, &kind, trait_.span);
+        let kind = Kind {
+            traits: vec![trait_.var.clone()],
+            ..Default::default()
+        };
+
+        self.require_kind(&input, &kind, trait_.span);
 
         if let Some(kind) = trait_.kind {
             let kind = self.kind(kind);
-            self.unify_kind(&input, &kind, trait_.span);
+            self.require_kind(&input, &kind, trait_.span);
         }
 
         for method in trait_.methods {
@@ -187,9 +196,9 @@ impl<'a> State<'a> {
         for member in impl_.methods {
             let ty = self.get_ty_var(member.var.clone());
             let ty = self.instantiate(subst.clone(), ty);
-            self.make_generic(&ty);
+            self.set_inferrable(&ty, false);
 
-            let expr = self.expr_up(member.expr, ty);
+            let expr = self.expr_up(member.expr, ty.clone());
 
             members.push(ImplMethod {
                 var: member.var,
@@ -207,71 +216,52 @@ impl<'a> State<'a> {
         }
     }
 
-    fn add_assignment(&mut self, assignment: rename::Def) {
-        let is_ascribed = assignment.ty.is_some();
+    fn add_def(&mut self, def: rename::Def) {
+        let expr = self.expr_down(def.expr);
 
-        let expr = if let Some(ty) = assignment.ty {
-            let ty = self.ty(ty);
-            self.make_generic(&ty);
-
-            self.expr_up(assignment.expr, ty)
-        } else {
-            self.expr_down(assignment.expr)
-        };
-
-        let var = self.get_ty_var(assignment.var.clone());
-        self.unify(&var, expr.ty(), assignment.span);
+        let var = self.get_ty_var(def.var.clone());
+        self.unify(&var, expr.ty(), def.span);
 
         let def = Def {
-            is_ascribed,
-            var: assignment.var,
+            var: def.var,
             expr,
-            span: assignment.span,
+            span: def.span,
         };
 
         self.defs.insert(def.var.unique(), def);
     }
 
     fn add_subst(&mut self, var: &Var, ty: Ty) {
-        self.subst.insert(var.unique(), ty);
+        let kind = self.kinds.entry(var.unique()).or_default();
+
+        debug_assert!(kind.subst.is_none());
+        kind.subst = Some(ty);
     }
 
     fn find_impl(&self, trait_: &Var, ty: &Ty) -> Option<&Impl> {
-        self.tycx.find_impl(&self.subst, trait_, ty)
+        self.tycx.find_impl(&self.kinds, trait_, ty)
     }
 
-    fn make_generic(&mut self, ty: &Ty) {
-        self.tycx.make_generic(&self.subst, ty);
+    fn set_inferrable(&mut self, ty: &Ty, inferrable: bool) {
+        self.tycx.set_inferrable(&mut self.kinds, ty, inferrable);
     }
 
     fn get_ty_var(&mut self, var: Var) -> Ty {
-        self.tycx.get_var(&self.subst, var)
+        self.tycx.get_var(&self.kinds, var)
     }
 
-    fn instantiate(&mut self, subst: Subst, ty: Ty) -> Ty {
+    fn instantiate(&mut self, subst: HashMap<Unique, Ty>, ty: Ty) -> Ty {
         self.tycx.instantiate(&mut self.kinds, subst, ty)
     }
 
-    fn unify_kind(&mut self, lhs: &Ty, rhs: &Kind, span: Span) {
-        if let Err(diagnostic) = self.tycx.unify_kind(
-            &mut self.kinds,
-            &self.subst,
-            lhs,
-            rhs,
-            span,
-        ) {
+    fn require_kind(&mut self, lhs: &Ty, rhs: &Kind, span: Span) {
+        if let Err(diagnostic) = self.tycx.require(&mut self.kinds, lhs, rhs, span) {
             self.reporter.report(diagnostic);
         }
     }
 
     fn unify(&mut self, lhs: &Ty, rhs: &Ty, span: Span) {
-        if let Err(diagnostic) = self.tycx.unify(
-            &mut self.kinds,
-            &mut self.subst,
-            lhs,
-            rhs,
-            span,
-        ) {
+        if let Err(diagnostic) = self.tycx.unify(&mut self.kinds, lhs, rhs, span) {
             self.reporter.report(diagnostic);
         }
     }

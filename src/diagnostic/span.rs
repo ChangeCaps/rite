@@ -10,6 +10,12 @@ pub struct Span {
 }
 
 impl Span {
+    pub const DUMMY: Self = Self {
+        source: SourceId::DUMMY,
+        start:  u32::MAX,
+        end:    u32::MAX,
+    };
+
     pub const fn new(source: SourceId, start: u32, end: u32) -> Self {
         Self { source, start, end }
     }

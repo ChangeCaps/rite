@@ -1,7 +1,7 @@
 use crate::{
     ast,
     diagnostic::{Diagnostic, Span},
-    rename::State,
+    rename::{Scope, State},
     var::Var,
 };
 
@@ -26,16 +26,16 @@ pub struct ErrorKind {
 }
 
 impl State<'_> {
-    pub fn kind(&mut self, kind: ast::Kind) -> Kind {
+    pub fn kind(&self, scope: &Scope, kind: ast::Kind) -> Kind {
         match kind {
-            ast::Kind::Var(kind) => self.var_kind(kind),
-            ast::Kind::Arity(kind) => self.arity_kind(kind),
-            ast::Kind::Error(kind) => self.error_kind(kind),
+            ast::Kind::Var(kind) => self.var_kind(scope, kind),
+            ast::Kind::Arity(kind) => self.arity_kind(scope, kind),
+            ast::Kind::Error(kind) => self.error_kind(scope, kind),
         }
     }
 
-    fn var_kind(&mut self, kind: ast::VarKind) -> Kind {
-        match self.find_kind(kind.var.as_ref()) {
+    fn var_kind(&self, scope: &Scope, kind: ast::VarKind) -> Kind {
+        match self.find_kind(scope, kind.var.as_ref()) {
             Some(var) => Kind::Var(VarKind {
                 var:  var.clone(),
                 span: kind.span,
@@ -50,14 +50,14 @@ impl State<'_> {
         }
     }
 
-    fn arity_kind(&mut self, kind: ast::ArityKind) -> Kind {
+    fn arity_kind(&self, _scope: &Scope, kind: ast::ArityKind) -> Kind {
         Kind::Arity(ArityKind {
             arity: kind.arity,
             span:  kind.span,
         })
     }
 
-    fn error_kind(&mut self, kind: ast::ErrorKind) -> Kind {
+    fn error_kind(&self, _scope: &Scope, kind: ast::ErrorKind) -> Kind {
         Kind::Error(ErrorKind { span: kind.span })
     }
 }

@@ -1,8 +1,8 @@
-use std::{collections::HashMap, mem};
+use std::collections::HashMap;
 
 use crate::{
     ir::{Alt, Expr},
-    typecheck::{self, Impl, Kinds, Module, Pat, Subst, Ty},
+    typecheck::{self, Impl, Module, Pat, Ty, TypeCons},
     var::{Unique, Var},
 };
 
@@ -22,8 +22,7 @@ pub fn lower(module: Module) -> Expr {
 
 struct State<'a> {
     module:  &'a Module,
-    kinds:   Kinds,
-    subst:   Subst,
+    subst:   HashMap<Unique, Ty>,
     defs:    HashMap<(Unique, Ty), Var>,
     globals: Vec<(Expr, Var)>,
 }
@@ -32,29 +31,81 @@ impl<'a> State<'a> {
     fn new(module: &'a Module) -> Self {
         Self {
             module,
-            kinds: module.kinds.clone(),
-            subst: module.subst.clone(),
+            subst: HashMap::new(),
             defs: HashMap::new(),
             globals: Vec::new(),
         }
     }
 
     fn format_ty(&self, ty: &Ty) -> String {
-        self.module.tycx.format_ty(&self.subst, ty)
+        self.module.tycx.format_ty(&self.module.kinds, ty)
     }
 
     fn find_impl(&self, trait_: &Var, ty: &Ty) -> Option<&'a Impl> {
-        self.module.tycx.find_impl(&self.subst, trait_, ty)
+        self.module.tycx.find_impl(&self.module.kinds, trait_, ty)
+    }
+
+    fn unify(&mut self, lhs: &Ty, rhs: &Ty) {
+        if let Some(lhs) = self.subst_shallow(lhs).cloned() {
+            return self.unify(&lhs, rhs);
+        } else if let Some(rhs) = self.subst_shallow(rhs).cloned() {
+            return self.unify(lhs, &rhs);
+        }
+
+        match (lhs, rhs) {
+            (Ty::Var(var), ty) => {
+                self.subst.insert(var.unique(), ty.clone());
+            }
+
+            (_, Ty::Var(_)) => unreachable!(),
+
+            (Ty::Cons(lhs_cons, lhs_args), Ty::Cons(rhs_cons, rhs_args)) => {
+                debug_assert_eq!(lhs_cons, rhs_cons);
+
+                for (lhs, rhs) in lhs_args.iter().zip(rhs_args) {
+                    self.unify(lhs, rhs);
+                }
+            }
+        }
+    }
+
+    fn subst_shallow(&self, ty: &Ty) -> Option<&Ty> {
+        match ty {
+            Ty::Var(var) => self.subst.get(&var.unique()).or_else(|| {
+                self.module
+                    .kinds
+                    .get(&var.unique())
+                    .and_then(|kind| kind.subst.as_ref())
+            }),
+
+            Ty::Cons(..) => None,
+        }
     }
 
     fn subst(&self, ty: Ty) -> Ty {
-        self.module.tycx.subst(&self.subst, ty)
+        if let Some(ty) = self.subst_shallow(&ty) {
+            return self.subst(ty.clone());
+        }
+
+        match ty {
+            Ty::Var(_) => ty,
+
+            Ty::Cons(cons, args) => {
+                let args = args.into_iter().map(|ty| self.subst(ty)).collect();
+                Ty::Cons(cons, args)
+            }
+        }
+    }
+
+    fn get_cons(&self, type_: &Var, var: &Var) -> &TypeCons {
+        self.module.tycx.get_cons(type_, var)
     }
 
     fn expr(&mut self, expr: &typecheck::Expr) -> Expr {
         match expr {
             typecheck::Expr::Let(expr) => self.let_expr(expr),
             typecheck::Expr::Var(expr) => self.var_expr(expr),
+            typecheck::Expr::Def(expr) => self.def_expr(expr),
             typecheck::Expr::Cons(expr) => self.cons_expr(expr),
             typecheck::Expr::Method(expr) => self.method_expr(expr),
             typecheck::Expr::Lam(expr) => self.lam_expr(expr),
@@ -76,47 +127,38 @@ impl<'a> State<'a> {
     }
 
     fn var_expr(&mut self, expr: &typecheck::VarExpr) -> Expr {
-        if let Some(def) = self.module.defs.get(&expr.var.unique()) {
-            let ty = self.subst(expr.ty.clone());
-            let key = (expr.var.unique(), ty.clone());
-
-            if let Some(var) = self.defs.get(&key) {
-                return Expr::Var(var.clone());
-            }
-
-            let var = Var::from(def.var.ident().cloned());
-            self.defs.insert(key, var.clone());
-
-            let mut subst = self.subst.clone();
-
-            self.module
-                .tycx
-                .unify(
-                    &mut self.kinds,
-                    &mut subst,
-                    &Ty::Var(def.var.clone()),
-                    &ty,
-                    expr.span,
-                )
-                .expect("unification shouldn't fail while lowering");
-
-            mem::swap(&mut self.subst, &mut subst);
-            let expr = self.expr(&def.expr);
-            mem::swap(&mut self.subst, &mut subst);
-
-            let ty = self.format_ty(&ty);
-            let expr = Expr::Note(ty, Box::new(expr));
-
-            self.globals.push((expr, var.clone()));
-
-            return Expr::Var(var);
-        }
-
         Expr::Var(expr.var.clone())
     }
 
+    fn def_expr(&mut self, expr: &typecheck::DefExpr) -> Expr {
+        let ty = self.subst(expr.ty.clone());
+        let key = (expr.var.unique(), ty.clone());
+
+        if let Some(var) = self.defs.get(&key) {
+            return Expr::Var(var.clone());
+        }
+
+        let def = self.module.defs.get(&expr.var.unique()).unwrap();
+
+        let var = Var::from(def.var.ident().cloned());
+        self.defs.insert(key, var.clone());
+
+        let subst = self.subst.clone();
+        self.unify(&Ty::Var(def.var.clone()), &ty);
+
+        let expr = self.expr(&def.expr);
+        self.subst = subst;
+
+        let ty = self.format_ty(&ty);
+        let expr = Expr::Note(ty, Box::new(expr));
+
+        self.globals.push((expr, var.clone()));
+
+        Expr::Var(var)
+    }
+
     fn cons_expr(&mut self, expr: &typecheck::ConsExpr) -> Expr {
-        let cons = self.module.tycx.get_cons(&expr.type_, &expr.var);
+        let cons = self.get_cons(&expr.type_, &expr.var);
         let args = cons.args.iter().map(|_| Var::unnamed()).collect::<Vec<_>>();
 
         let cons = Expr::Cons(
@@ -141,28 +183,17 @@ impl<'a> State<'a> {
         self.defs.insert(key, var.clone());
 
         let impl_ = self.find_impl(&expr.trait_, &expr.input).unwrap();
-        let impl_ = impl_
+        let method = impl_
             .methods
             .iter()
             .find(|method| method.var == expr.var)
             .unwrap();
 
-        let mut subst = self.subst.clone();
+        let subst = self.subst.clone();
+        self.unify(&Ty::Var(method.var.clone()), &ty);
 
-        self.module
-            .tycx
-            .unify(
-                &mut self.kinds,
-                &mut subst,
-                &Ty::Var(expr.var.clone()),
-                &ty,
-                expr.span,
-            )
-            .expect("unification shouldn't fail while lowering");
-
-        mem::swap(&mut self.subst, &mut subst);
-        let expr = self.expr(&impl_.expr);
-        mem::swap(&mut self.subst, &mut subst);
+        let expr = self.expr(&method.expr);
+        self.subst = subst;
 
         let ty = self.format_ty(&ty);
         let expr = Expr::Note(ty, Box::new(expr));

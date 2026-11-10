@@ -1,7 +1,7 @@
 use crate::{
     ast::{
-        AscribeStmt, DefineStmt, ErrorStmt, ImplMember, ImplStmt, Stmt, TraitMember, TraitStmt,
-        TypeCons, TypeStmt,
+        AscribeStmt, DefineStmt, ErrorStmt, ImplMember, ImplStmt, ImportStmt, Stmt, TraitMember,
+        TraitStmt, TypeCons, TypeStmt,
     },
     parse::{Parser, Token, expr, is_ty, kind, operator, term_ty, ty},
     var::Ident,
@@ -22,12 +22,27 @@ pub fn stmts(parser: &mut Parser<'_>) -> Vec<Stmt> {
 
 pub fn stmt(parser: &mut Parser<'_>) -> Stmt {
     match parser.peek() {
+        Token::Import => import_stmt(parser),
+        Token::Impl => impl_stmt(parser),
         Token::Type => type_stmt(parser),
         Token::Trait => trait_stmt(parser),
-        Token::Impl => impl_stmt(parser),
 
         _ => define_or_ascribe_stmt(parser),
     }
+}
+
+pub fn import_stmt(parser: &mut Parser<'_>) -> Stmt {
+    let span = parser.expect(Token::Import);
+    let path = parser.expect_str();
+
+    let alias = if parser.peek() == Token::As {
+        parser.consume();
+        parser.expect_ident()
+    } else {
+        None
+    };
+
+    Stmt::Import(ImportStmt { path, alias, span })
 }
 
 pub fn define_or_ascribe_stmt(parser: &mut Parser<'_>) -> Stmt {

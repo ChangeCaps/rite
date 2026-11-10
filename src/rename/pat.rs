@@ -1,7 +1,7 @@
 use crate::{
     ast,
     diagnostic::{Diagnostic, Span},
-    rename::{State, ValueKind},
+    rename::{Scope, State, Value, ValueKind, Vis},
     var::Var,
 };
 
@@ -27,21 +27,21 @@ pub struct ErrorPat {
 }
 
 impl State<'_> {
-    pub fn pat(&mut self, pat: ast::Pat) -> Pat {
+    pub fn pat(&mut self, scope: &mut Scope, pat: ast::Pat) -> Pat {
         match pat {
-            ast::Pat::Cons(pat) => self.cons_pat(pat),
-            ast::Pat::Error(pat) => self.error_pat(pat),
+            ast::Pat::Cons(pat) => self.cons_pat(scope, pat),
+            ast::Pat::Error(pat) => self.error_pat(scope, pat),
         }
     }
 
-    fn cons_pat(&mut self, pat: ast::ConsPat) -> Pat {
+    fn cons_pat(&mut self, scope: &mut Scope, pat: ast::ConsPat) -> Pat {
         let args = pat
             .args
             .into_iter()
-            .map(|arg| self.pat(arg))
+            .map(|arg| self.pat(scope, arg))
             .collect::<Vec<_>>();
 
-        if let Some(var) = self.find_cons(pat.var.as_ref()).cloned() {
+        if let Some(var) = self.find_cons(scope, pat.var.as_ref()).cloned() {
             return Pat::Cons(ConsPat {
                 var,
                 args,
@@ -57,7 +57,14 @@ impl State<'_> {
         };
 
         let var = Var::from(pat.var);
-        self.values.push((var.clone(), ValueKind::Local));
+
+        let value = Value {
+            vis:  Vis::Local,
+            var:  var.clone(),
+            kind: ValueKind::Local,
+        };
+
+        scope.values.push(value);
 
         Pat::Bind(BindPat {
             var:  Some(var),
@@ -65,7 +72,7 @@ impl State<'_> {
         })
     }
 
-    fn error_pat(&mut self, pat: ast::ErrorPat) -> Pat {
+    fn error_pat(&mut self, _scope: &mut Scope, pat: ast::ErrorPat) -> Pat {
         Pat::Error(ErrorPat { span: pat.span })
     }
 }

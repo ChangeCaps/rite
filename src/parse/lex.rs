@@ -172,6 +172,8 @@ impl<'a> Lexer<'a> {
 
         if let Some(token) = self
             .ident(c)
+            .or_else(|| self.number(c))
+            .or_else(|| self.string(c))
             .or_else(|| self.two_character_symbol())
             .or_else(|| self.one_character_symbol(c))
         {
@@ -200,8 +202,11 @@ impl<'a> Lexer<'a> {
         let (ident, span) = self.take_while(Self::is_ident_continue);
 
         let token = match ident.as_str() {
+            "as" => Token::As,
             "impl" => Token::Impl,
+            "import" => Token::Import,
             "let" => Token::Let,
+            "local" => Token::Local,
             "match" => Token::Match,
             "trait" => Token::Trait,
             "type" => Token::Type,
@@ -211,6 +216,38 @@ impl<'a> Lexer<'a> {
         };
 
         Some((token, span))
+    }
+
+    fn number(&mut self, c: char) -> Option<(Token, Span)> {
+        if !c.is_numeric() {
+            return None;
+        };
+
+        let (number, span) = self.take_while(char::is_numeric);
+        let int = number.parse::<i64>().unwrap();
+
+        Some((Token::Int(int), span))
+    }
+
+    fn string(&mut self, c: char) -> Option<(Token, Span)> {
+        if c != '\'' {
+            return None;
+        }
+
+        let start = self.consume();
+        let (string, span) = self.take_while(|c| c != '\'');
+
+        if self.remaining().is_empty() {
+            let span = start.join(span);
+
+            let diagnostic = Diagnostic::error("invalid string literal").label(span, "found here");
+            self.reporter.report(diagnostic);
+        }
+
+        let end = self.consume();
+        let span = start.join(end);
+
+        Some((Token::Str(string), span))
     }
 
     fn two_character_symbol(&mut self) -> Option<(Token, Span)> {
@@ -224,6 +261,8 @@ impl<'a> Lexer<'a> {
             "<|" => Token::LtPipe,
             "->" => Token::RArrow,
             "<-" => Token::LArrow,
+            "<>" => Token::LtGt,
+
             _ => return None,
         };
 

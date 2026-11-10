@@ -1,4 +1,7 @@
-use std::collections::{HashMap, HashSet, hash_map::Entry};
+use std::{
+    collections::{HashMap, HashSet},
+    hash::{DefaultHasher, Hash, Hasher},
+};
 
 use crate::{
     diagnostic::{Diagnostic, Span},
@@ -6,13 +9,12 @@ use crate::{
     var::{Unique, Var},
 };
 
-pub type Subst = HashMap<Unique, Ty>;
 pub type Kinds = HashMap<Unique, Kind>;
 
 pub struct TyCx {
-    pub types:   HashMap<Unique, Type>,
-    pub traits:  HashMap<Unique, Trait>,
-    pub generic: HashSet<Unique>,
+    pub types:  HashMap<Unique, Type>,
+    pub traits: HashMap<Unique, Trait>,
+    cache:      HashSet<u64>,
 }
 
 pub struct Type {
@@ -54,9 +56,9 @@ impl Default for TyCx {
 impl TyCx {
     pub fn new() -> Self {
         Self {
-            types:   HashMap::new(),
-            traits:  HashMap::new(),
-            generic: HashSet::new(),
+            types:  HashMap::new(),
+            traits: HashMap::new(),
+            cache:  HashSet::new(),
         }
     }
 
@@ -91,29 +93,27 @@ impl TyCx {
         trait_.impls[index].methods = members;
     }
 
-    pub fn make_generic(&mut self, subst: &Subst, ty: &Ty) {
+    pub fn set_inferrable(&self, kinds: &mut Kinds, ty: &Ty, inferrable: bool) {
         match ty {
-            Ty::Var(var) if let Some(ty) = subst.get(&var.unique()).cloned() => {
-                self.make_generic(subst, &ty);
+            Ty::Var(var) if let Some(ty) = Self::subst_shallow(kinds, var).cloned() => {
+                self.set_inferrable(kinds, &ty, inferrable);
             }
 
-            Ty::Var(var) => {
-                self.generic.insert(var.unique());
-            }
+            Ty::Var(var) => kinds.entry(var.unique()).or_default().inferrable = inferrable,
 
             Ty::Cons(_, args) => {
                 for arg in args {
-                    self.make_generic(subst, arg);
+                    self.set_inferrable(kinds, arg, inferrable);
                 }
             }
         }
     }
 
-    pub fn find_impl(&self, subst: &Subst, trait_: &Var, ty: &Ty) -> Option<&Impl> {
+    pub fn find_impl(&self, kinds: &Kinds, trait_: &Var, ty: &Ty) -> Option<&Impl> {
         self.traits[&trait_.unique()]
             .impls
             .iter()
-            .find(|impl_| self.check(subst, &impl_.input, ty))
+            .find(|impl_| self.matches(kinds, &impl_.input, ty))
     }
 
     #[track_caller]
@@ -139,8 +139,8 @@ impl TyCx {
             .expect("should only be called with valid `var`")
     }
 
-    pub fn get_var(&mut self, subst: &Subst, var: Var) -> Ty {
-        if let Some(subst) = subst.get(&var.unique()) {
+    pub fn get_var(&mut self, kinds: &Kinds, var: Var) -> Ty {
+        if let Some(subst) = Self::subst_shallow(kinds, &var) {
             return subst.clone();
         }
 
@@ -154,20 +154,16 @@ impl TyCx {
         Ty::Var(var)
     }
 
-    pub fn instantiate(&mut self, kinds: &mut Kinds, mut subst: HashMap<Unique, Ty>, ty: Ty) -> Ty {
-        fn recurse(
-            tycx: &mut TyCx,
-            kinds: &mut Kinds,
-            subst: &mut HashMap<Unique, Ty>,
-            ty: Ty,
-        ) -> Ty {
+    pub fn instantiate(&self, kinds: &mut Kinds, mut subst: HashMap<Unique, Ty>, ty: Ty) -> Ty {
+        fn recurse(kinds: &mut Kinds, subst: &mut HashMap<Unique, Ty>, ty: Ty) -> Ty {
             match ty {
                 Ty::Var(var) if let Some(subst) = subst.get(&var.unique()) => subst.clone(),
 
                 Ty::Var(var) => {
                     let new = Var::from(var.ident().cloned());
 
-                    if let Some(kind) = kinds.get(&var.unique()).cloned() {
+                    if let Some(mut kind) = kinds.get(&var.unique()).cloned() {
+                        kind.inferrable = true;
                         kinds.insert(new.unique(), kind);
                     }
 
@@ -179,7 +175,7 @@ impl TyCx {
                 Ty::Cons(con, args) => {
                     let args = args
                         .into_iter()
-                        .map(|arg| recurse(tycx, kinds, subst, arg))
+                        .map(|arg| recurse(kinds, subst, arg))
                         .collect();
 
                     Ty::Cons(con, args)
@@ -187,120 +183,136 @@ impl TyCx {
             }
         }
 
-        recurse(self, kinds, &mut subst, ty)
+        recurse(kinds, &mut subst, ty)
     }
 
-    pub fn unify_kind(
-        &self,
-        kinds: &mut Kinds,
-        subst: &Subst,
-        lhs: &Ty,
-        rhs: &Kind,
-        span: Span,
-    ) -> Result<(), Diagnostic> {
-        match lhs {
-            Ty::Var(var) => match subst.get(&var.unique()).cloned() {
-                Some(lhs) => self.unify_kind(kinds, subst, &lhs, rhs, span),
+    fn arity(kinds: &Kinds, ty: &Ty) -> usize {
+        match ty {
+            Ty::Var(var) => kinds
+                .get(&var.unique())
+                .and_then(|kind| kind.arity)
+                .expect("`arity` should only be called for types with valid arities"),
 
-                None => {
-                    match kinds.entry(var.unique()) {
-                        Entry::Occupied(mut entry) => {
-                            entry.get_mut().inter(rhs.clone());
-                        }
+            Ty::Cons(cons, args) => match cons {
+                Cons::Type(_, arity) => *arity,
+                Cons::App => Self::arity(kinds, &args[0]) - 1,
 
-                        Entry::Vacant(entry) => {
-                            entry.insert(rhs.clone());
-                        }
-                    }
-
-                    Ok(())
-                }
-            },
-
-            Ty::Cons(cons, args) => match rhs {
-                Kind::Inter(rhs) => {
-                    for rhs in rhs {
-                        self.unify_kind(kinds, subst, lhs, rhs, span)?;
-                    }
-
-                    Ok(())
-                }
-
-                Kind::Arity(arity) => {
-                    if matches!(cons, Cons::Type(_, a) if a == arity) {
-                        return Ok(());
-                    }
-
-                    if matches!(cons, Cons::App) {
-                        return self.unify_kind(
-                            kinds,
-                            subst,
-                            &args[0],
-                            &Kind::Arity(arity + 1),
-                            span,
-                        );
-                    }
-
-                    let kind = (0..=*arity).map(|_| "*").collect::<Vec<_>>().join(" -> ");
-
-                    Err(
-                        Diagnostic::error("kind mismatch").label(
-                            span,
-                            format!(
-                                "expected `{kind}` but found `{}`",
-                                self.format_ty(subst, lhs),
-                            ),
-                        ),
-                    )
-                }
-
-                Kind::Trait(var) => {
-                    if self.find_impl(subst, var, lhs).is_none() {
-                        let diagnostic = Diagnostic::error("kind mismatch").label(
-                            span,
-                            format!(
-                                "`{}` does not implement `{}`",
-                                self.format_ty(subst, lhs),
-                                var,
-                            ),
-                        );
-
-                        return Err(diagnostic);
-                    }
-
-                    Ok(())
-                }
+                _ => 0,
             },
         }
     }
 
-    pub fn unify(
-        &self,
+    pub fn require(
+        &mut self,
         kinds: &mut Kinds,
-        subst: &mut Subst,
+        ty: &Ty,
+        kind: &Kind,
+        span: Span,
+    ) -> Result<(), Diagnostic> {
+        let mut hasher = DefaultHasher::new();
+
+        ty.hash(&mut hasher);
+        kind.hash(&mut hasher);
+
+        let hash = hasher.finish();
+
+        if !self.cache.insert(hash) {
+            return Ok(());
+        }
+
+        match ty {
+            Ty::Var(var) => {
+                if let Some(ty) = Self::subst_shallow(kinds, var).cloned() {
+                    return self.require(kinds, &ty, kind, span);
+                }
+
+                kinds.entry(var.unique()).or_default().intersect(kind, span)
+            }
+
+            Ty::Cons(..) => {
+                if let Some(arity) = kind.arity
+                    && Self::arity(kinds, ty) != arity
+                {
+                    return Err(
+                        Diagnostic::error("kind mismatch").label(
+                            span,
+                            format!(
+                                "expected `{}` but found `{}`",
+                                Kind::format_arity(arity),
+                                self.format_ty(kinds, ty),
+                            ),
+                        ),
+                    );
+                }
+
+                for trait_ in &kind.traits {
+                    let Some(impl_) = self.find_impl(kinds, trait_, ty) else {
+                        let diagnostic = Diagnostic::error("kind mismatch").label(
+                            span,
+                            format!(
+                                "`{}` does not implement `{}`",
+                                self.format_ty(kinds, ty),
+                                trait_,
+                            ),
+                        );
+
+                        return Err(diagnostic);
+                    };
+
+                    if let Ty::Var(ref var) = impl_.input
+                        && let Some(kind) = kinds.get(&var.unique()).cloned()
+                    {
+                        self.require(kinds, ty, &kind, span)?;
+                    }
+                }
+
+                Ok(())
+            }
+        }
+    }
+
+    pub fn unify(
+        &mut self,
+        kinds: &mut Kinds,
         lhs: &Ty,
         rhs: &Ty,
         span: Span,
     ) -> Result<(), Diagnostic> {
+        let mut hasher = DefaultHasher::new();
+
+        lhs.hash(&mut hasher);
+        rhs.hash(&mut hasher);
+
+        let hash = hasher.finish();
+
+        if !self.cache.insert(hash) {
+            return Ok(());
+        }
+
         if lhs == rhs {
             return Ok(());
         }
 
         match (lhs, rhs) {
-            (Ty::Var(lhs), rhs) if let Some(lhs) = subst.get(&lhs.unique()).cloned() => {
-                self.unify(kinds, subst, &lhs, rhs, span)
+            (Ty::Var(lhs), rhs) if let Some(lhs) = Self::subst_shallow(kinds, lhs).cloned() => {
+                self.unify(kinds, &lhs, rhs, span)
             }
 
-            (lhs, Ty::Var(rhs)) if let Some(rhs) = subst.get(&rhs.unique()).cloned() => {
-                self.unify(kinds, subst, lhs, &rhs, span)
+            (lhs, Ty::Var(rhs)) if let Some(rhs) = Self::subst_shallow(kinds, rhs).cloned() => {
+                self.unify(kinds, lhs, &rhs, span)
             }
 
-            (Ty::Var(var), ty) | (ty, Ty::Var(var)) if !self.generic.contains(&var.unique()) => {
+            (Ty::Var(var), ty) | (ty, Ty::Var(var))
+                if kinds.get(&var.unique()).is_none_or(|kind| kind.inferrable) =>
+            {
                 if let Some(kind) = kinds.get(&var.unique()).cloned() {
-                    self.unify_kind(kinds, subst, ty, &kind, span)?;
+                    self.require(kinds, ty, &kind, span)?;
                 }
 
-                subst.insert(var.unique(), ty.clone());
+                let kind = kinds.entry(var.unique()).or_default();
+
+                debug_assert!(kind.subst.is_none());
+                kind.subst = Some(ty.clone());
 
                 Ok(())
             }
@@ -311,7 +323,7 @@ impl TyCx {
                 debug_assert_eq!(lhs_args.len(), rhs_args.len());
 
                 for (lhs, rhs) in lhs_args.iter().zip(rhs_args) {
-                    self.unify(kinds, subst, lhs, rhs, span)?;
+                    self.unify(kinds, lhs, rhs, span)?;
                 }
 
                 Ok(())
@@ -322,26 +334,26 @@ impl TyCx {
                     span,
                     format!(
                         "expected `{}` but found `{}`",
-                        self.format_ty(subst, lhs),
-                        self.format_ty(subst, rhs),
+                        self.format_ty(kinds, lhs),
+                        self.format_ty(kinds, rhs),
                     ),
                 ),
             ),
         }
     }
 
-    pub fn check(&self, subst: &Subst, lhs: &Ty, rhs: &Ty) -> bool {
+    pub fn matches(&self, kinds: &Kinds, lhs: &Ty, rhs: &Ty) -> bool {
         if lhs == rhs {
             return true;
         };
 
         match (lhs, rhs) {
-            (Ty::Var(lhs), rhs) if let Some(lhs) = subst.get(&lhs.unique()) => {
-                self.check(subst, lhs, rhs)
+            (Ty::Var(lhs), rhs) if let Some(lhs) = Self::subst_shallow(kinds, lhs) => {
+                self.matches(kinds, lhs, rhs)
             }
 
-            (lhs, Ty::Var(rhs)) if let Some(rhs) = subst.get(&rhs.unique()) => {
-                self.check(subst, lhs, rhs)
+            (lhs, Ty::Var(rhs)) if let Some(rhs) = Self::subst_shallow(kinds, rhs) => {
+                self.matches(kinds, lhs, rhs)
             }
 
             (Ty::Var(_), _) | (_, Ty::Var(_)) => true,
@@ -351,34 +363,16 @@ impl TyCx {
                     && lhs_args
                         .iter()
                         .zip(rhs_args)
-                        .all(|(lhs, rhs)| self.check(subst, lhs, rhs))
+                        .all(|(lhs, rhs)| self.matches(kinds, lhs, rhs))
             }
         }
     }
 
-    pub fn subst(&self, subst: &Subst, mut ty: Ty) -> Ty {
-        fn recurse(subst: &Subst, ty: &mut Ty) {
-            match ty {
-                Ty::Var(var) => {
-                    if let Some(sub) = subst.get(&var.unique()) {
-                        *ty = sub.clone();
-                        recurse(subst, ty);
-                    }
-                }
-
-                Ty::Cons(_, args) => {
-                    for arg in args {
-                        recurse(subst, arg);
-                    }
-                }
-            }
-        }
-
-        recurse(subst, &mut ty);
-        ty
+    fn subst_shallow<'a>(kinds: &'a Kinds, var: &Var) -> Option<&'a Ty> {
+        kinds.get(&var.unique())?.subst.as_ref()
     }
 
-    pub fn format_ty(&self, subst: &Subst, ty: &Ty) -> String {
+    pub fn format_ty(&self, kinds: &Kinds, ty: &Ty) -> String {
         fn fmt_paren(input: String, p: u8, q: u8) -> String {
             match p > q {
                 true => format!("({input})"),
@@ -386,19 +380,23 @@ impl TyCx {
             }
         }
 
-        fn fmt_ty(tycx: &TyCx, subst: &Subst, ty: &Ty, p: u8) -> String {
+        fn fmt_ty(kinds: &Kinds, ty: &Ty, p: u8) -> String {
             match ty {
-                Ty::Var(var) => match subst.get(&var.unique()) {
-                    Some(ty) => fmt_ty(tycx, subst, ty, p),
+                Ty::Var(var) => match TyCx::subst_shallow(kinds, var) {
+                    Some(ty) => fmt_ty(kinds, ty, p),
                     None => var.to_string(),
                 },
 
                 Ty::Cons(cons, args) => match cons {
+                    Cons::Str => String::from("str"),
+                    Cons::Int => String::from("int"),
+                    Cons::Real => String::from("real"),
+
                     Cons::App => fmt_paren(
                         format!(
                             "{} {}",
-                            fmt_ty(tycx, subst, &args[0], 1),
-                            fmt_ty(tycx, subst, &args[1], 2)
+                            fmt_ty(kinds, &args[0], 1),
+                            fmt_ty(kinds, &args[1], 2)
                         ),
                         p,
                         1,
@@ -407,8 +405,8 @@ impl TyCx {
                     Cons::Lam => fmt_paren(
                         format!(
                             "{} -> {}",
-                            fmt_ty(tycx, subst, &args[0], 1),
-                            fmt_ty(tycx, subst, &args[1], 0),
+                            fmt_ty(kinds, &args[0], 1),
+                            fmt_ty(kinds, &args[1], 0),
                         ),
                         p,
                         0,
@@ -419,6 +417,6 @@ impl TyCx {
             }
         }
 
-        fmt_ty(self, subst, ty, 0)
+        fmt_ty(kinds, ty, 0)
     }
 }

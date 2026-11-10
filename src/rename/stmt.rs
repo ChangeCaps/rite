@@ -1,7 +1,9 @@
+use std::{collections::HashSet, mem};
+
 use crate::{
     ast,
     diagnostic::{Diagnostic, Span},
-    rename::{ErrorExpr, Expr, Kind, State, Ty, ValueKind},
+    rename::{ErrorExpr, ErrorTy, Expr, Kind, Scope, State, Ty, Value, ValueKind, Vis},
     var::Var,
 };
 
@@ -53,210 +55,166 @@ pub struct ImplMethod {
 }
 
 impl State<'_> {
-    pub fn stmts(&mut self, stmts: Vec<ast::Stmt>) {
-        let mut assign_stmts = Vec::new();
+    pub fn stmts(&mut self, modules: Vec<ast::Module>) {
+        let mut define_stmts = Vec::new();
         let mut ascribe_stmts = Vec::new();
         let mut type_stmts = Vec::new();
         let mut trait_stmts = Vec::new();
         let mut impl_stmts = Vec::new();
 
-        for stmt in stmts {
-            match stmt {
-                ast::Stmt::Ascribe(stmt) => {
-                    ascribe_stmts.push(stmt);
-                }
+        let imports = modules
+            .iter()
+            .map(|module| module.path.clone())
+            .collect::<HashSet<_>>();
 
-                ast::Stmt::Define(stmt) => {
-                    self.register_define_stmt(&stmt);
-                    assign_stmts.push(stmt);
-                }
+        for module in modules {
+            let mut scope = Scope::new();
 
-                ast::Stmt::Type(stmt) => {
-                    self.register_type_stmt(&stmt);
-                    type_stmts.push(stmt);
-                }
+            for stmt in module.stmts {
+                match stmt {
+                    ast::Stmt::Import(stmt) => {
+                        self.register_import_stmt(&imports, &mut scope, stmt);
+                    }
 
-                ast::Stmt::Trait(stmt) => {
-                    self.register_trait_stmt(&stmt);
-                    trait_stmts.push(stmt);
-                }
+                    ast::Stmt::Ascribe(stmt) => {
+                        ascribe_stmts.push((module.path.clone(), stmt));
+                    }
 
-                ast::Stmt::Impl(stmt) => {
-                    impl_stmts.push(stmt);
-                }
+                    ast::Stmt::Define(stmt) => {
+                        let var = self.register_define_stmt(&mut scope, &stmt);
+                        define_stmts.push((module.path.clone(), var, stmt));
+                    }
 
-                ast::Stmt::Error(..) => {}
+                    ast::Stmt::Type(stmt) => {
+                        let var = self.register_type_stmt(&mut scope, &stmt);
+                        type_stmts.push((module.path.clone(), var, stmt));
+                    }
+
+                    ast::Stmt::Trait(stmt) => {
+                        let var = self.register_trait_stmt(&mut scope, &stmt);
+                        trait_stmts.push((module.path.clone(), var, stmt));
+                    }
+
+                    ast::Stmt::Impl(stmt) => {
+                        impl_stmts.push((module.path.clone(), stmt));
+                    }
+
+                    ast::Stmt::Error(..) => {}
+                }
             }
+
+            self.modules.insert(module.path, scope);
         }
 
         /* add */
 
-        for stmt in type_stmts {
-            self.type_stmt(stmt);
+        for (module, var, stmt) in type_stmts {
+            let scope = self.modules[&module].clone();
+            self.type_stmt(scope, var, stmt);
         }
 
-        for stmt in trait_stmts {
-            self.trait_stmt(stmt);
+        for (module, var, stmt) in trait_stmts {
+            let scope = self.modules[&module].clone();
+            self.trait_stmt(scope, var, stmt);
         }
 
-        for stmt in impl_stmts {
-            self.impl_stmt(stmt);
+        for (module, stmt) in impl_stmts {
+            let scope = self.modules[&module].clone();
+            self.impl_stmt(scope, stmt);
         }
 
-        for stmt in assign_stmts {
-            self.define_stmt(stmt);
+        for (module, stmt) in ascribe_stmts {
+            let scope = self.modules[&module].clone();
+            self.ascribe_stmt(scope, stmt);
         }
 
-        for stmt in ascribe_stmts {
-            self.ascribe_stmt(stmt);
+        for (module, var, stmt) in define_stmts {
+            let scope = self.modules[&module].clone();
+            self.define_stmt(scope, var, stmt);
         }
     }
 
-    fn register_type_stmt(&mut self, stmt: &ast::TypeStmt) {
+    fn register_import_stmt(
+        &mut self,
+        imports: &HashSet<String>,
+        scope: &mut Scope,
+        stmt: ast::ImportStmt,
+    ) {
+        let Some(path) = stmt.path else { return };
+
+        if !imports.contains(&path) {
+            let diagnostic =
+                Diagnostic::error("invalid import path").label(stmt.span, "in import here");
+
+            self.reporter.report(diagnostic);
+
+            return;
+        }
+        scope.imports.push(path.clone());
+
+        let Some(alias) = stmt.alias else { return };
+
+        if let Some(prev) = scope.find_value(Some(&alias))
+            && let Some(prev) = prev.var.ident()
+        {
+            let diagnostic = Diagnostic::error("redefinition of import")
+                .label(alias.span(), "found here")
+                .label(prev.span(), "other definition here");
+
+            self.reporter.report(diagnostic);
+        }
+
+        let value = Value {
+            vis:  Vis::Local,
+            var:  Var::new(alias),
+            kind: ValueKind::Import(path.clone()),
+        };
+
+        scope.values.push(value);
+    }
+
+    fn register_type_stmt(&mut self, scope: &mut Scope, stmt: &ast::TypeStmt) -> Var {
         if let Some(ref ident) = stmt.var
-            && let Some(var) = self.find_ty(Some(ident))
-            && let Some(prev) = var.ident()
+            && let Some(prev) = scope.find_ty(Some(ident))
+            && let Some(prev) = prev.ident()
         {
             let diagnostic = Diagnostic::error("redefinition of type")
                 .label(ident.span(), "found here")
                 .label(prev.span(), "other definition here");
 
             self.reporter.report(diagnostic);
-
-            return;
         }
 
         let var = Var::from(stmt.var.clone());
-        self.tys.push(var.clone());
+        scope.tys.push(var.clone());
+
+        let input = stmt.input.iter().cloned().map(Var::from).collect();
+
+        let cons = stmt
+            .cons
+            .iter()
+            .map(|cons| self.register_type_cons(scope, var.clone(), cons))
+            .collect();
 
         let type_ = Type {
-            var:   var.clone(),
-            input: Vec::new(),
-            cons:  Vec::new(),
-            span:  stmt.span,
+            var: var.clone(),
+            input,
+            cons,
+            span: stmt.span,
         };
 
         self.types.insert(var.unique(), type_);
+        var
     }
 
-    fn register_define_stmt(&mut self, stmt: &ast::DefineStmt) {
-        if let Some(ref ident) = stmt.var
-            && let Some((var, _kind)) = self.find_value(Some(ident))
-            && let Some(prev) = var.ident()
-        {
-            let diagnostic = Diagnostic::error("redefinition of variable")
-                .label(ident.span(), "found here")
-                .label(prev.span(), "other definition here");
-
-            self.reporter.report(diagnostic);
-
-            return;
-        }
-
-        let var = Var::from(stmt.var.clone());
-        self.values.push((var.clone(), ValueKind::Def));
-
-        let assignment = Def {
-            ty:   None,
-            var:  var.clone(),
-            expr: Expr::Error(ErrorExpr { span: stmt.span }),
-            span: stmt.span,
-        };
-
-        self.defs.insert(var.unique(), assignment);
-    }
-
-    fn register_trait_stmt(&mut self, stmt: &ast::TraitStmt) {
-        if let Some(ref ident) = stmt.var
-            && let Some(var) = self.find_kind(Some(ident))
-            && let Some(prev) = var.ident()
-        {
-            let diagnostic = Diagnostic::error("redefinition of kind")
-                .label(ident.span(), "found here")
-                .label(prev.span(), "other definition here");
-
-            self.reporter.report(diagnostic);
-
-            return;
-        }
-
-        let var = Var::from(stmt.var.clone());
-        let input = Var::from(stmt.input.clone());
-        self.kinds.push(var.clone());
-
-        let trait_ = Trait {
-            var: var.clone(),
-            input,
-            kind: None,
-            methods: Vec::new(),
-            span: stmt.span,
-        };
-
-        self.traits.insert(var.unique(), trait_);
-    }
-
-    fn ascribe_stmt(&mut self, stmt: ast::AscribeStmt) {
-        let ty = self.ty(stmt.ty);
-
-        let Some((var, kind)) = self.find_value(stmt.var.as_ref()).cloned() else {
-            let diagnostic = Diagnostic::error("undefined variable").label(stmt.span, "found here");
-            self.reporter.report(diagnostic);
-            return;
-        };
-
-        if !matches!(kind, ValueKind::Def) {
-            let diagnostic = Diagnostic::error("invalid ascription").label(stmt.span, "found here");
-            self.reporter.report(diagnostic);
-            return;
-        }
-
-        let assignment = self.defs.get_mut(&var.unique()).unwrap();
-
-        assignment.ty = Some(ty);
-    }
-
-    fn define_stmt(&mut self, stmt: ast::DefineStmt) {
-        self.value_scope(|state| {
-            let expr = state.expr(stmt.expr);
-
-            if let Some((var, _kind)) = state.find_value(stmt.var.as_ref())
-                && let Some(assignment) = state.defs.get_mut(&var.unique())
-            {
-                assignment.expr = expr;
-            }
-        });
-    }
-
-    fn type_stmt(&mut self, stmt: ast::TypeStmt) {
-        self.ty_scope(|state| {
-            let type_ = state.find_ty(stmt.var.as_ref()).unwrap().clone();
-
-            let input = stmt
-                .input
-                .into_iter()
-                .map(|input| {
-                    let var = Var::from(input);
-                    state.tys.push(var.clone());
-                    var
-                })
-                .collect();
-
-            let cons = stmt
-                .cons
-                .into_iter()
-                .map(|cons| state.type_cons(type_.clone(), cons))
-                .collect();
-
-            let type_ = state.types.get_mut(&type_.unique()).unwrap();
-
-            type_.input = input;
-            type_.cons = cons;
-        });
-    }
-
-    fn type_cons(&mut self, type_: Var, cons: ast::TypeCons) -> TypeCons {
+    fn register_type_cons(
+        &mut self,
+        scope: &mut Scope,
+        type_: Var,
+        cons: &ast::TypeCons,
+    ) -> TypeCons {
         if let Some(ref ident) = cons.var
-            && let Some(var) = self.find_cons(Some(ident))
+            && let Some(var) = scope.find_cons(Some(ident))
             && let Some(prev) = var.ident()
         {
             let diagnostic = Diagnostic::error("redefinition of constructor")
@@ -267,8 +225,8 @@ impl State<'_> {
         }
 
         if let Some(ref ident) = cons.var
-            && let Some((var, _)) = self.find_value(Some(ident))
-            && let Some(prev) = var.ident()
+            && let Some(value) = scope.find_value(Some(ident))
+            && let Some(prev) = value.var.ident()
         {
             let diagnostic = Diagnostic::error("redefinition of variable")
                 .label(ident.span(), "found here")
@@ -277,103 +235,238 @@ impl State<'_> {
             self.reporter.report(diagnostic);
         }
 
-        let var = Var::from(cons.var);
-        self.values.push((var.clone(), ValueKind::Cons(type_)));
-        self.cons.push(var.clone());
+        let var = Var::from(cons.var.clone());
 
-        let args = cons.args.into_iter().map(|ty| self.ty(ty)).collect();
+        let value = Value {
+            vis:  Vis::Public,
+            var:  var.clone(),
+            kind: ValueKind::Cons(type_),
+        };
+
+        scope.values.push(value);
+        scope.cons.push(var.clone());
 
         TypeCons {
             var,
-            args,
+            args: Vec::new(),
             span: cons.span,
         }
     }
 
-    fn trait_stmt(&mut self, stmt: ast::TraitStmt) {
-        self.ty_scope(|state| {
-            let var = state.find_kind(stmt.var.as_ref()).unwrap().clone();
-            let trait_ = state.traits.get(&var.unique()).unwrap();
+    fn register_trait_stmt(&mut self, scope: &mut Scope, stmt: &ast::TraitStmt) -> Var {
+        if let Some(ref ident) = stmt.var
+            && let Some(var) = scope.find_kind(Some(ident))
+            && let Some(prev) = var.ident()
+        {
+            let diagnostic = Diagnostic::error("redefinition of kind")
+                .label(ident.span(), "found here")
+                .label(prev.span(), "other definition here");
 
-            state.tys.push(trait_.input.clone());
+            self.reporter.report(diagnostic);
+        }
 
-            let kind = stmt.kind.map(|kind| state.kind(kind));
-            let members = state.trait_members(var.clone(), stmt.members);
+        let var = Var::from(stmt.var.clone());
+        let input = Var::from(stmt.input.clone());
+        scope.kinds.push(var.clone());
 
-            let trait_ = state.traits.get_mut(&var.unique()).unwrap();
+        let mut methods = Vec::new();
 
-            trait_.kind = kind;
-            trait_.methods = members;
-        });
-    }
-
-    fn trait_members(&mut self, trait_: Var, members: Vec<ast::TraitMember>) -> Vec<TraitMethod> {
-        let mut ascribe_members = Vec::new();
-
-        for member in members {
+        for member in &stmt.members {
             match member {
-                ast::TraitMember::Ascribe(member) => ascribe_members.push(member),
+                ast::TraitMember::Ascribe(member) => {
+                    let method = self.register_trait_method(scope, var.clone(), member);
+                    methods.push(method);
+                }
             }
         }
 
-        let mut members = Vec::new();
+        let trait_ = Trait {
+            var: var.clone(),
+            input,
+            kind: None,
+            methods,
+            span: stmt.span,
+        };
 
-        for member in ascribe_members {
-            if let Some(ref ident) = member.var
-                && let Some((var, _)) = self.find_value(Some(ident))
-                && let Some(prev) = var.ident()
-            {
-                let diagnostic = Diagnostic::error("redefinition of variable")
-                    .label(ident.span(), "found here")
-                    .label(prev.span(), "other definition here");
+        self.traits.insert(var.unique(), trait_);
 
-                self.reporter.report(diagnostic);
-            }
-
-            let var = Var::from(member.var);
-
-            self.values.push((
-                var.clone(),
-                ValueKind::Method(trait_.clone()),
-            ));
-
-            let ty = self.ty(member.ty);
-
-            members.push(TraitMethod {
-                ty,
-                var,
-                span: member.span,
-            });
-        }
-
-        members
+        var
     }
 
-    fn impl_stmt(&mut self, stmt: ast::ImplStmt) {
-        let Some(var) = self.find_kind(stmt.var.as_ref()).cloned() else {
+    fn register_trait_method(
+        &mut self,
+        scope: &mut Scope,
+        trait_: Var,
+        member: &ast::AscribeStmt,
+    ) -> TraitMethod {
+        if let Some(ref ident) = member.var
+            && let Some(value) = scope.find_value(Some(ident))
+            && let Some(prev) = value.var.ident()
+        {
+            let diagnostic = Diagnostic::error("redefinition of variable")
+                .label(ident.span(), "found here")
+                .label(prev.span(), "other definition here");
+
+            self.reporter.report(diagnostic);
+        }
+
+        let var = Var::from(member.var.clone());
+
+        let value = Value {
+            vis:  Vis::Public,
+            var:  var.clone(),
+            kind: ValueKind::Method(trait_),
+        };
+
+        scope.values.push(value);
+
+        TraitMethod {
+            ty: Ty::Error(ErrorTy { span: member.span }),
+            var,
+            span: member.span,
+        }
+    }
+
+    fn register_define_stmt(&mut self, scope: &mut Scope, stmt: &ast::DefineStmt) -> Var {
+        if let Some(ref ident) = stmt.var
+            && let Some(value) = scope.find_value(Some(ident))
+            && let Some(prev) = value.var.ident()
+        {
+            let diagnostic = Diagnostic::error("redefinition of variable")
+                .label(ident.span(), "found here")
+                .label(prev.span(), "other definition here");
+
+            self.reporter.report(diagnostic);
+        }
+
+        let var = Var::from(stmt.var.clone());
+
+        let value = Value {
+            vis:  Vis::Public,
+            var:  var.clone(),
+            kind: ValueKind::Def,
+        };
+
+        scope.values.push(value);
+
+        let assignment = Def {
+            ty:   None,
+            var:  var.clone(),
+            expr: Expr::Error(ErrorExpr { span: stmt.span }),
+            span: stmt.span,
+        };
+
+        self.defs.insert(var.unique(), assignment);
+
+        var
+    }
+
+    fn ascribe_stmt(&mut self, mut scope: Scope, stmt: ast::AscribeStmt) {
+        let ty = self.ty(&mut scope, stmt.ty);
+
+        let Some(value) = scope.find_value(stmt.var.as_ref()).cloned() else {
+            let diagnostic = Diagnostic::error("undefined variable").label(stmt.span, "found here");
+            self.reporter.report(diagnostic);
+            return;
+        };
+
+        if !matches!(value.kind, ValueKind::Def) {
+            let diagnostic = Diagnostic::error("invalid ascription").label(stmt.span, "found here");
+            self.reporter.report(diagnostic);
+            return;
+        }
+
+        let def = self.defs.get_mut(&value.var.unique()).unwrap();
+        def.ty = Some(ty);
+    }
+
+    fn define_stmt(&mut self, scope: Scope, var: Var, stmt: ast::DefineStmt) {
+        let expr = self.expr(&scope, stmt.expr);
+
+        if let Some(def) = self.defs.get_mut(&var.unique()) {
+            def.expr = expr;
+        }
+    }
+
+    fn type_stmt(&mut self, mut scope: Scope, var: Var, stmt: ast::TypeStmt) {
+        let type_ = self.type_mut(&var);
+        scope.tys.extend(type_.input.iter().cloned());
+
+        let cons = stmt
+            .cons
+            .into_iter()
+            .zip(mem::take(&mut type_.cons))
+            .map(|(ast, mut cons)| {
+                cons.args = ast
+                    .args
+                    .into_iter()
+                    .map(|arg| self.ty(&mut scope, arg))
+                    .collect();
+
+                cons
+            })
+            .collect();
+
+        self.type_mut(&var).cons = cons;
+    }
+
+    fn trait_stmt(&mut self, mut scope: Scope, var: Var, stmt: ast::TraitStmt) {
+        let trait_ = self.trait_mut(&var);
+        scope.tys.push(trait_.input.clone());
+
+        let mut methods = mem::take(&mut trait_.methods);
+
+        for member in stmt.members {
+            match member {
+                ast::TraitMember::Ascribe(member) => {
+                    let method = methods
+                        .iter_mut()
+                        .find(|method| method.var.ident() == member.var.as_ref())
+                        .unwrap();
+
+                    let mut scope = scope.clone();
+                    method.ty = self.ty(&mut scope, member.ty);
+                }
+            }
+        }
+
+        let kind = stmt.kind.map(|kind| self.kind(&scope, kind));
+
+        let trait_ = self.trait_mut(&var);
+
+        trait_.methods = methods;
+        trait_.kind = kind;
+    }
+
+    fn impl_stmt(&mut self, mut scope: Scope, stmt: ast::ImplStmt) {
+        let Some(var) = scope.find_kind(stmt.var.as_ref()).cloned() else {
             let diagnostic = Diagnostic::error("undefined trait").label(stmt.span, "here");
             self.reporter.report(diagnostic);
 
             return;
         };
 
-        self.ty_scope(|state| {
-            let input = state.ty(stmt.input);
-            let members = state.impl_members(&var, stmt.members, stmt.span);
+        let input = self.ty(&mut scope, stmt.input);
+        let members = self.impl_members(
+            &mut scope,
+            &var,
+            stmt.members,
+            stmt.span,
+        );
 
-            let impl_ = Impl {
-                var: var.clone(),
-                input,
-                methods: members,
-                span: stmt.span,
-            };
+        let impl_ = Impl {
+            var: var.clone(),
+            input,
+            methods: members,
+            span: stmt.span,
+        };
 
-            state.impls.push(impl_);
-        });
+        self.impls.push(impl_);
     }
 
     fn impl_members(
         &mut self,
+        scope: &Scope,
         trait_: &Var,
         members: Vec<ast::ImplMember>,
         span: Span,
@@ -389,7 +482,7 @@ impl State<'_> {
         let mut members = Vec::new();
 
         for member in assign_members {
-            let expr = self.expr(member.expr);
+            let expr = self.expr(scope, member.expr);
 
             let Some(trait_member) = self.find_trait_member(trait_, member.var.as_deref()) else {
                 let diagnostic = Diagnostic::error("undefined member").label(member.span, "here");

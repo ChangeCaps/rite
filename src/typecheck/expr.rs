@@ -10,6 +10,7 @@ use crate::{
 pub enum Expr {
     Let(LetExpr),
     Var(VarExpr),
+    Def(DefExpr),
     Cons(ConsExpr),
     Method(MethodExpr),
     Lam(LamExpr),
@@ -27,6 +28,12 @@ pub struct LetExpr {
 }
 
 pub struct VarExpr {
+    pub var:  Var,
+    pub ty:   Ty,
+    pub span: Span,
+}
+
+pub struct DefExpr {
     pub var:  Var,
     pub ty:   Ty,
     pub span: Span,
@@ -84,6 +91,7 @@ impl Expr {
         match self {
             Expr::Let(expr) => expr.span,
             Expr::Var(expr) => expr.span,
+            Expr::Def(expr) => expr.span,
             Expr::Cons(expr) => expr.span,
             Expr::Method(expr) => expr.span,
             Expr::Lam(expr) => expr.span,
@@ -97,6 +105,7 @@ impl Expr {
         match self {
             Expr::Let(expr) => &expr.ty,
             Expr::Var(expr) => &expr.ty,
+            Expr::Def(expr) => &expr.ty,
             Expr::Cons(expr) => &expr.ty,
             Expr::Method(expr) => &expr.ty,
             Expr::Lam(expr) => &expr.ty,
@@ -118,6 +127,7 @@ impl State<'_> {
         match expr {
             rename::Expr::Let(expr) => self.let_expr_down(expr),
             rename::Expr::Var(expr) => self.var_expr_down(expr),
+            rename::Expr::Def(expr) => self.def_expr_down(expr),
             rename::Expr::Cons(expr) => self.cons_expr_down(expr),
             rename::Expr::Method(expr) => self.method_expr_down(expr),
             rename::Expr::Lam(expr) => self.lam_expr_down(expr),
@@ -146,6 +156,20 @@ impl State<'_> {
         let ty = self.get_ty_var(expr.var.clone());
 
         Expr::Var(VarExpr {
+            var: expr.var.clone(),
+            ty,
+            span: expr.span,
+        })
+    }
+
+    fn def_expr_down(&mut self, expr: rename::DefExpr) -> Expr {
+        let mut ty = self.get_ty_var(expr.var.clone());
+
+        if expr.ascribed {
+            ty = self.instantiate(HashMap::new(), ty);
+        }
+
+        Expr::Def(DefExpr {
             var: expr.var.clone(),
             ty,
             span: expr.span,

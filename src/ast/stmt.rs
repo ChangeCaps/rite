@@ -5,12 +5,19 @@ use crate::{
 };
 
 pub enum Stmt {
+    Import(ImportStmt),
     Define(DefineStmt),
     Ascribe(AscribeStmt),
     Type(TypeStmt),
     Trait(TraitStmt),
     Impl(ImplStmt),
     Error(ErrorStmt),
+}
+
+pub struct ImportStmt {
+    pub path:  Option<String>,
+    pub alias: Option<Ident>,
+    pub span:  Span,
 }
 
 pub struct DefineStmt {
