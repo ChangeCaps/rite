@@ -1,17 +1,34 @@
 use std::fmt;
 
-use crate::var::Var;
+use crate::{
+    primitive::{BinPrim, PrimNum},
+    var::Var,
+};
 
 #[derive(Clone)]
 pub enum Expr {
     Var(Var),
+    Lit(Lit),
     Lam(Var, Box<Expr>),
     App(Box<Expr>, Box<Expr>),
     Rec(Vec<(Expr, Var)>, Box<Expr>),
     Let(Box<Expr>, Var, Box<Expr>),
     Cons(Var, Vec<Expr>),
     Case(Box<Expr>, Vec<Alt>, Option<Box<Expr>>),
+    Prim(Prim),
     Note(String, Box<Expr>),
+}
+
+#[derive(Clone)]
+pub enum Prim {
+    Bin(BinPrim, Box<Expr>, Box<Expr>),
+}
+
+#[derive(Clone)]
+pub enum Lit {
+    Str(String),
+    Int(i64),
+    Real(f64),
 }
 
 #[derive(Clone)]
@@ -43,6 +60,12 @@ impl fmt::Debug for Expr {
 
             match expr {
                 Expr::Var(var) => fmt_var(var),
+
+                Expr::Lit(lit) => match lit {
+                    Lit::Str(str) => format!("\"{str}\""),
+                    Lit::Int(int) => format!("{int} :: int"),
+                    Lit::Real(real) => format!("{real} :: real"),
+                },
 
                 Expr::Lam(var, expr) => {
                     let expr = fmt_expr(expr, i + 1, p);
@@ -145,6 +168,15 @@ impl fmt::Debug for Expr {
                         0,
                     )
                 }
+
+                Expr::Prim(prim) => match prim {
+                    Prim::Bin(prim, lhs, rhs) => {
+                        let lhs = fmt_expr(lhs, i, 0);
+                        let rhs = fmt_expr(rhs, i, 0);
+
+                        format!("({prim:?} {lhs} {rhs})")
+                    }
+                },
 
                 Expr::Note(note, expr) => {
                     format!(

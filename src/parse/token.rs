@@ -6,6 +6,7 @@ pub enum Token {
     Real(f64),
     Str(String),
     Ident(String),
+    Comment(String),
     Other(String),
 
     /* special */
@@ -25,14 +26,23 @@ pub enum Token {
     Type,
     Where,
 
+    /* three-character symbols */
+    GtGtEqual,
+
     /* two-character symbols */
     ColonColon,
     EqualEqual,
     BangEqual,
+    AmpAmp,
+    PipePipe,
     GtEqual,
     LtEqual,
     PipeGt,
     LtPipe,
+    BackGt,
+    LtBack,
+    GtGt,
+    LtLt,
     RArrow,
     LArrow,
     LtGt,
@@ -40,7 +50,7 @@ pub enum Token {
     /* one-character symbols */
     Under,
     Equal,
-    Backslash,
+    Back,
     Pipe,
     Plus,
     Minus,
@@ -57,13 +67,14 @@ pub enum Token {
 }
 
 impl Token {
-    fn as_str(&self) -> &str {
+    pub fn as_str(&self) -> &str {
         match self {
             Self::Str(..) => "{str}",
             Self::Int(..) => "{int}",
             Self::Real(..) => "{real}",
 
             Self::Ident(ident) => ident,
+            Self::Comment(..) => "{comment}",
             Self::Other(other) => other,
 
             /* special */
@@ -83,14 +94,23 @@ impl Token {
             Self::Type => "type",
             Self::Where => "where",
 
+            /* three-character symbols */
+            Self::GtGtEqual => ">>=",
+
             /* two-character symbols */
             Self::ColonColon => "::",
             Self::EqualEqual => "==",
             Self::BangEqual => "!=",
+            Self::AmpAmp => "&&",
+            Self::PipePipe => "||",
             Self::GtEqual => ">=",
             Self::LtEqual => "<=",
             Self::PipeGt => "|>",
             Self::LtPipe => "<|",
+            Self::BackGt => "\\>",
+            Self::LtBack => "<\\",
+            Self::GtGt => ">>",
+            Self::LtLt => "<<",
             Self::RArrow => "->",
             Self::LArrow => "<-",
             Self::LtGt => "<>",
@@ -98,7 +118,7 @@ impl Token {
             /* one-character symbols */
             Self::Under => "_",
             Self::Equal => "=",
-            Self::Backslash => "\\",
+            Self::Back => "\\",
             Self::Pipe => "|",
             Self::Plus => "+",
             Self::Minus => "-",

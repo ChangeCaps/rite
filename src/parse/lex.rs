@@ -171,9 +171,11 @@ impl<'a> Lexer<'a> {
         let c = self.peek()?;
 
         if let Some(token) = self
-            .ident(c)
+            .comment(c)
+            .or_else(|| self.ident(c))
             .or_else(|| self.number(c))
             .or_else(|| self.string(c))
+            .or_else(|| self.three_character_symbol())
             .or_else(|| self.two_character_symbol())
             .or_else(|| self.one_character_symbol(c))
         {
@@ -192,6 +194,19 @@ impl<'a> Lexer<'a> {
 
     fn whitespace(&mut self) -> (String, Span) {
         self.take_while(|c| c.is_whitespace() && c != '\n')
+    }
+
+    fn comment(&mut self, c: char) -> Option<(Token, Span)> {
+        if c != '#' {
+            return None;
+        }
+
+        let start = self.consume();
+        let (comment, end) = self.take_while(|c| c != '\n');
+
+        let span = start.join(end);
+
+        Some((Token::Comment(comment), span))
     }
 
     fn ident(&mut self, c: char) -> Option<(Token, Span)> {
@@ -250,15 +265,34 @@ impl<'a> Lexer<'a> {
         Some((Token::Str(string), span))
     }
 
+    fn three_character_symbol(&mut self) -> Option<(Token, Span)> {
+        let token = match self.remaining().get(..3).unwrap_or("") {
+            ">>=" => Token::GtGtEqual,
+
+            _ => return None,
+        };
+
+        let span = self.consume().join(self.consume()).join(self.consume());
+
+        Some((token, span))
+    }
+
     fn two_character_symbol(&mut self) -> Option<(Token, Span)> {
         let token = match self.remaining().get(..2).unwrap_or("") {
+            "\\>" => Token::BackGt,
+            "<\\" => Token::LtBack,
+
             "::" => Token::ColonColon,
             "==" => Token::EqualEqual,
             "!=" => Token::BangEqual,
+            "&&" => Token::AmpAmp,
+            "||" => Token::PipePipe,
             ">=" => Token::GtEqual,
             "<=" => Token::LtEqual,
             "|>" => Token::PipeGt,
             "<|" => Token::LtPipe,
+            ">>" => Token::GtGt,
+            "<<" => Token::LtLt,
             "->" => Token::RArrow,
             "<-" => Token::LArrow,
             "<>" => Token::LtGt,
@@ -273,7 +307,7 @@ impl<'a> Lexer<'a> {
 
     fn one_character_symbol(&mut self, c: char) -> Option<(Token, Span)> {
         let token = match c {
-            '\\' => Token::Backslash,
+            '\\' => Token::Back,
             '|' => Token::Pipe,
             '_' => Token::Under,
             '=' => Token::Equal,
@@ -302,6 +336,6 @@ impl<'a> Lexer<'a> {
     }
 
     fn is_ident_continue(c: char) -> bool {
-        c.is_alphanumeric()
+        c.is_alphanumeric() || c == '-' || c == '\'' || c == '_'
     }
 }

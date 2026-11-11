@@ -191,7 +191,7 @@ impl TyCx {
             Ty::Var(var) => kinds
                 .get(&var.unique())
                 .and_then(|kind| kind.arity)
-                .expect("`arity` should only be called for types with valid arities"),
+                .unwrap_or(0),
 
             Ty::Cons(cons, args) => match cons {
                 Cons::Type(_, arity) => *arity,
@@ -226,20 +226,25 @@ impl TyCx {
                     return self.require(kinds, &ty, kind, span);
                 }
 
-                kinds.entry(var.unique()).or_default().intersect(kind, span)
+                kinds
+                    .entry(var.unique())
+                    .or_default()
+                    .intersect(kind, var, span)
             }
 
             Ty::Cons(..) => {
-                if let Some(arity) = kind.arity
-                    && Self::arity(kinds, ty) != arity
+                if let Some(expected) = kind.arity
+                    && let actual = Self::arity(kinds, ty)
+                    && actual != expected
                 {
                     return Err(
                         Diagnostic::error("kind mismatch").label(
                             span,
                             format!(
-                                "expected `{}` but found `{}`",
-                                Kind::format_arity(arity),
+                                "expected type with kind `{}` but found `{}` which has kind `{}`",
+                                Kind::format_arity(expected),
                                 self.format_ty(kinds, ty),
+                                Kind::format_arity(actual),
                             ),
                         ),
                     );

@@ -7,6 +7,7 @@ pub enum Expr {
     Lam(LamExpr),
     App(AppExpr),
     Bin(BinExpr),
+    Seq(SeqExpr),
     Match(MatchExpr),
     Error(ErrorExpr),
 }
@@ -23,10 +24,17 @@ pub enum Lit {
 }
 
 pub struct LetExpr {
-    pub var:    Option<Ident>,
+    pub pat:    Pat,
+    pub assign: Assign,
     pub input:  Box<Expr>,
     pub output: Box<Expr>,
     pub span:   Span,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+pub enum Assign {
+    Assign,
+    Bind,
 }
 
 pub struct VarExpr {
@@ -35,7 +43,7 @@ pub struct VarExpr {
 }
 
 pub struct LamExpr {
-    pub var:    Option<Ident>,
+    pub args:   Vec<Pat>,
     pub output: Box<Expr>,
     pub span:   Span,
 }
@@ -51,6 +59,12 @@ pub struct BinExpr {
     pub lhs:  Box<Expr>,
     pub rhs:  Box<Expr>,
     pub span: Span,
+}
+
+pub struct SeqExpr {
+    pub input:  Box<Expr>,
+    pub output: Box<Expr>,
+    pub span:   Span,
 }
 
 pub struct MatchExpr {
@@ -78,6 +92,7 @@ impl Expr {
             Self::Lam(expr) => expr.span,
             Self::App(expr) => expr.span,
             Self::Bin(expr) => expr.span,
+            Self::Seq(expr) => expr.span,
             Self::Match(expr) => expr.span,
             Self::Error(expr) => expr.span,
         }

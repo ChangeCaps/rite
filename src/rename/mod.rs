@@ -7,6 +7,7 @@ use crate::{
 };
 
 mod expr;
+mod intrinsic;
 mod kind;
 mod pat;
 mod stmt;
@@ -18,6 +19,14 @@ pub use pat::*;
 pub use stmt::*;
 pub use ty::*;
 
+pub const PRELUDE: &[&str] = &[
+    "std:flow",
+    "std:math",
+    "std:maybe",
+    "std:monad",
+    "std:result",
+];
+
 pub struct Unit {
     pub defs:   HashMap<Unique, Def>,
     pub types:  HashMap<Unique, Type>,
@@ -27,7 +36,7 @@ pub struct Unit {
 
 pub fn rename(reporter: &dyn Reporter, modules: Vec<ast::Module>) -> Unit {
     let mut state = State::new(reporter);
-    state.stmts(modules);
+    state.modules(modules);
 
     Unit {
         defs:   state.defs,
@@ -49,9 +58,9 @@ struct State<'a> {
 #[derive(Clone)]
 struct Scope {
     imports: Vec<String>,
-    values:  Vec<Value>,
+    values:  Vec<ScopeValue>,
     cons:    Vec<Var>,
-    tys:     Vec<Var>,
+    tys:     Vec<ScopeTy>,
     kinds:   Vec<Var>,
 }
 
@@ -68,10 +77,22 @@ impl Scope {
 }
 
 #[derive(Clone)]
-struct Value {
+struct ScopeTy {
+    name: Option<String>,
+    kind: ScopeTyKind,
+}
+
+#[derive(Clone)]
+enum ScopeTyKind {
+    Var(Var),
+    Prim(TyPrim),
+}
+
+#[derive(Clone)]
+struct ScopeValue {
     vis:  Vis,
     var:  Var,
-    kind: ValueKind,
+    kind: ScopeValueKind,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -81,7 +102,7 @@ enum Vis {
 }
 
 #[derive(Clone, Debug)]
-enum ValueKind {
+enum ScopeValueKind {
     Local,
     Def,
     Cons(Var),
@@ -90,23 +111,44 @@ enum ValueKind {
 }
 
 impl Scope {
-    fn find_value(&self, name: Option<&Ident>) -> Option<&Value> {
+    fn find_value(&self, name: Option<&str>) -> Option<&ScopeValue> {
         self.values
             .iter()
             .rev()
-            .find(|value| value.var.ident() == name)
+            .find(|value| value.var.ident().map(Ident::as_str) == name)
     }
 
     fn find_cons(&self, name: Option<&Ident>) -> Option<&Var> {
         self.cons.iter().rev().find(|var| var.ident() == name)
     }
 
-    fn find_ty(&self, name: Option<&Ident>) -> Option<&Var> {
-        self.tys.iter().rev().find(|var| var.ident() == name)
+    fn find_ty(&self, name: Option<&str>) -> Option<&ScopeTy> {
+        self.tys
+            .iter()
+            .rev()
+            .find(|var| var.name.as_deref() == name)
     }
 
     fn find_kind(&self, name: Option<&Ident>) -> Option<&Var> {
         self.kinds.iter().rev().find(|var| var.ident() == name)
+    }
+}
+
+impl ScopeTy {
+    fn ident(&self) -> Option<&Ident> {
+        match self.kind {
+            ScopeTyKind::Var(ref var) => var.ident(),
+            ScopeTyKind::Prim(..) => None,
+        }
+    }
+}
+
+impl From<Var> for ScopeTy {
+    fn from(var: Var) -> Self {
+        Self {
+            name: var.ident().map(|ident| ident.as_str().into()),
+            kind: ScopeTyKind::Var(var),
+        }
     }
 }
 
@@ -122,7 +164,7 @@ impl<'a> State<'a> {
         }
     }
 
-    fn find_value<'b>(&'b self, scope: &'b Scope, name: Option<&Ident>) -> Option<&'b Value> {
+    fn find_value<'b>(&'b self, scope: &'b Scope, name: Option<&str>) -> Option<&'b ScopeValue> {
         scope.find_value(name).or_else(|| {
             scope.imports.iter().find_map(|import| {
                 self.modules[import]
@@ -138,7 +180,7 @@ impl<'a> State<'a> {
         })
     }
 
-    fn find_ty<'b>(&'b self, scope: &'b Scope, name: Option<&Ident>) -> Option<&'b Var> {
+    fn find_ty<'b>(&'b self, scope: &'b Scope, name: Option<&str>) -> Option<&'b ScopeTy> {
         scope.find_ty(name).or_else(|| {
             (scope.imports.iter()).find_map(|import| self.modules[import].find_ty(name))
         })

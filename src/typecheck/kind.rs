@@ -25,7 +25,14 @@ impl Default for Kind {
 }
 
 impl Kind {
-    pub fn intersect(&mut self, other: &Self, span: Span) -> Result<(), Diagnostic> {
+    pub fn arity(arity: usize) -> Self {
+        Self {
+            arity: Some(arity),
+            ..Default::default()
+        }
+    }
+
+    pub fn intersect(&mut self, other: &Self, var: &Var, span: Span) -> Result<(), Diagnostic> {
         if let Some(other_arity) = other.arity {
             if let Some(self_arity) = self.arity
                 && other_arity != self_arity
@@ -53,7 +60,7 @@ impl Kind {
             if !self.inferrable {
                 let diagnostic = Diagnostic::error("kind mismatch").label(
                     span,
-                    format!("expected to implement `{trait_}`"),
+                    format!("`{var}` does not implement `{trait_}`"),
                 );
 
                 return Err(diagnostic);

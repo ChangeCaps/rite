@@ -20,7 +20,7 @@ where
         Self { sources, writer }
     }
 
-    pub fn write(&mut self, diagnostics: &[Diagnostic]) -> io::Result<()> {
+    pub fn write(&mut self, diagnostics: &[Diagnostic]) -> io::Result<bool> {
         let mut errors = 0;
 
         for diagnostic in diagnostics {
@@ -40,7 +40,7 @@ where
             )?;
         }
 
-        Ok(())
+        Ok(errors == 0)
     }
 
     fn diagnostic(&mut self, diagnostic: &Diagnostic) -> io::Result<()> {

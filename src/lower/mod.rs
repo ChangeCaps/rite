@@ -1,15 +1,15 @@
 use std::collections::HashMap;
 
 use crate::{
-    ir::{Alt, Expr},
-    typecheck::{self, Impl, Module, Pat, Ty, TypeCons},
+    ir::{Alt, Expr, Lit, Prim},
+    typecheck::{self, Impl, Pat, Ty, TypeCons, Unit},
     var::{Unique, Var},
 };
 
-pub fn lower(module: Module) -> Expr {
-    let mut state = State::new(&module);
+pub fn lower(unit: Unit) -> Expr {
+    let mut state = State::new(&unit);
 
-    let main = module
+    let main = unit
         .defs
         .values()
         .find(|def| def.var.as_str() == Some("main"))
@@ -21,16 +21,16 @@ pub fn lower(module: Module) -> Expr {
 }
 
 struct State<'a> {
-    module:  &'a Module,
+    unit:    &'a Unit,
     subst:   HashMap<Unique, Ty>,
     defs:    HashMap<(Unique, Ty), Var>,
     globals: Vec<(Expr, Var)>,
 }
 
 impl<'a> State<'a> {
-    fn new(module: &'a Module) -> Self {
+    fn new(unit: &'a Unit) -> Self {
         Self {
-            module,
+            unit,
             subst: HashMap::new(),
             defs: HashMap::new(),
             globals: Vec::new(),
@@ -38,11 +38,11 @@ impl<'a> State<'a> {
     }
 
     fn format_ty(&self, ty: &Ty) -> String {
-        self.module.tycx.format_ty(&self.module.kinds, ty)
+        self.unit.tycx.format_ty(&self.unit.kinds, ty)
     }
 
     fn find_impl(&self, trait_: &Var, ty: &Ty) -> Option<&'a Impl> {
-        self.module.tycx.find_impl(&self.module.kinds, trait_, ty)
+        self.unit.tycx.find_impl(&self.unit.kinds, trait_, ty)
     }
 
     fn unify(&mut self, lhs: &Ty, rhs: &Ty) {
@@ -52,12 +52,16 @@ impl<'a> State<'a> {
             return self.unify(lhs, &rhs);
         }
 
+        if lhs == rhs {
+            return;
+        }
+
         match (lhs, rhs) {
             (Ty::Var(var), ty) => {
                 self.subst.insert(var.unique(), ty.clone());
             }
 
-            (_, Ty::Var(_)) => unreachable!(),
+            (_, Ty::Var(_)) => panic!("ambiguous type in lowering"),
 
             (Ty::Cons(lhs_cons, lhs_args), Ty::Cons(rhs_cons, rhs_args)) => {
                 debug_assert_eq!(lhs_cons, rhs_cons);
@@ -72,7 +76,7 @@ impl<'a> State<'a> {
     fn subst_shallow(&self, ty: &Ty) -> Option<&Ty> {
         match ty {
             Ty::Var(var) => self.subst.get(&var.unique()).or_else(|| {
-                self.module
+                self.unit
                     .kinds
                     .get(&var.unique())
                     .and_then(|kind| kind.subst.as_ref())
@@ -98,32 +102,45 @@ impl<'a> State<'a> {
     }
 
     fn get_cons(&self, type_: &Var, var: &Var) -> &TypeCons {
-        self.module.tycx.get_cons(type_, var)
+        self.unit.tycx.get_cons(type_, var)
     }
 
     fn expr(&mut self, expr: &typecheck::Expr) -> Expr {
         match expr {
-            typecheck::Expr::Let(expr) => self.let_expr(expr),
+            typecheck::Expr::Lit(expr) => self.lit_expr(expr),
             typecheck::Expr::Var(expr) => self.var_expr(expr),
             typecheck::Expr::Def(expr) => self.def_expr(expr),
             typecheck::Expr::Cons(expr) => self.cons_expr(expr),
             typecheck::Expr::Method(expr) => self.method_expr(expr),
+            typecheck::Expr::Let(expr) => self.let_expr(expr),
             typecheck::Expr::Lam(expr) => self.lam_expr(expr),
             typecheck::Expr::App(expr) => self.app_expr(expr),
+            typecheck::Expr::Prim(expr) => self.prim_expr(expr),
             typecheck::Expr::Match(expr) => self.match_expr(expr),
             typecheck::Expr::Error(expr) => self.error_expr(expr),
         }
+    }
+
+    fn lit_expr(&mut self, expr: &typecheck::LitExpr) -> Expr {
+        let lit = match expr.lit {
+            typecheck::Lit::Str(ref str) => Lit::Str(str.clone()),
+            typecheck::Lit::Int(int) => Lit::Int(int),
+            typecheck::Lit::Real(real) => Lit::Real(real),
+        };
+
+        Expr::Lit(lit)
     }
 
     fn let_expr(&mut self, expr: &typecheck::LetExpr) -> Expr {
         let input = self.expr(&expr.input);
         let output = self.expr(&expr.output);
 
-        Expr::Let(
-            Box::new(input),
-            expr.var.clone(),
-            Box::new(output),
-        )
+        let row = Row {
+            pats: vec![&expr.pat],
+            output,
+        };
+
+        self.bind(vec![input], vec![row])
     }
 
     fn var_expr(&mut self, expr: &typecheck::VarExpr) -> Expr {
@@ -138,7 +155,7 @@ impl<'a> State<'a> {
             return Expr::Var(var.clone());
         }
 
-        let def = self.module.defs.get(&expr.var.unique()).unwrap();
+        let def = self.unit.defs.get(&expr.var.unique()).unwrap();
 
         let var = Var::from(def.var.ident().cloned());
         self.defs.insert(key, var.clone());
@@ -204,9 +221,19 @@ impl<'a> State<'a> {
     }
 
     fn lam_expr(&mut self, expr: &typecheck::LamExpr) -> Expr {
-        let output = self.expr(&expr.output);
+        let input = Var::unnamed();
 
-        Expr::Lam(expr.var.clone(), Box::new(output))
+        let row = Row {
+            pats:   vec![&expr.arg],
+            output: self.expr(&expr.output),
+        };
+
+        let output = self.bind(
+            vec![Expr::Var(input.clone())],
+            vec![row],
+        );
+
+        Expr::Lam(input, Box::new(output))
     }
 
     fn app_expr(&mut self, expr: &typecheck::AppExpr) -> Expr {
@@ -214,6 +241,19 @@ impl<'a> State<'a> {
         let input = self.expr(&expr.input);
 
         Expr::App(Box::new(lambda), Box::new(input))
+    }
+
+    fn prim_expr(&mut self, expr: &typecheck::PrimExpr) -> Expr {
+        let prim = match expr.prim {
+            typecheck::ExprPrim::Bin(prim, ref lhs, ref rhs) => {
+                let lhs = self.expr(lhs);
+                let rhs = self.expr(rhs);
+
+                Prim::Bin(prim, Box::new(lhs), Box::new(rhs))
+            }
+        };
+
+        Expr::Prim(prim)
     }
 
     fn match_expr(&mut self, expr: &typecheck::MatchExpr) -> Expr {

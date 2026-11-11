@@ -3,9 +3,14 @@ use std::{collections::HashSet, mem};
 use crate::{
     ast,
     diagnostic::{Diagnostic, Span},
-    rename::{ErrorExpr, ErrorTy, Expr, Kind, Scope, State, Ty, Value, ValueKind, Vis},
+    rename::{
+        self, ErrorExpr, ErrorTy, Expr, Kind, LamExpr, Scope, ScopeTy, ScopeValue, ScopeValueKind,
+        State, Ty, TyPrim, Vis,
+    },
     var::Var,
 };
+
+use super::ScopeTyKind;
 
 pub struct Def {
     pub ty:   Option<Ty>,
@@ -55,20 +60,42 @@ pub struct ImplMethod {
 }
 
 impl State<'_> {
-    pub fn stmts(&mut self, modules: Vec<ast::Module>) {
+    pub fn modules(&mut self, modules: Vec<ast::Module>) {
+        let intrinsic = self.intrinsic();
+        self.modules.insert(String::from("intrinsic"), intrinsic);
+
+        let imports = modules
+            .iter()
+            .map(|module| module.path.clone())
+            .chain([String::from("intrinsic")])
+            .collect::<HashSet<_>>();
+
+        let mut scope = Scope::new();
+
+        scope
+            .imports
+            .extend(rename::PRELUDE.iter().copied().map(Into::into));
+
         let mut define_stmts = Vec::new();
         let mut ascribe_stmts = Vec::new();
         let mut type_stmts = Vec::new();
         let mut trait_stmts = Vec::new();
         let mut impl_stmts = Vec::new();
 
-        let imports = modules
-            .iter()
-            .map(|module| module.path.clone())
-            .collect::<HashSet<_>>();
-
         for module in modules {
-            let mut scope = Scope::new();
+            let mut scope = scope.clone();
+
+            if module.path == "std:math" {
+                scope.tys.push(ScopeTy {
+                    name: Some(String::from("int")),
+                    kind: ScopeTyKind::Prim(TyPrim::Int),
+                });
+
+                scope.tys.push(ScopeTy {
+                    name: Some(String::from("real")),
+                    kind: ScopeTyKind::Prim(TyPrim::Real),
+                });
+            }
 
             for stmt in module.stmts {
                 match stmt {
@@ -105,8 +132,6 @@ impl State<'_> {
 
             self.modules.insert(module.path, scope);
         }
-
-        /* add */
 
         for (module, var, stmt) in type_stmts {
             let scope = self.modules[&module].clone();
@@ -164,10 +189,10 @@ impl State<'_> {
             self.reporter.report(diagnostic);
         }
 
-        let value = Value {
+        let value = ScopeValue {
             vis:  Vis::Local,
             var:  Var::new(alias),
-            kind: ValueKind::Import(path.clone()),
+            kind: ScopeValueKind::Import(path.clone()),
         };
 
         scope.values.push(value);
@@ -186,7 +211,11 @@ impl State<'_> {
         }
 
         let var = Var::from(stmt.var.clone());
-        scope.tys.push(var.clone());
+
+        scope.tys.push(ScopeTy {
+            name: var.ident().map(|ident| ident.as_str().into()),
+            kind: ScopeTyKind::Var(var.clone()),
+        });
 
         let input = stmt.input.iter().cloned().map(Var::from).collect();
 
@@ -237,10 +266,10 @@ impl State<'_> {
 
         let var = Var::from(cons.var.clone());
 
-        let value = Value {
+        let value = ScopeValue {
             vis:  Vis::Public,
             var:  var.clone(),
-            kind: ValueKind::Cons(type_),
+            kind: ScopeValueKind::Cons(type_),
         };
 
         scope.values.push(value);
@@ -303,7 +332,7 @@ impl State<'_> {
             && let Some(value) = scope.find_value(Some(ident))
             && let Some(prev) = value.var.ident()
         {
-            let diagnostic = Diagnostic::error("redefinition of variable")
+            let diagnostic = Diagnostic::error("redefinition of method")
                 .label(ident.span(), "found here")
                 .label(prev.span(), "other definition here");
 
@@ -312,10 +341,10 @@ impl State<'_> {
 
         let var = Var::from(member.var.clone());
 
-        let value = Value {
+        let value = ScopeValue {
             vis:  Vis::Public,
             var:  var.clone(),
-            kind: ValueKind::Method(trait_),
+            kind: ScopeValueKind::Method(trait_),
         };
 
         scope.values.push(value);
@@ -341,10 +370,10 @@ impl State<'_> {
 
         let var = Var::from(stmt.var.clone());
 
-        let value = Value {
+        let value = ScopeValue {
             vis:  Vis::Public,
             var:  var.clone(),
-            kind: ValueKind::Def,
+            kind: ScopeValueKind::Def,
         };
 
         scope.values.push(value);
@@ -364,13 +393,13 @@ impl State<'_> {
     fn ascribe_stmt(&mut self, mut scope: Scope, stmt: ast::AscribeStmt) {
         let ty = self.ty(&mut scope, stmt.ty);
 
-        let Some(value) = scope.find_value(stmt.var.as_ref()).cloned() else {
+        let Some(value) = scope.find_value(stmt.var.as_deref()).cloned() else {
             let diagnostic = Diagnostic::error("undefined variable").label(stmt.span, "found here");
             self.reporter.report(diagnostic);
             return;
         };
 
-        if !matches!(value.kind, ValueKind::Def) {
+        if !matches!(value.kind, ScopeValueKind::Def) {
             let diagnostic = Diagnostic::error("invalid ascription").label(stmt.span, "found here");
             self.reporter.report(diagnostic);
             return;
@@ -381,7 +410,7 @@ impl State<'_> {
     }
 
     fn define_stmt(&mut self, scope: Scope, var: Var, stmt: ast::DefineStmt) {
-        let expr = self.expr(&scope, stmt.expr);
+        let expr = self.expr_with_args(scope, stmt.args, stmt.expr);
 
         if let Some(def) = self.defs.get_mut(&var.unique()) {
             def.expr = expr;
@@ -390,7 +419,9 @@ impl State<'_> {
 
     fn type_stmt(&mut self, mut scope: Scope, var: Var, stmt: ast::TypeStmt) {
         let type_ = self.type_mut(&var);
-        scope.tys.extend(type_.input.iter().cloned());
+        scope
+            .tys
+            .extend(type_.input.iter().cloned().map(From::from));
 
         let cons = stmt
             .cons
@@ -412,7 +443,7 @@ impl State<'_> {
 
     fn trait_stmt(&mut self, mut scope: Scope, var: Var, stmt: ast::TraitStmt) {
         let trait_ = self.trait_mut(&var);
-        scope.tys.push(trait_.input.clone());
+        scope.tys.push(trait_.input.clone().into());
 
         let mut methods = mem::take(&mut trait_.methods);
 
@@ -439,7 +470,7 @@ impl State<'_> {
     }
 
     fn impl_stmt(&mut self, mut scope: Scope, stmt: ast::ImplStmt) {
-        let Some(var) = scope.find_kind(stmt.var.as_ref()).cloned() else {
+        let Some(var) = self.find_kind(&scope, stmt.var.as_ref()).cloned() else {
             let diagnostic = Diagnostic::error("undefined trait").label(stmt.span, "here");
             self.reporter.report(diagnostic);
 
@@ -447,12 +478,7 @@ impl State<'_> {
         };
 
         let input = self.ty(&mut scope, stmt.input);
-        let members = self.impl_members(
-            &mut scope,
-            &var,
-            stmt.members,
-            stmt.span,
-        );
+        let members = self.impl_members(&scope, &var, stmt.members, stmt.span);
 
         let impl_ = Impl {
             var: var.clone(),
@@ -482,7 +508,7 @@ impl State<'_> {
         let mut members = Vec::new();
 
         for member in assign_members {
-            let expr = self.expr(scope, member.expr);
+            let expr = self.expr_with_args(scope.clone(), member.args, member.expr);
 
             let Some(trait_member) = self.find_trait_member(trait_, member.var.as_deref()) else {
                 let diagnostic = Diagnostic::error("undefined member").label(member.span, "here");

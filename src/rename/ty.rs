@@ -5,6 +5,8 @@ use crate::{
     var::Var,
 };
 
+use super::ScopeTyKind;
+
 pub enum Ty {
     Var(VarTy),
     Lam(LamTy),
@@ -36,6 +38,7 @@ pub struct PrimTy {
     pub span: Span,
 }
 
+#[derive(Clone, Copy, Debug)]
 pub enum TyPrim {
     Str,
     Int,
@@ -53,6 +56,19 @@ pub struct ErrorTy {
     pub span: Span,
 }
 
+impl Ty {
+    pub fn span(&self) -> Span {
+        match self {
+            Ty::Var(ty) => ty.span,
+            Ty::Lam(ty) => ty.span,
+            Ty::App(ty) => ty.span,
+            Ty::Prim(ty) => ty.span,
+            Ty::Where(ty) => ty.span,
+            Ty::Error(ty) => ty.span,
+        }
+    }
+}
+
 impl State<'_> {
     pub fn ty(&self, scope: &mut Scope, ty: ast::Ty) -> Ty {
         match ty {
@@ -65,16 +81,22 @@ impl State<'_> {
     }
 
     fn var_ty(&self, scope: &mut Scope, ty: ast::VarTy) -> Ty {
-        match self.find_ty(scope, ty.var.as_ref()) {
-            Some(var) => Ty::Var(VarTy {
-                var:  var.clone(),
-                span: ty.span,
-            }),
+        match self.find_ty(scope, ty.var.as_deref()) {
+            Some(found) => match found.kind {
+                ScopeTyKind::Var(ref var) => Ty::Var(VarTy {
+                    var:  var.clone(),
+                    span: ty.span,
+                }),
 
+                ScopeTyKind::Prim(ref prim) => Ty::Prim(PrimTy {
+                    prim: *prim,
+                    span: ty.span,
+                }),
+            },
             None => {
                 let var = Var::from(ty.var);
 
-                scope.tys.push(var.clone());
+                scope.tys.push(var.clone().into());
 
                 Ty::Var(VarTy { var, span: ty.span })
             }

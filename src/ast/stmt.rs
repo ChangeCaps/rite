@@ -1,5 +1,5 @@
 use crate::{
-    ast::{Expr, Kind, Ty},
+    ast::{Expr, Kind, Pat, Ty},
     diagnostic::Span,
     var::Ident,
 };
@@ -22,6 +22,7 @@ pub struct ImportStmt {
 
 pub struct DefineStmt {
     pub var:  Option<Ident>,
+    pub args: Vec<Pat>,
     pub expr: Expr,
     pub span: Span,
 }

@@ -18,7 +18,7 @@ pub use pat::*;
 pub use ty::*;
 pub use tycx::*;
 
-pub struct Module {
+pub struct Unit {
     pub tycx:    TyCx,
     pub kinds:   Kinds,
     pub defs:    HashMap<Unique, Def>,
@@ -37,9 +37,9 @@ pub struct TraitMethod {
     pub span:  Span,
 }
 
-pub fn typecheck(reporter: &dyn Reporter, module: rename::Unit) -> Module {
+pub fn typecheck(reporter: &dyn Reporter, unit: rename::Unit) -> Unit {
     let state = State::new(reporter);
-    state.module(module)
+    state.unit(unit)
 }
 
 struct State<'a> {
@@ -61,16 +61,12 @@ impl<'a> State<'a> {
         }
     }
 
-    fn module(mut self, mut module: rename::Unit) -> Module {
-        for type_ in module.types.into_values() {
+    fn unit(mut self, mut unit: rename::Unit) -> Unit {
+        for type_ in unit.types.into_values() {
             self.add_type(type_);
         }
 
-        for trait_ in module.traits.into_values() {
-            self.add_trait(trait_);
-        }
-
-        for def in module.defs.values_mut() {
+        for def in unit.defs.values_mut() {
             if let Some(rhs) = def.ty.take() {
                 let lhs = self.get_ty_var(def.var.clone());
                 let rhs = self.ty(rhs);
@@ -80,15 +76,19 @@ impl<'a> State<'a> {
             }
         }
 
-        for impl_ in module.impls {
+        for trait_ in unit.traits.into_values() {
+            self.add_trait(trait_);
+        }
+
+        for impl_ in unit.impls {
             self.add_impl(impl_);
         }
 
-        for def in module.defs.into_values() {
+        for def in unit.defs.into_values() {
             self.add_def(def);
         }
 
-        Module {
+        Unit {
             tycx:    self.tycx,
             kinds:   self.kinds,
             defs:    self.defs,
@@ -110,25 +110,7 @@ impl<'a> State<'a> {
         let cons = type_
             .cons
             .into_iter()
-            .map(|cons| {
-                let args = cons
-                    .args
-                    .into_iter()
-                    .map(|ty| self.ty(ty))
-                    .collect::<Vec<_>>();
-
-                let ty = args.iter().cloned().rfold(ty.clone(), |ty, arg| {
-                    Ty::Cons(Cons::Lam, vec![arg, ty])
-                });
-
-                self.add_subst(&cons.var, ty);
-
-                TypeCons {
-                    var: cons.var,
-                    args,
-                    span: cons.span,
-                }
-            })
+            .map(|cons| self.add_type_cons(ty.clone(), cons))
             .collect();
 
         self.tycx.add_type(
@@ -139,6 +121,31 @@ impl<'a> State<'a> {
         );
     }
 
+    fn add_type_cons(&mut self, ty: Ty, cons: rename::TypeCons) -> TypeCons {
+        let args = cons
+            .args
+            .into_iter()
+            .map(|ty| {
+                let span = ty.span();
+                let arg = self.ty(ty);
+                self.require(&arg, &Kind::arity(0), span);
+                arg
+            })
+            .collect::<Vec<_>>();
+
+        let ty = args.iter().cloned().rfold(ty, |ty, arg| {
+            Ty::Cons(Cons::Lam, vec![arg, ty])
+        });
+
+        self.add_subst(&cons.var, ty);
+
+        TypeCons {
+            var: cons.var,
+            args,
+            span: cons.span,
+        }
+    }
+
     fn add_trait(&mut self, trait_: rename::Trait) {
         let input = self.get_ty_var(trait_.input.clone());
 
@@ -147,11 +154,11 @@ impl<'a> State<'a> {
             ..Default::default()
         };
 
-        self.require_kind(&input, &kind, trait_.span);
+        self.require(&input, &kind, trait_.span);
 
         if let Some(kind) = trait_.kind {
             let kind = self.kind(kind);
-            self.require_kind(&input, &kind, trait_.span);
+            self.require(&input, &kind, trait_.span);
         }
 
         for method in trait_.methods {
@@ -254,7 +261,7 @@ impl<'a> State<'a> {
         self.tycx.instantiate(&mut self.kinds, subst, ty)
     }
 
-    fn require_kind(&mut self, lhs: &Ty, rhs: &Kind, span: Span) {
+    fn require(&mut self, lhs: &Ty, rhs: &Kind, span: Span) {
         if let Err(diagnostic) = self.tycx.require(&mut self.kinds, lhs, rhs, span) {
             self.reporter.report(diagnostic);
         }

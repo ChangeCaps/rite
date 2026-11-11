@@ -1,6 +1,6 @@
 use crate::{
     rename,
-    typecheck::State,
+    typecheck::{Kind, State},
     var::{Ident, Var},
 };
 
@@ -50,8 +50,14 @@ impl State<'_> {
         Ty::Cons(Cons::App, vec![lambda, input])
     }
 
-    fn prim_ty(&mut self, _ty: rename::PrimTy) -> Ty {
-        todo!()
+    fn prim_ty(&mut self, ty: rename::PrimTy) -> Ty {
+        let cons = match ty.prim {
+            rename::TyPrim::Str => Cons::Str,
+            rename::TyPrim::Int => Cons::Int,
+            rename::TyPrim::Real => Cons::Real,
+        };
+
+        Ty::Cons(cons, Vec::new())
     }
 
     fn where_ty(&mut self, ty: rename::WhereTy) -> Ty {
@@ -59,7 +65,7 @@ impl State<'_> {
         let target = self.ty(*ty.target);
         let kind = self.kind(ty.kind);
 
-        self.require_kind(&target, &kind, ty.span);
+        self.require(&target, &kind, ty.span);
 
         input
     }

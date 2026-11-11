@@ -1,38 +1,15 @@
-use std::{fs, io, path::PathBuf, sync::Mutex};
+use std::io;
 
-use rite::{
-    diagnostic::{DiagnosticWriter, Source, Sources},
-    lower, parse, rename,
-    runtime::Runtime,
-    typecheck,
-};
+use rite::{compiler::Compiler, runtime::Runtime};
 
-fn main() {
-    let reporter = Mutex::new(Vec::new());
-    let mut sources = Sources::new();
+fn main() -> io::Result<()> {
+    let mut compiler = Compiler::new();
+    compiler.add_module("test", "test.ri")?;
+    compiler.add_module("std", "std")?;
 
-    let source = sources.push(Source {
-        path:     PathBuf::from("test.rite"),
-        contents: fs::read_to_string("test.rite").unwrap(),
-    });
-
-    let input = &sources[source].contents;
-
-    let module = parse::module(
-        &reporter,
-        source,
-        input,
-        String::from("test:test"),
-    );
-
-    let unit = rename::rename(&reporter, vec![module]);
-    let unit = typecheck::typecheck(&reporter, unit);
-
-    let mut writer = DiagnosticWriter::new(&sources, io::stdout());
-    let diagnostics = reporter.lock().unwrap();
-    writer.write(&diagnostics).unwrap();
-
-    let expr = lower::lower(unit);
+    let Ok(expr) = compiler.lower() else {
+        return Ok(());
+    };
 
     println!("{expr:?}");
 
@@ -40,4 +17,6 @@ fn main() {
     let output = runtime.run(&expr);
 
     println!("{output:?}");
+
+    Ok(())
 }

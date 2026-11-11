@@ -1,23 +1,32 @@
 use crate::{
     ast::{
-        AscribeStmt, DefineStmt, ErrorStmt, ImplMember, ImplStmt, ImportStmt, Stmt, TraitMember,
-        TraitStmt, TypeCons, TypeStmt,
+        AscribeStmt, DefineStmt, ErrorStmt, ImplMember, ImplStmt, ImportStmt, Pat, Stmt,
+        TraitMember, TraitStmt, TypeCons, TypeStmt,
     },
-    parse::{Parser, Token, expr, is_ty, kind, operator, term_ty, ty},
+    parse::{Parser, Token, expr, is_pat, is_ty, kind, operator, pat, term_ty, ty},
     var::Ident,
 };
 
 pub fn stmts(parser: &mut Parser<'_>) -> Vec<Stmt> {
     let mut stmts = Vec::new();
 
-    parser.consume_all(Token::Newline);
+    lines(parser);
 
     while parser.peek() != Token::Eof {
         stmts.push(stmt(parser));
-        parser.consume_all(Token::Newline);
+        lines(parser);
     }
 
     stmts
+}
+
+pub fn lines(parser: &mut Parser<'_>) {
+    parser.consume_while(|token| {
+        matches!(
+            token,
+            Token::Comment(..) | Token::Newline,
+        )
+    });
 }
 
 pub fn stmt(parser: &mut Parser<'_>) -> Stmt {
@@ -49,6 +58,8 @@ pub fn define_or_ascribe_stmt(parser: &mut Parser<'_>) -> Stmt {
     let span = parser.span();
     let var = definee(parser);
 
+    let args = args(parser);
+
     match parser.peek() {
         Token::Equal => {
             parser.expect(Token::Equal);
@@ -56,7 +67,12 @@ pub fn define_or_ascribe_stmt(parser: &mut Parser<'_>) -> Stmt {
             let expr = expr(parser);
             let span = span.join(expr.span());
 
-            Stmt::Define(DefineStmt { var, expr, span })
+            Stmt::Define(DefineStmt {
+                var,
+                args,
+                expr,
+                span,
+            })
         }
 
         Token::ColonColon => {
@@ -213,12 +229,29 @@ pub fn impl_member(parser: &mut Parser<'_>) -> ImplMember {
     let span = parser.span();
     let var = definee(parser);
 
+    let args = args(parser);
+
     parser.expect(Token::Equal);
 
     let expr = expr(parser);
     let span = span.join(expr.span());
 
-    ImplMember::Assign(DefineStmt { var, expr, span })
+    ImplMember::Assign(DefineStmt {
+        var,
+        args,
+        expr,
+        span,
+    })
+}
+
+fn args(parser: &mut Parser<'_>) -> Vec<Pat> {
+    let mut args = Vec::new();
+
+    while is_pat(parser.peek()) {
+        args.push(pat(parser, false));
+    }
+
+    args
 }
 
 fn is_indent(parser: &Parser<'_>) -> bool {

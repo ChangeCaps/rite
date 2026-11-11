@@ -1,0 +1,3 @@
+main =
+  some 0
+  pure 0

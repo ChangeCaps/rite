@@ -1,7 +1,7 @@
 use crate::{
     ast,
     diagnostic::{Diagnostic, Span},
-    rename::{Scope, State, Value, ValueKind, Vis},
+    rename::{Scope, ScopeValue, ScopeValueKind, State, Vis},
     var::Var,
 };
 
@@ -24,6 +24,16 @@ pub struct ConsPat {
 
 pub struct ErrorPat {
     pub span: Span,
+}
+
+impl Pat {
+    pub fn span(&self) -> Span {
+        match self {
+            Pat::Bind(pat) => pat.span,
+            Pat::Cons(pat) => pat.span,
+            Pat::Error(pat) => pat.span,
+        }
+    }
 }
 
 impl State<'_> {
@@ -58,10 +68,10 @@ impl State<'_> {
 
         let var = Var::from(pat.var);
 
-        let value = Value {
+        let value = ScopeValue {
             vis:  Vis::Local,
             var:  var.clone(),
-            kind: ValueKind::Local,
+            kind: ScopeValueKind::Local,
         };
 
         scope.values.push(value);

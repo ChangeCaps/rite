@@ -7,9 +7,10 @@ pub fn is_pat(token: Token) -> bool {
     matches!(token, Token::Ident(..))
 }
 
-pub fn pat(parser: &mut Parser<'_>) -> Pat {
+pub fn pat(parser: &mut Parser<'_>, allow_cons: bool) -> Pat {
     match parser.peek() {
-        Token::Ident(..) => cons(parser),
+        Token::Ident(..) => cons(parser, allow_cons),
+
         _ => {
             let span = parser.expected("pattern");
             Pat::Error(ErrorPat { span })
@@ -17,14 +18,14 @@ pub fn pat(parser: &mut Parser<'_>) -> Pat {
     }
 }
 
-pub fn cons(parser: &mut Parser<'_>) -> Pat {
+pub fn cons(parser: &mut Parser<'_>, allow_cons: bool) -> Pat {
     let span = parser.span();
     let var = parser.expect_ident();
 
     let mut args = Vec::new();
 
-    while is_pat(parser.peek()) {
-        args.push(pat(parser));
+    while is_pat(parser.peek()) && allow_cons {
+        args.push(pat(parser, false));
     }
 
     Pat::Cons(ConsPat { var, args, span })

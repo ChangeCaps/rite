@@ -1,7 +1,8 @@
 use std::{cell::RefCell, collections::HashMap, fmt, mem, rc::Rc};
 
 use crate::{
-    ir::Expr,
+    ir::{Expr, Lit, Prim},
+    primitive::{BinPrim, PrimNum},
     var::{Unique, Var},
 };
 
@@ -10,14 +11,38 @@ pub struct Runtime {}
 
 #[derive(Clone)]
 pub enum Value<'a> {
+    Str(String),
+    Int(i64),
+    Real(f64),
     Lam(Env<'a>, &'a Var, &'a Expr),
     Cons(&'a Var, Vec<Thunk<'a>>),
+}
+
+impl Value<'_> {
+    pub fn as_i64(&self) -> i64 {
+        match self {
+            Self::Int(int) => *int,
+            _ => panic!(),
+        }
+    }
+
+    pub fn as_f64(&self) -> f64 {
+        match self {
+            Self::Real(real) => *real,
+            _ => panic!(),
+        }
+    }
 }
 
 impl fmt::Debug for Value<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Str(str) => write!(f, "\"{str}\""),
+            Self::Int(int) => write!(f, "{int}"),
+            Self::Real(real) => write!(f, "{real}"),
+
             Self::Lam(..) => f.write_str("<lambda>"),
+
             Self::Cons(cons, args) => {
                 if args.is_empty() {
                     return cons.fmt(f);
@@ -113,6 +138,8 @@ impl<'a> Env<'a> {
                     }
                 }
 
+                Expr::Lit(..) => {}
+
                 Expr::Lam(_, expr) => recurse(env, cap, expr),
 
                 Expr::App(lam, input) => {
@@ -151,6 +178,13 @@ impl<'a> Env<'a> {
                     }
                 }
 
+                Expr::Prim(prim) => match prim {
+                    Prim::Bin(_, lhs, rhs) => {
+                        recurse(env, cap, lhs);
+                        recurse(env, cap, rhs);
+                    }
+                },
+
                 Expr::Note(_, expr) => recurse(env, cap, expr),
             }
         }
@@ -179,6 +213,12 @@ impl Runtime {
                 .get(&var.unique())
                 .unwrap_or_else(|| panic!("{:?}", var))
                 .clone(),
+
+            Expr::Lit(lit) => match lit {
+                Lit::Str(str) => Thunk::value(Value::Str(str.clone())),
+                Lit::Int(int) => Thunk::value(Value::Int(*int)),
+                Lit::Real(real) => Thunk::value(Value::Real(*real)),
+            },
 
             Expr::Lam(var, expr) => {
                 let env = env.capture(expr);
@@ -252,6 +292,25 @@ impl Runtime {
 
                 panic!();
             }
+
+            Expr::Prim(prim) => match prim {
+                Prim::Bin(prim, lhs, rhs) => {
+                    let lhs = self.eval(env, lhs);
+                    let rhs = self.eval(env, rhs);
+
+                    let lhs = lhs.force(self);
+                    let rhs = rhs.force(self);
+
+                    Thunk::value(match prim {
+                        BinPrim::Add(PrimNum::Int) => Value::Int(lhs.as_i64() + rhs.as_i64()),
+                        BinPrim::Sub(PrimNum::Int) => Value::Int(lhs.as_i64() - rhs.as_i64()),
+                        BinPrim::Mul(PrimNum::Int) => Value::Int(lhs.as_i64() * rhs.as_i64()),
+                        BinPrim::Div(PrimNum::Int) => Value::Int(lhs.as_i64() / rhs.as_i64()),
+
+                        _ => unimplemented!("{prim:?}"),
+                    })
+                }
+            },
 
             Expr::Note(_, expr) => self.eval(env, expr),
         }

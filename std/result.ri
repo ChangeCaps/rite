@@ -1,0 +1,1 @@
+type result e a = ok a | err e
