@@ -1,0 +1,13 @@
+type [] a = [] | (:) a [a]
+
+trait fold t
+  fold :: b -> (a -> b -> b) -> t a -> b
+
+impl fold ([])
+  fold acc f xs =
+    match xs
+      x : xs -> fold (f x acc) f xs
+      [] -> acc
+
+sum :: t a -> a where t :: fold where a :: add where a :: zero
+sum xs = fold zero (+) xs

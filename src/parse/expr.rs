@@ -1,10 +1,10 @@
 use crate::{
     ast::{
-        AppExpr, Assign, BinExpr, ErrorExpr, Expr, LamExpr, LetExpr, Lit, LitExpr, MatchArm,
-        MatchExpr, SeqExpr, VarExpr,
+        AppExpr, Assign, BinExpr, ErrorExpr, Expr, ExprField, FieldExpr, LamExpr, LetExpr,
+        ListExpr, Lit, LitExpr, MatchArm, MatchExpr, ParenExpr, RecExpr, SeqExpr, VarExpr,
     },
-    parse::{Parser, Token, is_pat, operator, operator_from_token, pat, precedence},
-    var::Ident,
+    parse::{Parser, Token, is_pat, operator, operator_from_token, pat},
+    var::{Assoc, Ident, Operator},
 };
 
 pub fn is_expr(parser: &Parser<'_>) -> bool {
@@ -17,7 +17,8 @@ pub fn is_expr(parser: &Parser<'_>) -> bool {
             | Token::Match
             | Token::Let
             | Token::Back
-            | Token::LParen,
+            | Token::LParen
+            | Token::LBracket,
     )
 }
 
@@ -127,7 +128,10 @@ pub fn match_expr(parser: &mut Parser<'_>) -> MatchExpr {
 
     let mut arms = Vec::new();
 
-    while parser.peek() != Token::Dedent {
+    while !matches!(
+        parser.peek(),
+        Token::Dedent | Token::Eof,
+    ) {
         arms.push(match_arm(parser));
         parser.consume_all(Token::Newline);
     }
@@ -153,9 +157,9 @@ pub fn match_arm(parser: &mut Parser<'_>) -> MatchArm {
 }
 
 pub fn bin_expr(parser: &mut Parser<'_>) -> Expr {
-    let lhs = app_expr(parser);
+    let lhs = rec_expr(parser);
 
-    let Some(op) = operator(parser) else {
+    let Some((op, _)) = operator(parser) else {
         if is_bin_block(parser) {
             return bin_block(parser, lhs);
         }
@@ -172,7 +176,7 @@ pub fn bin_block(parser: &mut Parser<'_>, mut lhs: Expr) -> Expr {
     parser.consume_all(Token::Newline);
     parser.expect(Token::Indent);
 
-    while let Some(op) = operator(parser) {
+    while let Some((op, _)) = operator(parser) {
         let rhs = bin_expr(parser);
         lhs = bin(op, lhs, rhs);
 
@@ -194,11 +198,12 @@ fn is_bin_block(parser: &Parser<'_>) -> bool {
     parser.peek_nth(n) == Token::Indent && operator_from_token(&parser.peek_nth(n + 1)).is_some()
 }
 
-fn bin(op: Ident, lhs: Expr, rhs: Expr) -> Expr {
+fn bin(op: Operator, lhs: Expr, rhs: Expr) -> Expr {
     let span = lhs.span().join(rhs.span());
 
     if let Expr::Bin(ref right) = rhs
-        && precedence(&op) >= precedence(&right.op)
+        && op.precedence() >= right.op.precedence()
+        && op.assoc() == Assoc::Left
         && let Expr::Bin(rhs) = rhs
     {
         return Expr::Bin(BinExpr {
@@ -222,16 +227,95 @@ fn bin(op: Ident, lhs: Expr, rhs: Expr) -> Expr {
     })
 }
 
+pub fn rec_expr(parser: &mut Parser<'_>) -> Expr {
+    let input = app_expr(parser);
+
+    if parser.peek() != Token::LBrace {
+        return input;
+    }
+
+    parser.expect(Token::LBrace);
+
+    let mut fields = Vec::new();
+
+    if parser.peek() == Token::Newline {
+        lines(parser);
+        parser.expect(Token::Indent);
+        lines(parser);
+
+        while !matches!(
+            parser.peek(),
+            Token::Dedent | Token::Eof,
+        ) {
+            fields.push(expr_field(parser));
+            lines(parser);
+        }
+
+        parser.expect(Token::Dedent);
+        lines(parser);
+    } else {
+        while matches!(parser.peek(), Token::Ident(..)) {
+            fields.push(expr_field(parser));
+
+            if parser.peek() != Token::Semi {
+                break;
+            }
+
+            parser.expect(Token::Semi);
+        }
+    }
+
+    let end = parser.expect(Token::RBrace);
+    let span = input.span().join(end);
+
+    Expr::Rec(RecExpr {
+        input: Box::new(input),
+        fields,
+        span,
+    })
+}
+
+fn expr_field(parser: &mut Parser<'_>) -> ExprField {
+    let start = parser.span();
+    let name = parser.expect_ident();
+
+    parser.expect(Token::Equal);
+
+    let expr = expr(parser);
+    let span = start.join(expr.span());
+
+    ExprField { name, expr, span }
+}
+
 pub fn app_expr(parser: &mut Parser<'_>) -> Expr {
-    let mut expr = term_expr(parser);
+    let mut expr = field_expr(parser);
 
     while is_expr(parser) {
-        let input = term_expr(parser);
+        let input = field_expr(parser);
         let span = expr.span().join(input.span());
 
         expr = Expr::App(AppExpr {
             lambda: Box::new(expr),
             input: Box::new(input),
+            span,
+        });
+    }
+
+    expr
+}
+
+pub fn field_expr(parser: &mut Parser<'_>) -> Expr {
+    let mut expr = term_expr(parser);
+
+    while parser.peek() == Token::Dot {
+        parser.expect(Token::Dot);
+
+        let span = expr.span().join(parser.span());
+        let name = parser.expect_ident();
+
+        expr = Expr::Field(FieldExpr {
+            input: Box::new(expr),
+            name,
             span,
         });
     }
@@ -246,7 +330,8 @@ pub fn term_expr(parser: &mut Parser<'_>) -> Expr {
         Token::Real(real) => Expr::Lit(real_expr(parser, real)),
         Token::Ident(..) => Expr::Var(item_expr(parser)),
         Token::Back => Expr::Lam(lambda_expr(parser)),
-        Token::LParen => paren_expr(parser),
+        Token::LParen => Expr::Paren(paren_expr(parser)),
+        Token::LBracket => Expr::List(list_expr(parser)),
 
         _ => {
             let span = parser.expected("expression");
@@ -255,20 +340,24 @@ pub fn term_expr(parser: &mut Parser<'_>) -> Expr {
     }
 }
 
-pub fn paren_expr(parser: &mut Parser<'_>) -> Expr {
-    parser.expect(Token::LParen);
+pub fn paren_expr(parser: &mut Parser<'_>) -> ParenExpr {
+    let start = parser.expect(Token::LParen);
 
     let expr = match operator(parser) {
-        Some(operator) => Expr::Var(VarExpr {
-            span: operator.span(),
-            var:  Some(operator),
+        Some((operator, span)) => Expr::Var(VarExpr {
+            span,
+            var: Some(Ident::operator(operator, span)),
         }),
+
         None => expr(parser),
     };
 
-    parser.expect(Token::RParen);
+    let end = parser.expect(Token::RParen);
 
-    expr
+    ParenExpr {
+        expr: Box::new(expr),
+        span: start.join(end),
+    }
 }
 
 pub fn str_expr(parser: &mut Parser<'_>, str: String) -> LitExpr {
@@ -295,6 +384,29 @@ pub fn real_expr(parser: &mut Parser<'_>, real: f64) -> LitExpr {
     LitExpr {
         lit: Lit::Real(real),
         span,
+    }
+}
+
+pub fn list_expr(parser: &mut Parser<'_>) -> ListExpr {
+    let start = parser.expect(Token::LBracket);
+
+    let mut items = Vec::new();
+
+    while is_expr(parser) {
+        items.push(expr(parser));
+
+        if parser.peek() != Token::Semi {
+            break;
+        }
+
+        parser.expect(Token::Semi);
+    }
+
+    let end = parser.expect(Token::RBracket);
+
+    ListExpr {
+        items,
+        span: start.join(end),
     }
 }
 

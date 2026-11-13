@@ -1,7 +1,7 @@
 use crate::{
     ast::{
-        AscribeStmt, DefineStmt, ErrorStmt, ImplMember, ImplStmt, ImportStmt, Pat, Stmt,
-        TraitMember, TraitStmt, TypeCons, TypeStmt,
+        AscribeStmt, DefineStmt, ErrorStmt, ImplMember, ImplStmt, ImportStmt, Pat, RecordCons,
+        RecordField, Stmt, TraitMember, TraitStmt, TupleCons, TypeCons, TypeStmt,
     },
     parse::{Parser, Token, expr, is_pat, is_ty, kind, operator, pat, term_ty, ty},
     var::Ident,
@@ -56,7 +56,7 @@ pub fn import_stmt(parser: &mut Parser<'_>) -> Stmt {
 
 pub fn define_or_ascribe_stmt(parser: &mut Parser<'_>) -> Stmt {
     let span = parser.span();
-    let var = definee(parser);
+    let var = ident_or_operator(parser);
 
     let args = args(parser);
 
@@ -92,13 +92,22 @@ pub fn define_or_ascribe_stmt(parser: &mut Parser<'_>) -> Stmt {
     }
 }
 
-pub fn definee(parser: &mut Parser<'_>) -> Option<Ident> {
+pub fn ident_or_operator(parser: &mut Parser<'_>) -> Option<Ident> {
     match parser.peek() {
         Token::LParen => {
             parser.expect(Token::LParen);
-            let operator = operator(parser);
+            let (operator, span) = operator(parser)?;
             parser.expect(Token::RParen);
-            operator
+
+            Some(Ident::operator(operator, span))
+        }
+
+        Token::LBracket => {
+            let start = parser.expect(Token::LBracket);
+            let end = parser.expect(Token::RBracket);
+            let span = start.join(end);
+
+            Some(Ident::new("[]", span))
         }
 
         _ => parser.expect_ident(),
@@ -107,7 +116,7 @@ pub fn definee(parser: &mut Parser<'_>) -> Option<Ident> {
 
 pub fn type_stmt(parser: &mut Parser<'_>) -> Stmt {
     let span = parser.expect(Token::Type);
-    let var = parser.expect_ident();
+    let var = ident_or_operator(parser);
 
     let mut input = Vec::new();
 
@@ -116,18 +125,9 @@ pub fn type_stmt(parser: &mut Parser<'_>) -> Stmt {
         input.push(var);
     }
 
-    let mut cons = Vec::new();
+    parser.expect(Token::Equal);
 
-    if parser.peek() == Token::Equal {
-        parser.expect(Token::Equal);
-
-        cons.push(self::type_cons(parser));
-
-        while parser.peek() == Token::Pipe {
-            parser.expect(Token::Pipe);
-            cons.push(self::type_cons(parser));
-        }
-    }
+    let cons = type_cons(parser);
 
     Stmt::Type(TypeStmt {
         var,
@@ -138,8 +138,79 @@ pub fn type_stmt(parser: &mut Parser<'_>) -> Stmt {
 }
 
 pub fn type_cons(parser: &mut Parser<'_>) -> TypeCons {
-    let span = parser.span();
+    if matches!(parser.peek(), Token::Ident(..)) && parser.peek_nth(1) == Token::LBrace {
+        TypeCons::Record(rec_cons(parser))
+    } else {
+        let mut cons = Vec::new();
+
+        cons.push(self::tuple_cons(parser));
+
+        while parser.peek() == Token::Pipe {
+            parser.expect(Token::Pipe);
+            cons.push(self::tuple_cons(parser));
+        }
+
+        TypeCons::Tuple(cons)
+    }
+}
+
+pub fn rec_cons(parser: &mut Parser<'_>) -> RecordCons {
+    let start = parser.span();
     let var = parser.expect_ident();
+
+    parser.expect(Token::LBrace);
+
+    let mut fields = Vec::new();
+
+    if parser.peek() == Token::Newline {
+        lines(parser);
+        parser.expect(Token::Indent);
+        lines(parser);
+
+        while !matches!(
+            parser.peek(),
+            Token::Dedent | Token::Eof,
+        ) {
+            fields.push(rec_field(parser));
+            lines(parser);
+        }
+
+        parser.expect(Token::Dedent);
+        lines(parser);
+    } else {
+        while matches!(parser.peek(), Token::Ident(..)) {
+            fields.push(rec_field(parser));
+
+            if parser.peek() != Token::Semi {
+                break;
+            }
+
+            parser.expect(Token::Semi);
+        }
+    }
+
+    let end = parser.expect(Token::RBrace);
+    let span = start.join(end);
+
+    RecordCons { var, fields, span }
+}
+
+fn rec_field(parser: &mut Parser<'_>) -> RecordField {
+    let start = parser.span();
+    let name = parser.expect_ident();
+
+    parser.expect(Token::ColonColon);
+
+    let ty = ty(parser);
+
+    let span = start.join(ty.span());
+
+    RecordField { name, ty, span }
+}
+
+pub fn tuple_cons(parser: &mut Parser<'_>) -> TupleCons {
+    let span = parser.span();
+    let var = ident_or_operator(parser);
 
     let mut args = Vec::new();
 
@@ -147,7 +218,7 @@ pub fn type_cons(parser: &mut Parser<'_>) -> TypeCons {
         args.push(term_ty(parser));
     }
 
-    TypeCons { var, args, span }
+    TupleCons { var, args, span }
 }
 
 pub fn trait_stmt(parser: &mut Parser<'_>) -> Stmt {
@@ -188,7 +259,7 @@ pub fn trait_stmt(parser: &mut Parser<'_>) -> Stmt {
 
 pub fn trait_member(parser: &mut Parser<'_>) -> TraitMember {
     let span = parser.span();
-    let var = definee(parser);
+    let var = ident_or_operator(parser);
 
     parser.expect(Token::ColonColon);
 
@@ -209,7 +280,10 @@ pub fn impl_stmt(parser: &mut Parser<'_>) -> Stmt {
         parser.consume_all(Token::Newline);
         parser.expect(Token::Indent);
 
-        while parser.peek() != Token::Dedent {
+        while !matches!(
+            parser.peek(),
+            Token::Dedent | Token::Eof
+        ) {
             members.push(impl_member(parser));
             parser.consume_all(Token::Newline);
         }
@@ -227,7 +301,7 @@ pub fn impl_stmt(parser: &mut Parser<'_>) -> Stmt {
 
 pub fn impl_member(parser: &mut Parser<'_>) -> ImplMember {
     let span = parser.span();
-    let var = definee(parser);
+    let var = ident_or_operator(parser);
 
     let args = args(parser);
 

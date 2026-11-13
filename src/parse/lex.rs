@@ -308,6 +308,7 @@ impl<'a> Lexer<'a> {
     fn one_character_symbol(&mut self, c: char) -> Option<(Token, Span)> {
         let token = match c {
             '\\' => Token::Back,
+
             '|' => Token::Pipe,
             '_' => Token::Under,
             '=' => Token::Equal,
@@ -318,11 +319,17 @@ impl<'a> Lexer<'a> {
             ':' => Token::Colon,
             ';' => Token::Semi,
             '.' => Token::Dot,
+            ',' => Token::Comma,
             '>' => Token::Gt,
             '<' => Token::Lt,
 
             '(' => Token::LParen,
             ')' => Token::RParen,
+            '[' => Token::LBracket,
+            ']' => Token::RBracket,
+            '{' => Token::LBrace,
+            '}' => Token::RBrace,
+
             _ => return None,
         };
 

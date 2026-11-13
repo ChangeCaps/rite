@@ -36,11 +36,28 @@ pub struct AscribeStmt {
 pub struct TypeStmt {
     pub var:   Option<Ident>,
     pub input: Vec<Option<Ident>>,
-    pub cons:  Vec<TypeCons>,
+    pub cons:  TypeCons,
     pub span:  Span,
 }
 
-pub struct TypeCons {
+pub enum TypeCons {
+    Record(RecordCons),
+    Tuple(Vec<TupleCons>),
+}
+
+pub struct RecordCons {
+    pub var:    Option<Ident>,
+    pub fields: Vec<RecordField>,
+    pub span:   Span,
+}
+
+pub struct RecordField {
+    pub name: Option<Ident>,
+    pub ty:   Ty,
+    pub span: Span,
+}
+
+pub struct TupleCons {
     pub var:  Option<Ident>,
     pub args: Vec<Ty>,
     pub span: Span,

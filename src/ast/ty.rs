@@ -1,10 +1,17 @@
-use crate::{ast::Kind, diagnostic::Span, var::Ident};
+use crate::{
+    ast::Kind,
+    diagnostic::Span,
+    var::{Ident, Operator},
+};
 
 #[derive(Debug)]
 pub enum Ty {
     Var(VarTy),
     Lam(LamTy),
+    Bin(BinTy),
     App(AppTy),
+    List(ListTy),
+    Paren(ParenTy),
     Where(WhereTy),
     Error(ErrorTy),
 }
@@ -23,10 +30,30 @@ pub struct LamTy {
 }
 
 #[derive(Debug)]
+pub struct BinTy {
+    pub op:   Operator,
+    pub lhs:  Box<Ty>,
+    pub rhs:  Box<Ty>,
+    pub span: Span,
+}
+
+#[derive(Debug)]
 pub struct AppTy {
     pub lambda: Box<Ty>,
     pub input:  Box<Ty>,
     pub span:   Span,
+}
+
+#[derive(Debug)]
+pub struct ListTy {
+    pub item: Box<Ty>,
+    pub span: Span,
+}
+
+#[derive(Debug)]
+pub struct ParenTy {
+    pub ty:   Box<Ty>,
+    pub span: Span,
 }
 
 #[derive(Debug)]
@@ -47,7 +74,10 @@ impl Ty {
         match self {
             Ty::Var(ty) => ty.span,
             Ty::Lam(ty) => ty.span,
+            Ty::Bin(ty) => ty.span,
             Ty::App(ty) => ty.span,
+            Ty::List(ty) => ty.span,
+            Ty::Paren(ty) => ty.span,
             Ty::Where(ty) => ty.span,
             Ty::Error(ty) => ty.span,
         }

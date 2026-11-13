@@ -4,10 +4,10 @@ use crate::{
     ast,
     diagnostic::{Diagnostic, Span},
     rename::{
-        self, ErrorExpr, ErrorTy, Expr, Kind, LamExpr, Scope, ScopeTy, ScopeValue, ScopeValueKind,
-        State, Ty, TyPrim, Vis,
+        self, ErrorExpr, ErrorTy, Expr, Kind, Scope, ScopeCons, ScopeTy, ScopeValue,
+        ScopeValueKind, State, Ty, TyPrim, Vis,
     },
-    var::Var,
+    var::{Ident, Var},
 };
 
 use super::ScopeTyKind;
@@ -22,11 +22,28 @@ pub struct Def {
 pub struct Type {
     pub var:   Var,
     pub input: Vec<Var>,
-    pub cons:  Vec<TypeCons>,
+    pub cons:  TypeCons,
     pub span:  Span,
 }
 
-pub struct TypeCons {
+pub enum TypeCons {
+    Rec(RecordCons),
+    Tuple(Vec<TupleCons>),
+}
+
+pub struct RecordCons {
+    pub var:    Var,
+    pub fields: Vec<RecordField>,
+    pub span:   Span,
+}
+
+pub struct RecordField {
+    pub name: Ident,
+    pub ty:   Ty,
+    pub span: Span,
+}
+
+pub struct TupleCons {
     pub var:  Var,
     pub args: Vec<Ty>,
     pub span: Span,
@@ -72,9 +89,13 @@ impl State<'_> {
 
         let mut scope = Scope::new();
 
-        scope
-            .imports
-            .extend(rename::PRELUDE.iter().copied().map(Into::into));
+        scope.imports.extend(
+            rename::PRELUDE
+                .iter()
+                .copied()
+                .filter(|path| imports.contains(*path))
+                .map(Into::into),
+        );
 
         let mut define_stmts = Vec::new();
         let mut ascribe_stmts = Vec::new();
@@ -94,6 +115,20 @@ impl State<'_> {
                 scope.tys.push(ScopeTy {
                     name: Some(String::from("real")),
                     kind: ScopeTyKind::Prim(TyPrim::Real),
+                });
+            }
+
+            if module.path == "std:str" {
+                scope.tys.push(ScopeTy {
+                    name: Some(String::from("str")),
+                    kind: ScopeTyKind::Prim(TyPrim::Str),
+                });
+            }
+
+            if module.path == "std:system" {
+                scope.tys.push(ScopeTy {
+                    name: Some(String::from("io")),
+                    kind: ScopeTyKind::Prim(TyPrim::Io),
                 });
             }
 
@@ -143,11 +178,6 @@ impl State<'_> {
             self.trait_stmt(scope, var, stmt);
         }
 
-        for (module, stmt) in impl_stmts {
-            let scope = self.modules[&module].clone();
-            self.impl_stmt(scope, stmt);
-        }
-
         for (module, stmt) in ascribe_stmts {
             let scope = self.modules[&module].clone();
             self.ascribe_stmt(scope, stmt);
@@ -156,6 +186,11 @@ impl State<'_> {
         for (module, var, stmt) in define_stmts {
             let scope = self.modules[&module].clone();
             self.define_stmt(scope, var, stmt);
+        }
+
+        for (module, stmt) in impl_stmts {
+            let scope = self.modules[&module].clone();
+            self.impl_stmt(scope, stmt);
         }
     }
 
@@ -214,16 +249,22 @@ impl State<'_> {
 
         scope.tys.push(ScopeTy {
             name: var.ident().map(|ident| ident.as_str().into()),
-            kind: ScopeTyKind::Var(var.clone()),
+            kind: ScopeTyKind::Type(var.clone()),
         });
 
         let input = stmt.input.iter().cloned().map(Var::from).collect();
 
-        let cons = stmt
-            .cons
-            .iter()
-            .map(|cons| self.register_type_cons(scope, var.clone(), cons))
-            .collect();
+        let cons = match stmt.cons {
+            ast::TypeCons::Record(ref cons) => {
+                TypeCons::Rec(self.register_record_cons(scope, var.clone(), cons))
+            }
+
+            ast::TypeCons::Tuple(ref cons) => TypeCons::Tuple(
+                cons.iter()
+                    .map(|cons| self.register_tuple_cons(scope, var.clone(), cons))
+                    .collect(),
+            ),
+        };
 
         let type_ = Type {
             var: var.clone(),
@@ -236,15 +277,38 @@ impl State<'_> {
         var
     }
 
-    fn register_type_cons(
+    fn register_record_cons(
         &mut self,
         scope: &mut Scope,
         type_: Var,
-        cons: &ast::TypeCons,
-    ) -> TypeCons {
-        if let Some(ref ident) = cons.var
-            && let Some(var) = scope.find_cons(Some(ident))
-            && let Some(prev) = var.ident()
+        cons: &ast::RecordCons,
+    ) -> RecordCons {
+        let var = Var::from(cons.var.clone());
+
+        let value = ScopeValue {
+            vis:  Vis::Public,
+            var:  var.clone(),
+            kind: ScopeValueKind::Cons(type_),
+        };
+
+        scope.values.push(value);
+
+        RecordCons {
+            var,
+            fields: Vec::new(),
+            span: cons.span,
+        }
+    }
+
+    fn register_tuple_cons(
+        &mut self,
+        scope: &mut Scope,
+        type_: Var,
+        ast: &ast::TupleCons,
+    ) -> TupleCons {
+        if let Some(ref ident) = ast.var
+            && let Some(cons) = scope.find_cons(Some(ident))
+            && let Some(prev) = cons.var.ident()
         {
             let diagnostic = Diagnostic::error("redefinition of constructor")
                 .label(ident.span(), "found here")
@@ -253,7 +317,7 @@ impl State<'_> {
             self.reporter.report(diagnostic);
         }
 
-        if let Some(ref ident) = cons.var
+        if let Some(ref ident) = ast.var
             && let Some(value) = scope.find_value(Some(ident))
             && let Some(prev) = value.var.ident()
         {
@@ -264,21 +328,26 @@ impl State<'_> {
             self.reporter.report(diagnostic);
         }
 
-        let var = Var::from(cons.var.clone());
+        let var = Var::from(ast.var.clone());
 
         let value = ScopeValue {
             vis:  Vis::Public,
             var:  var.clone(),
-            kind: ScopeValueKind::Cons(type_),
+            kind: ScopeValueKind::Cons(type_.clone()),
+        };
+
+        let cons = ScopeCons {
+            var:   var.clone(),
+            type_: type_.clone(),
         };
 
         scope.values.push(value);
-        scope.cons.push(var.clone());
+        scope.cons.push(cons);
 
-        TypeCons {
+        TupleCons {
             var,
             args: Vec::new(),
-            span: cons.span,
+            span: ast.span,
         }
     }
 
@@ -423,22 +492,47 @@ impl State<'_> {
             .tys
             .extend(type_.input.iter().cloned().map(From::from));
 
-        let cons = stmt
-            .cons
-            .into_iter()
-            .zip(mem::take(&mut type_.cons))
-            .map(|(ast, mut cons)| {
-                cons.args = ast
-                    .args
+        match stmt.cons {
+            ast::TypeCons::Record(cons) => {
+                let fields = cons
+                    .fields
                     .into_iter()
-                    .map(|arg| self.ty(&mut scope, arg))
-                    .collect();
+                    .filter_map(|field| {
+                        Some(RecordField {
+                            name: field.name?,
+                            ty:   self.ty(&mut scope, field.ty),
+                            span: field.span,
+                        })
+                    })
+                    .collect::<Vec<_>>();
 
-                cons
-            })
-            .collect();
+                let TypeCons::Rec(ref mut cons) = self.type_mut(&var).cons else {
+                    panic!();
+                };
 
-        self.type_mut(&var).cons = cons;
+                cons.fields = fields;
+            }
+
+            ast::TypeCons::Tuple(cons) => {
+                let args = cons
+                    .into_iter()
+                    .map(|cons| {
+                        cons.args
+                            .into_iter()
+                            .map(|arg| self.ty(&mut scope, arg))
+                            .collect::<Vec<_>>()
+                    })
+                    .collect::<Vec<_>>();
+
+                let TypeCons::Tuple(ref mut cons) = self.type_mut(&var).cons else {
+                    panic!();
+                };
+
+                for (cons, args) in cons.iter_mut().zip(args) {
+                    cons.args = args;
+                }
+            }
+        }
     }
 
     fn trait_stmt(&mut self, mut scope: Scope, var: Var, stmt: ast::TraitStmt) {

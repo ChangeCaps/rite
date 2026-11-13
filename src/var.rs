@@ -8,18 +8,143 @@ use std::{
     },
 };
 
-use crate::diagnostic::Span;
+use crate::{diagnostic::Span, parse::Token};
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Operator {
+    PipeGt,
+    LtPipe,
+    BackGt,
+    LtBack,
+    GtGtEqual,
+    GtGt,
+    LtLt,
+    EqualEqual,
+    BangEqual,
+    Comma,
+    Colon,
+    PipePipe,
+    AmpAmp,
+    Plus,
+    Minus,
+    Star,
+    Slash,
+}
+
+impl Operator {
+    pub const ALL: &[Self] = &[
+        Operator::PipeGt,
+        Operator::LtPipe,
+        Operator::BackGt,
+        Operator::LtBack,
+        Operator::GtGtEqual,
+        Operator::GtGt,
+        Operator::LtLt,
+        Operator::EqualEqual,
+        Operator::BangEqual,
+        Operator::Comma,
+        Operator::Colon,
+        Operator::PipePipe,
+        Operator::AmpAmp,
+        Operator::Plus,
+        Operator::Minus,
+        Operator::Star,
+        Operator::Slash,
+    ];
+
+    pub fn as_token(self) -> &'static Token {
+        match self {
+            Operator::PipeGt => &Token::PipeGt,
+            Operator::LtPipe => &Token::LtPipe,
+            Operator::BackGt => &Token::BackGt,
+            Operator::LtBack => &Token::LtBack,
+            Operator::GtGtEqual => &Token::GtGtEqual,
+            Operator::GtGt => &Token::GtGt,
+            Operator::LtLt => &Token::LtLt,
+            Operator::EqualEqual => &Token::EqualEqual,
+            Operator::BangEqual => &Token::BangEqual,
+            Operator::Comma => &Token::Comma,
+            Operator::Colon => &Token::Colon,
+            Operator::PipePipe => &Token::PipePipe,
+            Operator::AmpAmp => &Token::AmpAmp,
+            Operator::Plus => &Token::Plus,
+            Operator::Minus => &Token::Minus,
+            Operator::Star => &Token::Star,
+            Operator::Slash => &Token::Slash,
+        }
+    }
+
+    pub fn precedence(self) -> u8 {
+        match self {
+            Self::PipeGt | Self::BackGt | Self::GtGtEqual | Self::GtGt => 0,
+            Self::LtPipe | Self::LtBack | Self::LtLt => 1,
+            Self::EqualEqual | Self::BangEqual => 2,
+            Self::Comma => 3,
+            Self::Colon => 4,
+            Self::PipePipe => 5,
+            Self::AmpAmp => 6,
+            Self::Plus | Self::Minus => 7,
+            Self::Star | Self::Slash => 8,
+        }
+    }
+
+    pub fn assoc(self) -> Assoc {
+        match self {
+            Operator::PipeGt
+            | Operator::LtPipe
+            | Operator::BackGt
+            | Operator::LtBack
+            | Operator::GtGtEqual
+            | Operator::GtGt
+            | Operator::LtLt
+            | Operator::EqualEqual
+            | Operator::BangEqual
+            | Operator::Comma
+            | Operator::PipePipe
+            | Operator::AmpAmp
+            | Operator::Plus
+            | Operator::Minus
+            | Operator::Star
+            | Operator::Slash => Assoc::Left,
+
+            Operator::Colon => Assoc::Right,
+        }
+    }
+
+    pub fn as_str(&self) -> &'static str {
+        self.as_token().as_str()
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum Assoc {
+    Left,
+    Right,
+}
 
 #[derive(Clone)]
 pub struct Ident {
-    name: Arc<str>,
-    span: Span,
+    inner: IdentInner,
+    span:  Span,
+}
+
+#[derive(Clone, PartialEq)]
+enum IdentInner {
+    Name(Arc<str>),
+    Operator(Operator),
 }
 
 impl Ident {
     pub fn new(name: impl Into<String>, span: Span) -> Self {
         Self {
-            name: name.into().into(),
+            inner: IdentInner::Name(name.into().into()),
+            span,
+        }
+    }
+
+    pub fn operator(operator: Operator, span: Span) -> Self {
+        Self {
+            inner: IdentInner::Operator(operator),
             span,
         }
     }
@@ -29,7 +154,17 @@ impl Ident {
     }
 
     pub fn as_str(&self) -> &str {
-        self.name.as_ref()
+        match self.inner {
+            IdentInner::Name(ref name) => name.as_ref(),
+            IdentInner::Operator(operator) => operator.as_str(),
+        }
+    }
+
+    pub fn as_operator(&self) -> Option<Operator> {
+        match self.inner {
+            IdentInner::Name(_) => None,
+            IdentInner::Operator(operator) => Some(operator),
+        }
     }
 }
 
@@ -47,13 +182,13 @@ impl fmt::Display for Ident {
 
 impl PartialEq for Ident {
     fn eq(&self, other: &Self) -> bool {
-        self.name == other.name
+        self.inner == other.inner
     }
 }
 
 impl PartialEq<str> for Ident {
     fn eq(&self, other: &str) -> bool {
-        self.name.as_ref() == other
+        self.as_str() == other
     }
 }
 
@@ -158,10 +293,9 @@ impl Default for Unique {
 impl Unique {
     pub fn new() -> Self {
         static NEXT: AtomicU64 = AtomicU64::new(0);
+        let data = NEXT.fetch_add(1, Ordering::SeqCst);
 
-        Self {
-            data: NEXT.fetch_add(1, Ordering::SeqCst),
-        }
+        Self { data }
     }
 }
 

@@ -1,12 +1,13 @@
 use crate::{
-    ast::{AppTy, ErrorTy, LamTy, Ty, VarTy, WhereTy},
-    parse::{Parser, Token, kind},
+    ast::{AppTy, BinTy, ErrorTy, LamTy, ListTy, ParenTy, Ty, VarTy, WhereTy},
+    parse::{Parser, Token, kind, operator},
+    var::{Assoc, Ident, Operator},
 };
 
 pub fn is_ty(token: Token) -> bool {
     matches!(
         token,
-        Token::Ident(..) | Token::Star | Token::LParen,
+        Token::Ident(..) | Token::Star | Token::LParen | Token::LBracket,
     )
 }
 
@@ -39,7 +40,7 @@ pub fn where_ty(parser: &mut Parser<'_>) -> Ty {
 }
 
 pub fn lambda_ty(parser: &mut Parser<'_>) -> Ty {
-    let ty = apply_ty(parser);
+    let ty = bin_ty(parser);
 
     if parser.peek() == Token::RArrow {
         parser.expect(Token::RArrow);
@@ -55,6 +56,47 @@ pub fn lambda_ty(parser: &mut Parser<'_>) -> Ty {
     } else {
         ty
     }
+}
+
+pub fn bin_ty(parser: &mut Parser<'_>) -> Ty {
+    let lhs = apply_ty(parser);
+
+    let Some((op, _)) = operator(parser) else {
+        return lhs;
+    };
+
+    let rhs = bin_ty(parser);
+
+    bin(op, lhs, rhs)
+}
+
+fn bin(op: Operator, lhs: Ty, rhs: Ty) -> Ty {
+    let span = lhs.span().join(rhs.span());
+
+    if let Ty::Bin(ref right) = rhs
+        && op.precedence() >= right.op.precedence()
+        && op.assoc() == Assoc::Left
+        && let Ty::Bin(rhs) = rhs
+    {
+        return Ty::Bin(BinTy {
+            op:   rhs.op,
+            lhs:  Box::new(Ty::Bin(BinTy {
+                op,
+                lhs: Box::new(lhs),
+                rhs: rhs.lhs,
+                span,
+            })),
+            rhs:  rhs.rhs,
+            span: rhs.span,
+        });
+    }
+
+    Ty::Bin(BinTy {
+        op,
+        lhs: Box::new(lhs),
+        rhs: Box::new(rhs),
+        span,
+    })
 }
 
 pub fn apply_ty(parser: &mut Parser<'_>) -> Ty {
@@ -78,7 +120,8 @@ pub fn term_ty(parser: &mut Parser<'_>) -> Ty {
     match parser.peek() {
         Token::Ident(..) => Ty::Var(var_ty(parser)),
 
-        Token::LParen => paren_ty(parser),
+        Token::LParen => Ty::Paren(paren_ty(parser)),
+        Token::LBracket => Ty::List(list_ty(parser)),
 
         _ => {
             let span = parser.expected("type");
@@ -87,14 +130,35 @@ pub fn term_ty(parser: &mut Parser<'_>) -> Ty {
     }
 }
 
-pub fn paren_ty(parser: &mut Parser<'_>) -> Ty {
-    parser.expect(Token::LParen);
+pub fn paren_ty(parser: &mut Parser<'_>) -> ParenTy {
+    let start = parser.expect(Token::LParen);
 
-    let ty = ty(parser);
+    let ty = match parser.peek() {
+        Token::LBracket => {
+            let start = parser.expect(Token::LBracket);
+            let end = parser.expect(Token::RBracket);
+            let span = start.join(end);
 
-    parser.expect(Token::RParen);
+            Ty::Var(VarTy {
+                var: Some(Ident::new("[]", span)),
+                span,
+            })
+        }
 
-    ty
+        _ if let Some((operator, span)) = operator(parser) => Ty::Var(VarTy {
+            span,
+            var: Some(Ident::operator(operator, span)),
+        }),
+
+        _ => ty(parser),
+    };
+
+    let end = parser.expect(Token::RParen);
+
+    ParenTy {
+        ty:   Box::new(ty),
+        span: start.join(end),
+    }
 }
 
 pub fn var_ty(parser: &mut Parser<'_>) -> VarTy {
@@ -102,4 +166,15 @@ pub fn var_ty(parser: &mut Parser<'_>) -> VarTy {
     let var = parser.expect_ident();
 
     VarTy { var, span }
+}
+
+pub fn list_ty(parser: &mut Parser<'_>) -> ListTy {
+    let start = parser.expect(Token::LBracket);
+    let item = ty(parser);
+    let end = parser.expect(Token::RBracket);
+
+    ListTy {
+        item: Box::new(item),
+        span: start.join(end),
+    }
 }

@@ -1,0 +1,16 @@
+import 'intrinsic'
+
+impl add int
+  (+) a b = int-add a b
+
+impl sub int
+  (-) a b = int-sub a b
+
+impl mul int
+  (*) a b = int-mul a b
+
+impl div int
+  (/) a b = int-div a b
+
+impl zero int
+  zero = 0

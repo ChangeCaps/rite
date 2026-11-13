@@ -1,0 +1,17 @@
+type state s a = state (s -> a, s)
+
+impl monad state s
+  (>>=) m f = state \s.
+    let x, s = run m s
+    run (f x) s
+
+  pure x = state \s. x, s
+
+run :: state s a -> s -> a, s
+run (state f) s = f s
+
+get :: state s s
+get = state \s. s, s
+
+put :: s -> state s void
+put s = state \_. (void, s)

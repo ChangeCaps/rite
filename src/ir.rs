@@ -1,7 +1,7 @@
 use std::fmt;
 
 use crate::{
-    primitive::{BinPrim, PrimNum},
+    primitive::{BinPrim, UnPrim},
     var::Var,
 };
 
@@ -13,7 +13,7 @@ pub enum Expr {
     App(Box<Expr>, Box<Expr>),
     Rec(Vec<(Expr, Var)>, Box<Expr>),
     Let(Box<Expr>, Var, Box<Expr>),
-    Cons(Var, Vec<Expr>),
+    Cons(Cons, Vec<Expr>),
     Case(Box<Expr>, Vec<Alt>, Option<Box<Expr>>),
     Prim(Prim),
     Note(String, Box<Expr>),
@@ -21,6 +21,7 @@ pub enum Expr {
 
 #[derive(Clone)]
 pub enum Prim {
+    Un(UnPrim, Box<Expr>),
     Bin(BinPrim, Box<Expr>, Box<Expr>),
 }
 
@@ -33,9 +34,14 @@ pub enum Lit {
 
 #[derive(Clone)]
 pub struct Alt {
-    pub var:  Var,
+    pub cons: Cons,
     pub args: Vec<Var>,
     pub expr: Expr,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Cons {
+    Var(Var),
 }
 
 impl fmt::Debug for Expr {
@@ -58,13 +64,19 @@ impl fmt::Debug for Expr {
                     .unwrap_or_else(|| format!("_{}", var.unique()))
             }
 
+            fn fmt_cons(cons: &Cons) -> String {
+                match cons {
+                    Cons::Var(var) => fmt_var(var),
+                }
+            }
+
             match expr {
                 Expr::Var(var) => fmt_var(var),
 
                 Expr::Lit(lit) => match lit {
                     Lit::Str(str) => format!("\"{str}\""),
-                    Lit::Int(int) => format!("{int} :: int"),
-                    Lit::Real(real) => format!("{real} :: real"),
+                    Lit::Int(int) => format!("{int}_int"),
+                    Lit::Real(real) => format!("{real}_real"),
                 },
 
                 Expr::Lam(var, expr) => {
@@ -123,13 +135,13 @@ impl fmt::Debug for Expr {
                     0,
                 ),
 
-                Expr::Cons(var, args) => {
+                Expr::Cons(cons, args) => {
                     let mut args = args
                         .iter()
                         .map(|arg| fmt_expr(arg, i, 1))
                         .collect::<Vec<_>>();
 
-                    args.insert(0, fmt_var(var));
+                    args.insert(0, fmt_cons(cons));
 
                     args.join(" ")
                 }
@@ -139,7 +151,7 @@ impl fmt::Debug for Expr {
                         .iter()
                         .map(|alt| {
                             let mut args = alt.args.iter().map(fmt_var).collect::<Vec<_>>();
-                            args.insert(0, fmt_var(&alt.var));
+                            args.insert(0, fmt_cons(&alt.cons));
 
                             format!(
                                 "{} -> {}",
@@ -170,6 +182,12 @@ impl fmt::Debug for Expr {
                 }
 
                 Expr::Prim(prim) => match prim {
+                    Prim::Un(prim, input) => {
+                        let input = fmt_expr(input, i, 0);
+
+                        format!("({prim:?} {input})")
+                    }
+
                     Prim::Bin(prim, lhs, rhs) => {
                         let lhs = fmt_expr(lhs, i, 0);
                         let rhs = fmt_expr(rhs, i, 0);

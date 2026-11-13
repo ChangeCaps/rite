@@ -21,10 +21,17 @@ pub use ty::*;
 
 pub const PRELUDE: &[&str] = &[
     "std:flow",
+    "std:functor",
+    "std:list",
     "std:math",
     "std:maybe",
     "std:monad",
     "std:result",
+    "std:state",
+    "std:str",
+    "std:system",
+    "std:tuple",
+    "std:void",
 ];
 
 pub struct Unit {
@@ -59,7 +66,7 @@ struct State<'a> {
 struct Scope {
     imports: Vec<String>,
     values:  Vec<ScopeValue>,
-    cons:    Vec<Var>,
+    cons:    Vec<ScopeCons>,
     tys:     Vec<ScopeTy>,
     kinds:   Vec<Var>,
 }
@@ -85,6 +92,7 @@ struct ScopeTy {
 #[derive(Clone)]
 enum ScopeTyKind {
     Var(Var),
+    Type(Var),
     Prim(TyPrim),
 }
 
@@ -93,6 +101,12 @@ struct ScopeValue {
     vis:  Vis,
     var:  Var,
     kind: ScopeValueKind,
+}
+
+#[derive(Clone)]
+struct ScopeCons {
+    var:   Var,
+    type_: Var,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -118,8 +132,11 @@ impl Scope {
             .find(|value| value.var.ident().map(Ident::as_str) == name)
     }
 
-    fn find_cons(&self, name: Option<&Ident>) -> Option<&Var> {
-        self.cons.iter().rev().find(|var| var.ident() == name)
+    fn find_cons(&self, name: Option<&str>) -> Option<&ScopeCons> {
+        self.cons
+            .iter()
+            .rev()
+            .find(|cons| cons.var.ident().map(Ident::as_str) == name)
     }
 
     fn find_ty(&self, name: Option<&str>) -> Option<&ScopeTy> {
@@ -137,7 +154,7 @@ impl Scope {
 impl ScopeTy {
     fn ident(&self) -> Option<&Ident> {
         match self.kind {
-            ScopeTyKind::Var(ref var) => var.ident(),
+            ScopeTyKind::Var(ref var) | ScopeTyKind::Type(ref var) => var.ident(),
             ScopeTyKind::Prim(..) => None,
         }
     }
@@ -166,7 +183,7 @@ impl<'a> State<'a> {
 
     fn find_value<'b>(&'b self, scope: &'b Scope, name: Option<&str>) -> Option<&'b ScopeValue> {
         scope.find_value(name).or_else(|| {
-            scope.imports.iter().find_map(|import| {
+            scope.imports.iter().rev().find_map(|import| {
                 self.modules[import]
                     .find_value(name)
                     .filter(|value| value.vis == Vis::Public)
@@ -174,21 +191,33 @@ impl<'a> State<'a> {
         })
     }
 
-    fn find_cons<'b>(&'b self, scope: &'b Scope, name: Option<&Ident>) -> Option<&'b Var> {
+    fn find_cons<'b>(&'b self, scope: &'b Scope, name: Option<&str>) -> Option<&'b ScopeCons> {
         scope.find_cons(name).or_else(|| {
-            (scope.imports.iter()).find_map(|import| self.modules[import].find_cons(name))
+            scope
+                .imports
+                .iter()
+                .rev()
+                .find_map(|import| self.modules[import].find_cons(name))
         })
     }
 
     fn find_ty<'b>(&'b self, scope: &'b Scope, name: Option<&str>) -> Option<&'b ScopeTy> {
         scope.find_ty(name).or_else(|| {
-            (scope.imports.iter()).find_map(|import| self.modules[import].find_ty(name))
+            scope
+                .imports
+                .iter()
+                .rev()
+                .find_map(|import| self.modules[import].find_ty(name))
         })
     }
 
     fn find_kind<'b>(&'b self, scope: &'b Scope, name: Option<&Ident>) -> Option<&'b Var> {
         scope.find_kind(name).or_else(|| {
-            (scope.imports.iter()).find_map(|import| self.modules[import].find_kind(name))
+            scope
+                .imports
+                .iter()
+                .rev()
+                .find_map(|import| self.modules[import].find_kind(name))
         })
     }
 

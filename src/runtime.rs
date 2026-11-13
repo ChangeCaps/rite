@@ -1,8 +1,8 @@
 use std::{cell::RefCell, collections::HashMap, fmt, mem, rc::Rc};
 
 use crate::{
-    ir::{Expr, Lit, Prim},
-    primitive::{BinPrim, PrimNum},
+    ir::{Cons, Expr, Lit, Prim},
+    primitive::{BinPrim, PrimNum, UnPrim},
     var::{Unique, Var},
 };
 
@@ -11,11 +11,12 @@ pub struct Runtime {}
 
 #[derive(Clone)]
 pub enum Value<'a> {
+    Io(Io<'a>),
     Str(String),
     Int(i64),
     Real(f64),
     Lam(Env<'a>, &'a Var, &'a Expr),
-    Cons(&'a Var, Vec<Thunk<'a>>),
+    Cons(&'a Cons, Vec<Thunk<'a>>),
 }
 
 impl Value<'_> {
@@ -34,9 +35,18 @@ impl Value<'_> {
     }
 }
 
+#[derive(Clone)]
+pub enum Io<'a> {
+    Pure(Thunk<'a>),
+    Bind(Thunk<'a>, Thunk<'a>),
+    Extern(Rc<dyn Fn() -> Value<'a>>),
+}
+
 impl fmt::Debug for Value<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::Io(..) => write!(f, "<io>"),
+
             Self::Str(str) => write!(f, "\"{str}\""),
             Self::Int(int) => write!(f, "{int}"),
             Self::Real(real) => write!(f, "{real}"),
@@ -79,22 +89,6 @@ impl<'a> Thunk<'a> {
     pub fn value(value: Value<'a>) -> Self {
         Self {
             inner: Rc::new(RefCell::new(ThunkInner::Value(value))),
-        }
-    }
-
-    pub fn force(&self, runtime: &mut Runtime) -> Value<'a> {
-        let mut inner = self.inner.borrow_mut();
-
-        match &mut *inner {
-            ThunkInner::Value(value) => value.clone(),
-
-            ThunkInner::Thunk(env, expr) => {
-                let mut env = mem::take(env);
-                let thunk = runtime.eval(&mut env, expr);
-                let value = thunk.force(runtime);
-                *inner = ThunkInner::Value(value.clone());
-                value
-            }
         }
     }
 
@@ -179,6 +173,8 @@ impl<'a> Env<'a> {
                 }
 
                 Expr::Prim(prim) => match prim {
+                    Prim::Un(_, input) => recurse(env, cap, input),
+
                     Prim::Bin(_, lhs, rhs) => {
                         recurse(env, cap, lhs);
                         recurse(env, cap, rhs);
@@ -203,7 +199,51 @@ impl Runtime {
     pub fn run<'a>(&mut self, expr: &'a Expr) -> Value<'a> {
         let mut env = Env::new();
         let thunk = self.eval(&mut env, expr);
-        thunk.force(self)
+        let thunk = self.eval_io(thunk);
+        self.force(thunk)
+    }
+
+    fn force<'a>(&mut self, thunk: Thunk<'a>) -> Value<'a> {
+        let mut inner = thunk.inner.borrow_mut();
+
+        match &mut *inner {
+            ThunkInner::Value(value) => value.clone(),
+
+            ThunkInner::Thunk(env, expr) => {
+                let mut env = mem::take(env);
+                let thunk = self.eval(&mut env, expr);
+                let value = self.force(thunk);
+                *inner = ThunkInner::Value(value.clone());
+                value
+            }
+        }
+    }
+
+    fn eval_io<'a>(&mut self, thunk: Thunk<'a>) -> Thunk<'a> {
+        let value = self.force(thunk);
+
+        let Value::Io(io) = value else {
+            panic!();
+        };
+
+        match io {
+            Io::Pure(input) => input,
+
+            Io::Bind(input, lambda) => {
+                let input = self.eval_io(input);
+                let lambda = self.force(lambda);
+
+                let Value::Lam(mut env, var, output) = lambda else {
+                    panic!();
+                };
+
+                env.vars.insert(var.unique(), input);
+                let output = self.eval(&mut env, output);
+                self.eval_io(output)
+            }
+
+            Io::Extern(f) => Thunk::value(f()),
+        }
     }
 
     fn eval<'a>(&mut self, env: &mut Env<'a>, expr: &'a Expr) -> Thunk<'a> {
@@ -227,15 +267,14 @@ impl Runtime {
 
             Expr::App(lambda, input) => {
                 let lambda = self.eval(env, lambda);
-                let lambda = lambda.force(self);
+                let lambda = self.force(lambda);
 
                 let input = self.eval(env, input);
 
-                let Value::Lam(env, var, expr) = lambda else {
+                let Value::Lam(mut env, var, expr) = lambda else {
                     panic!();
                 };
 
-                let mut env = env.clone();
                 env.vars.insert(var.unique(), input);
                 self.eval(&mut env, expr)
             }
@@ -261,21 +300,21 @@ impl Runtime {
                 self.eval(env, output)
             }
 
-            Expr::Cons(var, args) => {
+            Expr::Cons(cons, args) => {
                 let args = args.iter().map(|expr| self.eval(env, expr)).collect();
-                Thunk::value(Value::Cons(var, args))
+                Thunk::value(Value::Cons(cons, args))
             }
 
             Expr::Case(input, alts, default) => {
                 let input = self.eval(env, input);
-                let input = input.force(self);
+                let input = self.force(input);
 
-                let Value::Cons(var, args) = input else {
-                    panic!();
+                let Value::Cons(cons, args) = input else {
+                    panic!("{input:?}");
                 };
 
                 for alt in alts {
-                    if alt.var != *var {
+                    if alt.cons != *cons {
                         continue;
                     };
 
@@ -294,12 +333,24 @@ impl Runtime {
             }
 
             Expr::Prim(prim) => match prim {
+                Prim::Un(prim, input) => {
+                    let input = self.eval(env, input);
+
+                    match prim {
+                        UnPrim::IoPure => Thunk::value(Value::Io(Io::Pure(input))),
+                    }
+                }
+
                 Prim::Bin(prim, lhs, rhs) => {
                     let lhs = self.eval(env, lhs);
                     let rhs = self.eval(env, rhs);
 
-                    let lhs = lhs.force(self);
-                    let rhs = rhs.force(self);
+                    if *prim == BinPrim::IoBind {
+                        return Thunk::value(Value::Io(Io::Bind(lhs, rhs)));
+                    }
+
+                    let lhs = self.force(lhs);
+                    let rhs = self.force(rhs);
 
                     Thunk::value(match prim {
                         BinPrim::Add(PrimNum::Int) => Value::Int(lhs.as_i64() + rhs.as_i64()),

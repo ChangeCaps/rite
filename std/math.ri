@@ -1,8 +1,3 @@
-import 'intrinsic'
-
-
-# traits definitions
-
 trait add a
   (+) :: a -> a -> a
 
@@ -15,32 +10,5 @@ trait mul a
 trait div a
   (/) :: a -> a -> a
 
-
-# int implementations
-
-impl add int
-  (+) a b = int-add a b
-
-impl sub int
-  (-) a b = int-sub a b
-
-impl mul int
-  (*) a b = int-mul a b
-
-impl div int
-  (/) a b = int-div a b
-
-
-# real implementations
-
-impl add real
-  (+) a b = real-add a b
-
-impl sub real
-  (-) a b = real-sub a b
-
-impl mul real
-  (*) a b = real-mul a b
-
-impl div real
-  (/) a b = real-div a b
+trait zero a
+  zero :: a

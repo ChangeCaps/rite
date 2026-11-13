@@ -1,0 +1,5 @@
+import 'intrinsic'
+
+impl monad io
+  (>>=) = io-bind
+  pure = io-pure

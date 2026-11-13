@@ -1,3 +1,23 @@
-main =
-  some 0
-  pure 0
+main :: io int
+main = [1; 2; 3]
+  |> map ((*) 2)
+  |> sum
+  |> pure
+
+type try m e a = try (m (result e a))
+
+run-try :: try m e a -> m (result e a)
+run-try (try m) = m
+
+impl monad try m e where m :: monad
+  (>>=) m f =
+    let m =
+      let x <- run-try m
+
+      match x
+        err e -> pure (err e)
+        ok x -> run-try (f x)
+
+    try m
+
+  pure x = try (pure (ok x))

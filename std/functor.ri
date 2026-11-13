@@ -1,0 +1,20 @@
+trait functor f
+  map :: (a -> b) -> f a -> f b
+
+impl functor maybe
+  map f x =
+    match x
+      some x -> some (f x)
+      none -> none
+
+impl functor result e
+  map f x =
+    match x
+      ok x -> ok (f x)
+      err e -> err e
+
+impl functor ([])
+  map f xs =
+    match xs
+      x : xs -> f x : map f xs
+      [] -> []

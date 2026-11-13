@@ -11,7 +11,7 @@ impl monad maybe
       some x -> f x
       none -> none
 
-  pure x = some x
+  pure = some
 
 impl monad result e
   (>>=) m f =
@@ -19,4 +19,4 @@ impl monad result e
       ok x -> f x
       err e -> err e
 
-  pure x = ok x
+  pure = ok

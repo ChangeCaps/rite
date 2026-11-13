@@ -1,4 +1,8 @@
-use crate::{ast::Pat, diagnostic::Span, var::Ident};
+use crate::{
+    ast::Pat,
+    diagnostic::Span,
+    var::{Ident, Operator},
+};
 
 pub enum Expr {
     Lit(LitExpr),
@@ -8,6 +12,10 @@ pub enum Expr {
     App(AppExpr),
     Bin(BinExpr),
     Seq(SeqExpr),
+    Rec(RecExpr),
+    List(ListExpr),
+    Paren(ParenExpr),
+    Field(FieldExpr),
     Match(MatchExpr),
     Error(ErrorExpr),
 }
@@ -55,7 +63,7 @@ pub struct AppExpr {
 }
 
 pub struct BinExpr {
-    pub op:   Ident,
+    pub op:   Operator,
     pub lhs:  Box<Expr>,
     pub rhs:  Box<Expr>,
     pub span: Span,
@@ -65,6 +73,34 @@ pub struct SeqExpr {
     pub input:  Box<Expr>,
     pub output: Box<Expr>,
     pub span:   Span,
+}
+
+pub struct RecExpr {
+    pub input:  Box<Expr>,
+    pub fields: Vec<ExprField>,
+    pub span:   Span,
+}
+
+pub struct ExprField {
+    pub name: Option<Ident>,
+    pub expr: Expr,
+    pub span: Span,
+}
+
+pub struct ListExpr {
+    pub items: Vec<Expr>,
+    pub span:  Span,
+}
+
+pub struct ParenExpr {
+    pub expr: Box<Expr>,
+    pub span: Span,
+}
+
+pub struct FieldExpr {
+    pub input: Box<Expr>,
+    pub name:  Option<Ident>,
+    pub span:  Span,
 }
 
 pub struct MatchExpr {
@@ -93,6 +129,10 @@ impl Expr {
             Self::App(expr) => expr.span,
             Self::Bin(expr) => expr.span,
             Self::Seq(expr) => expr.span,
+            Self::Rec(expr) => expr.span,
+            Self::List(expr) => expr.span,
+            Self::Paren(expr) => expr.span,
+            Self::Field(expr) => expr.span,
             Self::Match(expr) => expr.span,
             Self::Error(expr) => expr.span,
         }

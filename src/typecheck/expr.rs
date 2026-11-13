@@ -1,11 +1,11 @@
 use std::collections::HashMap;
 
 use crate::{
-    diagnostic::Span,
-    primitive::BinPrim,
+    diagnostic::{Diagnostic, Span},
+    primitive::{BinPrim, UnPrim},
     rename,
-    typecheck::{Cons, Pat, State, Ty},
-    var::Var,
+    typecheck::{Kind, Pat, State, Ty, TypeCons, exhaust},
+    var::{Ident, Var},
 };
 
 pub enum Expr {
@@ -17,7 +17,10 @@ pub enum Expr {
     Let(LetExpr),
     Lam(LamExpr),
     App(AppExpr),
+    Rec(RecExpr),
+    With(WithExpr),
     Prim(PrimExpr),
+    Field(FieldExpr),
     Match(MatchExpr),
     Error(ErrorExpr),
 }
@@ -83,6 +86,26 @@ pub struct AppExpr {
     pub span:   Span,
 }
 
+pub struct RecExpr {
+    pub type_:  Var,
+    pub fields: Vec<ExprField>,
+    pub ty:     Ty,
+    pub span:   Span,
+}
+
+pub struct WithExpr {
+    pub input:  Box<Expr>,
+    pub fields: Vec<ExprField>,
+    pub ty:     Ty,
+    pub span:   Span,
+}
+
+pub struct ExprField {
+    pub name: Ident,
+    pub expr: Expr,
+    pub span: Span,
+}
+
 pub struct PrimExpr {
     pub prim: ExprPrim,
     pub ty:   Ty,
@@ -90,7 +113,15 @@ pub struct PrimExpr {
 }
 
 pub enum ExprPrim {
+    Un(UnPrim, Box<Expr>),
     Bin(BinPrim, Box<Expr>, Box<Expr>),
+}
+
+pub struct FieldExpr {
+    pub input: Box<Expr>,
+    pub name:  Ident,
+    pub ty:    Ty,
+    pub span:  Span,
 }
 
 pub struct MatchExpr {
@@ -122,7 +153,10 @@ impl Expr {
             Expr::Method(expr) => expr.span,
             Expr::Lam(expr) => expr.span,
             Expr::App(expr) => expr.span,
+            Expr::Rec(expr) => expr.span,
+            Expr::With(expr) => expr.span,
             Expr::Prim(expr) => expr.span,
+            Expr::Field(expr) => expr.span,
             Expr::Match(expr) => expr.span,
             Expr::Error(expr) => expr.span,
         }
@@ -138,7 +172,10 @@ impl Expr {
             Expr::Method(expr) => &expr.ty,
             Expr::Lam(expr) => &expr.ty,
             Expr::App(expr) => &expr.ty,
+            Expr::Rec(expr) => &expr.ty,
+            Expr::With(expr) => &expr.ty,
             Expr::Prim(expr) => &expr.ty,
+            Expr::Field(expr) => &expr.ty,
             Expr::Match(expr) => &expr.ty,
             Expr::Error(expr) => &expr.ty,
         }
@@ -162,7 +199,10 @@ impl State<'_> {
             rename::Expr::Method(expr) => self.method_expr_down(expr),
             rename::Expr::Lam(expr) => self.lam_expr_down(expr),
             rename::Expr::App(expr) => self.app_expr_down(expr),
+            rename::Expr::Rec(expr) => self.rec_expr_down(expr),
+            rename::Expr::With(expr) => self.with_expr_down(expr),
             rename::Expr::Prim(expr) => self.prim_expr_down(expr),
+            rename::Expr::Field(expr) => self.field_expr_down(expr),
             rename::Expr::Match(expr) => self.match_expr_down(expr),
             rename::Expr::Error(expr) => self.error_expr_down(expr),
         }
@@ -170,9 +210,9 @@ impl State<'_> {
 
     fn lit_expr_down(&mut self, expr: rename::LitExpr) -> Expr {
         let ty = match expr.lit {
-            rename::Lit::Str(_) => Ty::Cons(Cons::Str, Vec::new()),
-            rename::Lit::Int(_) => Ty::Cons(Cons::Int, Vec::new()),
-            rename::Lit::Real(_) => Ty::Cons(Cons::Real, Vec::new()),
+            rename::Lit::Str(_) => Ty::Str,
+            rename::Lit::Int(_) => Ty::Int,
+            rename::Lit::Real(_) => Ty::Real,
         };
 
         let lit = match expr.lit {
@@ -206,7 +246,7 @@ impl State<'_> {
     }
 
     fn var_expr_down(&mut self, expr: rename::VarExpr) -> Expr {
-        let ty = self.get_ty_var(expr.var.clone());
+        let ty = Ty::Var(expr.var.clone());
 
         Expr::Var(VarExpr {
             var: expr.var.clone(),
@@ -216,10 +256,10 @@ impl State<'_> {
     }
 
     fn def_expr_down(&mut self, expr: rename::DefExpr) -> Expr {
-        let mut ty = self.get_ty_var(expr.var.clone());
+        let mut ty = Ty::Var(expr.var.clone());
 
         if expr.ascribed {
-            ty = self.instantiate(HashMap::new(), ty);
+            self.instantiate(&mut HashMap::new(), &mut ty);
         }
 
         Expr::Def(DefExpr {
@@ -230,8 +270,8 @@ impl State<'_> {
     }
 
     fn cons_expr_down(&mut self, expr: rename::ConsExpr) -> Expr {
-        let ty = self.get_ty_var(expr.var.clone());
-        let ty = self.instantiate(HashMap::new(), ty);
+        let mut ty = Ty::Var(expr.var.clone());
+        self.instantiate(&mut HashMap::new(), &mut ty);
 
         Expr::Cons(ConsExpr {
             var: expr.var.clone(),
@@ -251,11 +291,10 @@ impl State<'_> {
         }
 
         let input = Ty::Var(input);
+        let mut subst = HashMap::from([(trait_.input.unique(), input.clone())]);
 
-        let subst = HashMap::from([(trait_.input.unique(), input.clone())]);
-
-        let ty = self.get_ty_var(expr.var.clone());
-        let ty = self.instantiate(subst, ty);
+        let mut ty = Ty::Var(expr.var.clone());
+        self.instantiate(&mut subst, &mut ty);
 
         Expr::Method(MethodExpr {
             var: expr.var.clone(),
@@ -272,10 +311,7 @@ impl State<'_> {
         let arg = self.pat(expr.arg, &input);
         let output = self.expr_down(*expr.output);
 
-        let ty = Ty::Cons(
-            Cons::Lam,
-            vec![input, output.ty().clone()],
-        );
+        let ty = Ty::lam(input, output.ty().clone());
 
         Expr::Lam(LamExpr {
             arg,
@@ -287,14 +323,8 @@ impl State<'_> {
 
     fn app_expr_down(&mut self, expr: rename::AppExpr) -> Expr {
         let input = self.expr_down(*expr.input);
-
-        let output = self.get_ty_var(Var::unnamed());
-
-        let lambda = Ty::Cons(
-            Cons::Lam,
-            vec![input.ty().clone(), output.clone()],
-        );
-
+        let output = Ty::Var(Var::unnamed());
+        let lambda = Ty::lam(input.ty().clone(), output.clone());
         let lambda = self.expr_up(*expr.lambda, lambda);
 
         Expr::App(AppExpr {
@@ -305,8 +335,87 @@ impl State<'_> {
         })
     }
 
+    fn rec_expr_down(&mut self, expr: rename::RecExpr) -> Expr {
+        let mut subst = HashMap::new();
+        let mut ty = self.tycx.type_ty(expr.type_.clone());
+        self.instantiate(&mut subst, &mut ty);
+
+        let TypeCons::Record(ref cons) = self.tycx.get_type(&expr.type_).cons else {
+            panic!();
+        };
+
+        let fields = cons.fields.clone();
+        let fields = expr
+            .fields
+            .into_iter()
+            .map(|field| {
+                let expr = self.expr_down(field.expr);
+                let mut ty = fields
+                    .iter()
+                    .find(|f| f.name == field.name)
+                    .map(|f| f.ty.clone())
+                    .expect("field should be present");
+
+                self.instantiate(&mut subst, &mut ty);
+                self.unify(expr.ty(), &ty, expr.span());
+
+                ExprField {
+                    name: field.name,
+                    expr,
+                    span: field.span,
+                }
+            })
+            .collect();
+
+        Expr::Rec(RecExpr {
+            type_: expr.type_,
+            fields,
+            ty,
+            span: expr.span,
+        })
+    }
+
+    fn with_expr_down(&mut self, expr: rename::WithExpr) -> Expr {
+        let input = self.expr_down(*expr.input);
+        let ty = input.ty().clone();
+
+        let fields = expr
+            .fields
+            .into_iter()
+            .map(|field| {
+                let expr = self.expr_down(field.expr);
+
+                let kind = Kind::field(
+                    field.name.to_string(),
+                    expr.ty().clone(),
+                );
+
+                self.require(&ty, &kind, field.span);
+
+                ExprField {
+                    name: field.name,
+                    expr,
+                    span: field.span,
+                }
+            })
+            .collect();
+
+        Expr::With(WithExpr {
+            input: Box::new(input),
+            fields,
+            ty,
+            span: expr.span,
+        })
+    }
+
     fn prim_expr_down(&mut self, expr: rename::PrimExpr) -> Expr {
         let prim = match expr.prim {
+            rename::ExprPrim::Un(prim, input) => {
+                let input = self.expr_down(*input);
+
+                ExprPrim::Un(prim, Box::new(input))
+            }
+
             rename::ExprPrim::Bin(prim, lhs, rhs) => {
                 let lhs = self.expr_down(*lhs);
                 let rhs = self.expr_down(*rhs);
@@ -324,26 +433,99 @@ impl State<'_> {
         })
     }
 
+    fn field_expr_down(&mut self, expr: rename::FieldExpr) -> Expr {
+        let ty = Ty::Var(Var::unnamed());
+
+        let Some(name) = expr.name else {
+            return Expr::Error(ErrorExpr {
+                ty,
+                span: expr.span,
+            });
+        };
+
+        let input = self.expr_down(*expr.input);
+
+        self.require(
+            input.ty(),
+            &Kind::field(name.to_string(), ty.clone()),
+            expr.span,
+        );
+
+        Expr::Field(FieldExpr {
+            input: Box::new(input),
+            name,
+            ty,
+            span: expr.span,
+        })
+    }
+
     fn match_expr_down(&mut self, expr: rename::MatchExpr) -> Expr {
         let input = self.expr_down(*expr.input);
         let ty = Ty::Var(Var::unnamed());
 
+        let mut matrix = exhaust::Matrix::new();
+
         let arms = expr
             .arms
             .into_iter()
-            .map(|arm| {
+            .filter_map(|arm| {
+                let row = self.row(&arm.pat);
+                let span = arm.pat.span();
+
                 let pat = self.pat(arm.pat, input.ty());
                 let output = self.expr_down(arm.output);
 
                 self.unify(&ty, output.ty(), arm.span);
 
-                MatchArm {
-                    pat,
-                    output,
-                    span: arm.span,
+                if self.is_useful(matrix.clone(), row.clone()) {
+                    matrix.push(row);
+
+                    Some(MatchArm {
+                        pat,
+                        output,
+                        span: arm.span,
+                    })
+                } else {
+                    let diagnostic = Diagnostic::warn("unreachable pattern")
+                        .label(span, "no value can reach this");
+
+                    self.reporter.report(diagnostic);
+
+                    None
                 }
             })
             .collect();
+
+        let pats = self.exhaust(matrix);
+
+        if !pats.is_empty() {
+            let fmts = pats
+                .iter()
+                .take(3)
+                .map(|pat| format!("`{pat}`"))
+                .collect::<Vec<_>>();
+
+            let diagnostic = if pats.len() > 3 {
+                Diagnostic::error("non-exhaustive patterns").label(
+                    expr.span,
+                    format!(
+                        "patterns: {} and {} more not covered",
+                        fmts.join(", "),
+                        pats.len(),
+                    ),
+                )
+            } else {
+                Diagnostic::error("non-exhaustive patterns").label(
+                    expr.span,
+                    format!(
+                        "patterns: {} not covered",
+                        fmts.join(", "),
+                    ),
+                )
+            };
+
+            self.reporter.report(diagnostic);
+        }
 
         Expr::Match(MatchExpr {
             input: Box::new(input),

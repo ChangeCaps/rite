@@ -1,9 +1,7 @@
-use std::collections::HashMap;
-
 use crate::{
     diagnostic::Span,
     rename,
-    typecheck::{Cons, State, Ty},
+    typecheck::{State, Ty},
     var::Var,
 };
 
@@ -39,7 +37,7 @@ impl State<'_> {
 
     fn bind_pat(&mut self, pat: rename::BindPat, ty: &Ty) -> Pat {
         if let Some(var) = pat.var.clone() {
-            let actual = self.get_ty_var(var);
+            let actual = Ty::Var(var);
             self.unify(ty, &actual, pat.span);
         }
 
@@ -50,29 +48,23 @@ impl State<'_> {
     }
 
     fn cons_pat(&mut self, pat: rename::ConsPat, ty: &Ty) -> Pat {
-        let actual = self.get_ty_var(pat.var.clone());
-        let actual = self.instantiate(HashMap::new(), actual);
+        let cons = self.tycx.get_tuple_cons(&pat.type_, &pat.var);
 
-        let (args, actual) = pat.args.into_iter().fold(
-            (Vec::new(), actual),
-            |(mut pats, ty), arg| {
-                let Ty::Cons(cons, mut args) = ty else {
-                    panic!();
-                };
+        let mut subst = Default::default();
+        let mut tys = cons.args.clone();
 
-                debug_assert_eq!(cons, Cons::Lam);
+        self.instantiate_all(&mut subst, &mut tys);
 
-                let output = args.pop().unwrap();
-                let ty = args.pop().unwrap();
+        let args = pat
+            .args
+            .into_iter()
+            .zip(tys.iter())
+            .map(|(arg, ty)| self.pat(arg, ty))
+            .collect();
 
-                let pat = self.pat(arg, &ty);
-                pats.push(pat);
-
-                (pats, output)
-            },
-        );
-
-        self.unify(ty, &actual, pat.span);
+        let mut type_ty = self.tycx.type_ty(pat.type_);
+        self.instantiate(&mut subst, &mut type_ty);
+        self.unify(ty, &type_ty, pat.span);
 
         Pat::Cons(ConsPat {
             var: pat.var,

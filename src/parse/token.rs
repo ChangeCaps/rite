@@ -59,11 +59,16 @@ pub enum Token {
     Colon,
     Semi,
     Dot,
+    Comma,
     Gt,
     Lt,
 
     LParen,
     RParen,
+    LBracket,
+    RBracket,
+    LBrace,
+    RBrace,
 }
 
 impl Token {
@@ -127,11 +132,17 @@ impl Token {
             Self::Colon => ":",
             Self::Semi => ";",
             Self::Dot => ".",
+            Self::Comma => ",",
             Self::Gt => ">",
             Self::Lt => "<",
 
+            /* delimiters */
             Self::LParen => "(",
             Self::RParen => ")",
+            Self::LBracket => "[",
+            Self::RBracket => "]",
+            Self::LBrace => "{",
+            Self::RBrace => "}",
         }
     }
 }

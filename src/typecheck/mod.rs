@@ -6,6 +6,7 @@ use crate::{
     var::{Unique, Var},
 };
 
+mod exhaust;
 mod expr;
 mod kind;
 mod pat;
@@ -66,18 +67,19 @@ impl<'a> State<'a> {
             self.add_type(type_);
         }
 
+        for trait_ in unit.traits.into_values() {
+            self.add_trait(trait_);
+        }
+
         for def in unit.defs.values_mut() {
             if let Some(rhs) = def.ty.take() {
-                let lhs = self.get_ty_var(def.var.clone());
+                let lhs = Ty::Var(def.var.clone());
                 let rhs = self.ty(rhs);
+                self.require_arity(&rhs, Arity::exact(0), def.span);
 
                 self.set_inferrable(&rhs, false);
                 self.unify(&lhs, &rhs, def.span);
             }
-        }
-
-        for trait_ in unit.traits.into_values() {
-            self.add_trait(trait_);
         }
 
         for impl_ in unit.impls {
@@ -97,49 +99,70 @@ impl<'a> State<'a> {
     }
 
     fn add_type(&mut self, type_: rename::Type) {
-        let ty = Ty::Cons(
-            Cons::Type(type_.var.clone(), type_.input.len()),
-            Vec::new(),
-        );
+        let ty = type_
+            .input
+            .iter()
+            .cloned()
+            .map(Ty::Var)
+            .fold(Ty::Type(type_.var.clone()), Ty::app);
 
-        let ty = type_.input.iter().cloned().fold(ty, |ty, input| {
-            let input = self.get_ty_var(input);
-            Ty::Cons(Cons::App, vec![ty, input])
-        });
+        match type_.cons {
+            rename::TypeCons::Rec(cons) => {
+                let fields = cons
+                    .fields
+                    .into_iter()
+                    .map(|field| RecordField {
+                        name: field.name,
+                        ty:   self.ty(field.ty),
+                        span: field.span,
+                    })
+                    .collect();
 
-        let cons = type_
-            .cons
-            .into_iter()
-            .map(|cons| self.add_type_cons(ty.clone(), cons))
-            .collect();
+                self.tycx.add_type(
+                    type_.var.clone(),
+                    type_.input.clone(),
+                    TypeCons::Record(RecordCons {
+                        var: cons.var,
+                        fields,
+                        span: cons.span,
+                    }),
+                    type_.span,
+                );
+            }
 
-        self.tycx.add_type(
-            type_.var.clone(),
-            type_.input.clone(),
-            cons,
-            type_.span,
-        );
+            rename::TypeCons::Tuple(cons) => {
+                let cons = cons
+                    .into_iter()
+                    .map(|cons| self.add_tuple_cons(ty.clone(), cons))
+                    .collect();
+
+                self.tycx.add_type(
+                    type_.var.clone(),
+                    type_.input.clone(),
+                    TypeCons::Tuple(cons),
+                    type_.span,
+                );
+            }
+        }
     }
 
-    fn add_type_cons(&mut self, ty: Ty, cons: rename::TypeCons) -> TypeCons {
+    fn add_tuple_cons(&mut self, ty: Ty, cons: rename::TupleCons) -> TupleCons {
         let args = cons
             .args
             .into_iter()
             .map(|ty| {
                 let span = ty.span();
                 let arg = self.ty(ty);
-                self.require(&arg, &Kind::arity(0), span);
+                self.require_arity(&arg, Arity::exact(0), span);
                 arg
             })
             .collect::<Vec<_>>();
 
-        let ty = args.iter().cloned().rfold(ty, |ty, arg| {
-            Ty::Cons(Cons::Lam, vec![arg, ty])
-        });
+        let ty = args.iter().cloned().rfold(ty, |ty, arg| Ty::lam(arg, ty));
 
         self.add_subst(&cons.var, ty);
 
-        TypeCons {
+        TupleCons {
             var: cons.var,
             args,
             span: cons.span,
@@ -147,7 +170,7 @@ impl<'a> State<'a> {
     }
 
     fn add_trait(&mut self, trait_: rename::Trait) {
-        let input = self.get_ty_var(trait_.input.clone());
+        let input = Ty::Var(trait_.input.clone());
 
         let kind = Kind {
             traits: vec![trait_.var.clone()],
@@ -163,6 +186,8 @@ impl<'a> State<'a> {
 
         for method in trait_.methods {
             let ty = self.ty(method.ty);
+
+            self.require_arity(&ty, Arity::exact(0), method.span);
             self.add_subst(&method.var, ty);
 
             self.methods.insert(
@@ -194,15 +219,15 @@ impl<'a> State<'a> {
             return;
         }
 
-        let subst = HashMap::from([(var.unique(), input.clone())]);
+        let mut subst = HashMap::from([(var.unique(), input.clone())]);
 
         let index = self.tycx.add_impl(&impl_.var, input.clone(), impl_.span);
 
         let mut members = Vec::new();
 
         for member in impl_.methods {
-            let ty = self.get_ty_var(member.var.clone());
-            let ty = self.instantiate(subst.clone(), ty);
+            let mut ty = Ty::Var(member.var.clone());
+            self.instantiate(&mut subst, &mut ty);
             self.set_inferrable(&ty, false);
 
             let expr = self.expr_up(member.expr, ty.clone());
@@ -217,16 +242,16 @@ impl<'a> State<'a> {
         self.tycx.set_members(&impl_.var, index, members);
 
         {
-            let var = self.get_ty_var(var.clone());
-            let var = self.instantiate(HashMap::new(), var);
-            self.unify(&var, &input, impl_.span);
+            let mut var = Ty::Var(var.clone());
+            self.instantiate(&mut HashMap::new(), &mut var);
+            self.unify(&input, &var, impl_.span);
         }
     }
 
     fn add_def(&mut self, def: rename::Def) {
         let expr = self.expr_down(def.expr);
 
-        let var = self.get_ty_var(def.var.clone());
+        let var = Ty::Var(def.var.clone());
         self.unify(&var, expr.ty(), def.span);
 
         let def = Def {
@@ -253,16 +278,20 @@ impl<'a> State<'a> {
         self.tycx.set_inferrable(&mut self.kinds, ty, inferrable);
     }
 
-    fn get_ty_var(&mut self, var: Var) -> Ty {
-        self.tycx.get_var(&self.kinds, var)
-    }
-
-    fn instantiate(&mut self, subst: HashMap<Unique, Ty>, ty: Ty) -> Ty {
+    fn instantiate(&mut self, subst: &mut HashMap<Unique, Ty>, ty: &mut Ty) {
         self.tycx.instantiate(&mut self.kinds, subst, ty)
     }
 
-    fn require(&mut self, lhs: &Ty, rhs: &Kind, span: Span) {
-        if let Err(diagnostic) = self.tycx.require(&mut self.kinds, lhs, rhs, span) {
+    fn instantiate_all(&mut self, subst: &mut HashMap<Unique, Ty>, tys: &mut [Ty]) {
+        self.tycx.instantiate_all(&mut self.kinds, subst, tys);
+    }
+
+    fn require_arity(&mut self, ty: &Ty, arity: Arity, span: Span) {
+        self.require(ty, &Kind::arity(arity), span);
+    }
+
+    fn require(&mut self, ty: &Ty, kind: &Kind, span: Span) {
+        if let Err(diagnostic) = self.tycx.require(&mut self.kinds, ty, kind, span) {
             self.reporter.report(diagnostic);
         }
     }

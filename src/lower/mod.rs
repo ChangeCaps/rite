@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use crate::{
-    ir::{Alt, Expr, Lit, Prim},
+    ir::{Alt, Cons, Expr, Lit, Prim},
     typecheck::{self, Impl, Pat, Ty, TypeCons, Unit},
     var::{Unique, Var},
 };
@@ -41,8 +41,11 @@ impl<'a> State<'a> {
         self.unit.tycx.format_ty(&self.unit.kinds, ty)
     }
 
-    fn find_impl(&self, trait_: &Var, ty: &Ty) -> Option<&'a Impl> {
-        self.unit.tycx.find_impl(&self.unit.kinds, trait_, ty)
+    fn find_impl(&self, trait_: &Var, ty: &Ty) -> &'a Impl {
+        self.unit
+            .tycx
+            .find_impl(&self.unit.kinds, trait_, ty)
+            .expect("finding impl should never fail during lowering")
     }
 
     fn unify(&mut self, lhs: &Ty, rhs: &Ty) {
@@ -52,24 +55,17 @@ impl<'a> State<'a> {
             return self.unify(lhs, &rhs);
         }
 
-        if lhs == rhs {
-            return;
-        }
-
         match (lhs, rhs) {
             (Ty::Var(var), ty) => {
                 self.subst.insert(var.unique(), ty.clone());
             }
 
-            (_, Ty::Var(_)) => panic!("ambiguous type in lowering"),
-
-            (Ty::Cons(lhs_cons, lhs_args), Ty::Cons(rhs_cons, rhs_args)) => {
-                debug_assert_eq!(lhs_cons, rhs_cons);
-
-                for (lhs, rhs) in lhs_args.iter().zip(rhs_args) {
-                    self.unify(lhs, rhs);
-                }
+            (Ty::App(lhs_lambda, lhs_input), Ty::App(rhs_lambda, rhs_input)) => {
+                self.unify(lhs_lambda, rhs_lambda);
+                self.unify(lhs_input, rhs_input);
             }
+
+            (lhs, rhs) => debug_assert_eq!(lhs, rhs),
         }
     }
 
@@ -82,7 +78,7 @@ impl<'a> State<'a> {
                     .and_then(|kind| kind.subst.as_ref())
             }),
 
-            Ty::Cons(..) => None,
+            _ => None,
         }
     }
 
@@ -94,15 +90,13 @@ impl<'a> State<'a> {
         match ty {
             Ty::Var(_) => ty,
 
-            Ty::Cons(cons, args) => {
-                let args = args.into_iter().map(|ty| self.subst(ty)).collect();
-                Ty::Cons(cons, args)
-            }
-        }
-    }
+            Ty::App(input, output) => Ty::App(
+                Box::new(self.subst(*input)),
+                Box::new(self.subst(*output)),
+            ),
 
-    fn get_cons(&self, type_: &Var, var: &Var) -> &TypeCons {
-        self.unit.tycx.get_cons(type_, var)
+            _ => ty,
+        }
     }
 
     fn expr(&mut self, expr: &typecheck::Expr) -> Expr {
@@ -115,7 +109,10 @@ impl<'a> State<'a> {
             typecheck::Expr::Let(expr) => self.let_expr(expr),
             typecheck::Expr::Lam(expr) => self.lam_expr(expr),
             typecheck::Expr::App(expr) => self.app_expr(expr),
+            typecheck::Expr::Rec(expr) => self.rec_expr(expr),
+            typecheck::Expr::With(expr) => self.with_expr(expr),
             typecheck::Expr::Prim(expr) => self.prim_expr(expr),
+            typecheck::Expr::Field(expr) => self.field_expr(expr),
             typecheck::Expr::Match(expr) => self.match_expr(expr),
             typecheck::Expr::Error(expr) => self.error_expr(expr),
         }
@@ -175,11 +172,23 @@ impl<'a> State<'a> {
     }
 
     fn cons_expr(&mut self, expr: &typecheck::ConsExpr) -> Expr {
-        let cons = self.get_cons(&expr.type_, &expr.var);
-        let args = cons.args.iter().map(|_| Var::unnamed()).collect::<Vec<_>>();
+        let type_ = self.unit.tycx.get_type(&expr.type_);
+
+        let TypeCons::Tuple(ref cons) = type_.cons else {
+            panic!();
+        };
+
+        let args = cons
+            .iter()
+            .find(|cons| cons.var == expr.var)
+            .expect("type should have referenced constructor")
+            .args
+            .iter()
+            .map(|_| Var::unnamed())
+            .collect::<Vec<_>>();
 
         let cons = Expr::Cons(
-            expr.var.clone(),
+            Cons::Var(expr.var.clone()),
             args.iter().cloned().map(Expr::Var).collect(),
         );
 
@@ -189,32 +198,41 @@ impl<'a> State<'a> {
     }
 
     fn method_expr(&mut self, expr: &typecheck::MethodExpr) -> Expr {
+        // get the in context type of the method
         let ty = self.subst(expr.ty.clone());
         let key = (expr.var.unique(), ty.clone());
 
+        // try to find the instance in the cache
         if let Some(var) = self.defs.get(&key) {
             return Expr::Var(var.clone());
         }
 
+        // generate a new Var for the instance and insert in cache
         let var = Var::from(expr.var.ident().cloned());
         self.defs.insert(key, var.clone());
 
-        let impl_ = self.find_impl(&expr.trait_, &expr.input).unwrap();
+        // get the in context type of the trait input type
+        let input = self.subst(expr.input.clone());
+
+        // find the corresponding method implementation
+        let impl_ = self.find_impl(&expr.trait_, &input);
         let method = impl_
             .methods
             .iter()
             .find(|method| method.var == expr.var)
             .unwrap();
 
+        // save the current substitution table and unify method type with the expected type
         let subst = self.subst.clone();
-        self.unify(&Ty::Var(method.var.clone()), &ty);
+        self.unify(method.expr.ty(), &ty);
 
+        // lower the method expression and restore the substitution table
         let expr = self.expr(&method.expr);
         self.subst = subst;
 
+        // anotate the instance and add it as a global
         let ty = self.format_ty(&ty);
         let expr = Expr::Note(ty, Box::new(expr));
-
         self.globals.push((expr, var.clone()));
 
         Expr::Var(var)
@@ -243,8 +261,72 @@ impl<'a> State<'a> {
         Expr::App(Box::new(lambda), Box::new(input))
     }
 
+    fn rec_expr(&mut self, expr: &typecheck::RecExpr) -> Expr {
+        let TypeCons::Record(ref cons) = self.unit.tycx.get_type(&expr.type_).cons else {
+            panic!();
+        };
+
+        let args = cons
+            .fields
+            .iter()
+            .map(|field| {
+                let field = expr.fields.iter().find(|f| f.name == field.name).unwrap();
+                self.expr(&field.expr)
+            })
+            .collect();
+
+        Expr::Cons(Cons::Var(expr.type_.clone()), args)
+    }
+
+    fn with_expr(&mut self, expr: &typecheck::WithExpr) -> Expr {
+        let ty = self.subst(expr.input.ty().clone());
+        let (ty, _) = ty.reduce();
+
+        let Ty::Type(type_) = ty else {
+            panic!();
+        };
+
+        let TypeCons::Record(ref cons) = self.unit.tycx.get_type(type_).cons else {
+            panic!();
+        };
+
+        let input = self.expr(&expr.input);
+
+        let mut args = Vec::new();
+        let mut exprs = Vec::new();
+
+        for field in &cons.fields {
+            let arg = Var::unnamed();
+
+            if let Some(field) = expr.fields.iter().find(|f| f.name == field.name) {
+                let expr = self.expr(&field.expr);
+                exprs.push(expr);
+            } else {
+                exprs.push(Expr::Var(arg.clone()));
+            }
+
+            args.push(arg);
+        }
+
+        Expr::Case(
+            Box::new(input),
+            vec![Alt {
+                cons: Cons::Var(type_.clone()),
+                args,
+                expr: Expr::Cons(Cons::Var(type_.clone()), exprs),
+            }],
+            None,
+        )
+    }
+
     fn prim_expr(&mut self, expr: &typecheck::PrimExpr) -> Expr {
         let prim = match expr.prim {
+            typecheck::ExprPrim::Un(prim, ref input) => {
+                let input = self.expr(input);
+
+                Prim::Un(prim, Box::new(input))
+            }
+
             typecheck::ExprPrim::Bin(prim, ref lhs, ref rhs) => {
                 let lhs = self.expr(lhs);
                 let rhs = self.expr(rhs);
@@ -254,6 +336,45 @@ impl<'a> State<'a> {
         };
 
         Expr::Prim(prim)
+    }
+
+    fn field_expr(&mut self, expr: &typecheck::FieldExpr) -> Expr {
+        let ty = self.subst(expr.input.ty().clone());
+        let (ty, _) = ty.reduce();
+
+        let Ty::Type(type_) = ty else {
+            panic!();
+        };
+
+        let TypeCons::Record(ref cons) = self.unit.tycx.get_type(type_).cons else {
+            panic!();
+        };
+
+        let input = self.expr(&expr.input);
+
+        let index = cons
+            .fields
+            .iter()
+            .position(|field| field.name == expr.name)
+            .unwrap();
+
+        let args = cons
+            .fields
+            .iter()
+            .map(|_| Var::unnamed())
+            .collect::<Vec<_>>();
+
+        let var = args[index].clone();
+
+        Expr::Case(
+            Box::new(input),
+            vec![Alt {
+                cons: Cons::Var(type_.clone()),
+                args,
+                expr: Expr::Var(var),
+            }],
+            None,
+        )
     }
 
     fn match_expr(&mut self, expr: &typecheck::MatchExpr) -> Expr {
@@ -281,11 +402,12 @@ impl<'a> State<'a> {
 
     fn bind(&mut self, mut inputs: Vec<Expr>, mut rows: Vec<Row<'_>>) -> Expr {
         let Some(input) = inputs.pop() else {
-            let arm = rows.pop().unwrap();
+            let arm = rows.remove(0);
             return arm.output;
         };
 
-        let pat = rows.first().unwrap().pats.first().unwrap();
+        let row = rows.first().unwrap();
+        let pat = row.pats.last().unwrap();
 
         match pat {
             Pat::Bind(..) => self.bind_bind(input, inputs, rows),
@@ -298,18 +420,15 @@ impl<'a> State<'a> {
         for arm in &mut rows {
             let pat = arm.pats.pop().unwrap();
 
-            let Pat::Bind(pat) = pat else {
-                panic!();
-            };
-
-            arm.output = match pat.var {
-                Some(ref var) => Expr::Let(
+            if let Pat::Bind(pat) = pat
+                && let Some(ref var) = pat.var
+            {
+                arm.output = Expr::Let(
                     Box::new(input.clone()),
                     var.clone(),
                     Box::new(arm.output.clone()),
-                ),
-                None => arm.output.clone(),
-            };
+                );
+            }
         }
 
         self.bind(inputs, rows)
@@ -345,9 +464,10 @@ impl<'a> State<'a> {
                 let mut inputs = inputs.clone();
                 inputs.extend(args.iter().cloned().map(Expr::Var));
 
+                let cons = Cons::Var(var);
                 let expr = self.bind(inputs.clone(), rows);
 
-                Alt { var, args, expr }
+                Alt { cons, args, expr }
             })
             .collect();
 

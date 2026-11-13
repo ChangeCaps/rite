@@ -5,8 +5,8 @@ use std::{
 
 use crate::{
     diagnostic::{Diagnostic, Span},
-    typecheck::{Cons, Expr, Kind, Ty},
-    var::{Unique, Var},
+    typecheck::{Expr, Kind, Ty},
+    var::{Ident, Unique, Var},
 };
 
 pub type Kinds = HashMap<Unique, Kind>;
@@ -18,12 +18,30 @@ pub struct TyCx {
 }
 
 pub struct Type {
-    pub input: Vec<Var>,
-    pub cons:  Vec<TypeCons>,
-    pub span:  Span,
+    pub args: Vec<Var>,
+    pub cons: TypeCons,
+    pub span: Span,
 }
 
-pub struct TypeCons {
+pub enum TypeCons {
+    Record(RecordCons),
+    Tuple(Vec<TupleCons>),
+}
+
+pub struct RecordCons {
+    pub var:    Var,
+    pub fields: Vec<RecordField>,
+    pub span:   Span,
+}
+
+#[derive(Clone)]
+pub struct RecordField {
+    pub name: Ident,
+    pub ty:   Ty,
+    pub span: Span,
+}
+
+pub struct TupleCons {
     pub var:  Var,
     pub args: Vec<Ty>,
     pub span: Span,
@@ -72,8 +90,15 @@ impl TyCx {
         self.traits.insert(var.unique(), trait_);
     }
 
-    pub fn add_type(&mut self, var: Var, input: Vec<Var>, cons: Vec<TypeCons>, span: Span) {
-        self.types.insert(var.unique(), Type { input, cons, span });
+    pub fn add_type(&mut self, var: Var, input: Vec<Var>, cons: TypeCons, span: Span) {
+        self.types.insert(
+            var.unique(),
+            Type {
+                args: input,
+                cons,
+                span,
+            },
+        );
     }
 
     pub fn add_impl(&mut self, trait_: &Var, input: Ty, span: Span) -> usize {
@@ -99,13 +124,14 @@ impl TyCx {
                 self.set_inferrable(kinds, &ty, inferrable);
             }
 
-            Ty::Var(var) => kinds.entry(var.unique()).or_default().inferrable = inferrable,
+            Ty::Var(var) => kinds.entry(var.unique()).or_default().infer = inferrable,
 
-            Ty::Cons(_, args) => {
-                for arg in args {
-                    self.set_inferrable(kinds, arg, inferrable);
-                }
+            Ty::App(lambda, input) => {
+                self.set_inferrable(kinds, lambda, inferrable);
+                self.set_inferrable(kinds, input, inferrable);
             }
+
+            _ => {}
         }
     }
 
@@ -116,6 +142,17 @@ impl TyCx {
             .find(|impl_| self.matches(kinds, &impl_.input, ty))
     }
 
+    pub fn type_ty(&self, var: Var) -> Ty {
+        let type_ = self.get_type(&var);
+
+        type_
+            .args
+            .iter()
+            .cloned()
+            .map(Ty::Var)
+            .fold(Ty::Type(var), Ty::app)
+    }
+
     #[track_caller]
     pub fn get_type(&self, var: &Var) -> &Type {
         self.types
@@ -124,12 +161,19 @@ impl TyCx {
     }
 
     #[track_caller]
-    pub fn get_cons(&self, type_: &Var, var: &Var) -> &TypeCons {
-        self.get_type(type_)
-            .cons
+    pub fn get_tuple_conses(&self, type_: &Var) -> &[TupleCons] {
+        match self.get_type(type_).cons {
+            TypeCons::Tuple(ref cons) => cons,
+            _ => panic!("type must have a tuple constructor"),
+        }
+    }
+
+    #[track_caller]
+    pub fn get_tuple_cons(&self, type_: &Var, var: &Var) -> &TupleCons {
+        self.get_tuple_conses(type_)
             .iter()
             .find(|cons| cons.var == *var)
-            .expect("should only be called with var `type_` and `var`")
+            .expect("type must have the constructor")
     }
 
     #[track_caller]
@@ -139,66 +183,50 @@ impl TyCx {
             .expect("should only be called with valid `var`")
     }
 
-    pub fn get_var(&mut self, kinds: &Kinds, var: Var) -> Ty {
-        if let Some(subst) = Self::subst_shallow(kinds, &var) {
-            return subst.clone();
-        }
-
-        if let Some(type_) = self.types.get(&var.unique()) {
-            return Ty::Cons(
-                Cons::Type(var.clone(), type_.input.len()),
-                Vec::new(),
-            );
-        }
-
-        Ty::Var(var)
-    }
-
-    pub fn instantiate(&self, kinds: &mut Kinds, mut subst: HashMap<Unique, Ty>, ty: Ty) -> Ty {
-        fn recurse(kinds: &mut Kinds, subst: &mut HashMap<Unique, Ty>, ty: Ty) -> Ty {
+    pub fn instantiate(&self, kinds: &mut Kinds, subst: &mut HashMap<Unique, Ty>, ty: &mut Ty) {
+        fn recurse(kinds: &mut Kinds, subst: &mut HashMap<Unique, Ty>, ty: &mut Ty) {
             match ty {
-                Ty::Var(var) if let Some(subst) = subst.get(&var.unique()) => subst.clone(),
+                Ty::Var(var) if let Some(subst) = subst.get(&var.unique()) => {
+                    *ty = subst.clone();
+                }
 
                 Ty::Var(var) => {
                     let new = Var::from(var.ident().cloned());
 
                     if let Some(mut kind) = kinds.get(&var.unique()).cloned() {
-                        kind.inferrable = true;
+                        if let Some(ref mut ty) = kind.subst {
+                            recurse(kinds, subst, ty);
+                        }
+
+                        kind.infer = true;
                         kinds.insert(new.unique(), kind);
                     }
 
                     let new = Ty::Var(new);
                     subst.insert(var.unique(), new.clone());
-                    new
+                    *ty = new;
                 }
 
-                Ty::Cons(con, args) => {
-                    let args = args
-                        .into_iter()
-                        .map(|arg| recurse(kinds, subst, arg))
-                        .collect();
-
-                    Ty::Cons(con, args)
+                Ty::App(lambda, input) => {
+                    recurse(kinds, subst, lambda);
+                    recurse(kinds, subst, input);
                 }
+
+                _ => {}
             }
         }
 
-        recurse(kinds, &mut subst, ty)
+        recurse(kinds, subst, ty);
     }
 
-    fn arity(kinds: &Kinds, ty: &Ty) -> usize {
-        match ty {
-            Ty::Var(var) => kinds
-                .get(&var.unique())
-                .and_then(|kind| kind.arity)
-                .unwrap_or(0),
-
-            Ty::Cons(cons, args) => match cons {
-                Cons::Type(_, arity) => *arity,
-                Cons::App => Self::arity(kinds, &args[0]) - 1,
-
-                _ => 0,
-            },
+    pub fn instantiate_all(
+        &self,
+        kinds: &mut Kinds,
+        subst: &mut HashMap<Unique, Ty>,
+        tys: &mut [Ty],
+    ) {
+        for ty in tys {
+            self.instantiate(kinds, subst, ty);
         }
     }
 
@@ -220,60 +248,117 @@ impl TyCx {
             return Ok(());
         }
 
-        match ty {
-            Ty::Var(var) => {
-                if let Some(ty) = Self::subst_shallow(kinds, var).cloned() {
-                    return self.require(kinds, &ty, kind, span);
-                }
+        if let Ty::Var(var) = ty {
+            return self.require_var(kinds, var, kind, span);
+        }
 
-                kinds
-                    .entry(var.unique())
-                    .or_default()
-                    .intersect(kind, var, span)
-            }
+        for trait_ in &kind.traits {
+            if self.find_impl(kinds, trait_, ty).is_none() {
+                let diagnostic = Diagnostic::error("kind mismatch").label(
+                    span,
+                    format!(
+                        "`{}` does not implement trait `{}`",
+                        self.format_ty(kinds, ty),
+                        trait_,
+                    ),
+                );
 
-            Ty::Cons(..) => {
-                if let Some(expected) = kind.arity
-                    && let actual = Self::arity(kinds, ty)
-                    && actual != expected
-                {
-                    return Err(
-                        Diagnostic::error("kind mismatch").label(
-                            span,
-                            format!(
-                                "expected type with kind `{}` but found `{}` which has kind `{}`",
-                                Kind::format_arity(expected),
-                                self.format_ty(kinds, ty),
-                                Kind::format_arity(actual),
-                            ),
-                        ),
-                    );
-                }
-
-                for trait_ in &kind.traits {
-                    let Some(impl_) = self.find_impl(kinds, trait_, ty) else {
-                        let diagnostic = Diagnostic::error("kind mismatch").label(
-                            span,
-                            format!(
-                                "`{}` does not implement `{}`",
-                                self.format_ty(kinds, ty),
-                                trait_,
-                            ),
-                        );
-
-                        return Err(diagnostic);
-                    };
-
-                    if let Ty::Var(ref var) = impl_.input
-                        && let Some(kind) = kinds.get(&var.unique()).cloned()
-                    {
-                        self.require(kinds, ty, &kind, span)?;
-                    }
-                }
-
-                Ok(())
+                return Err(diagnostic);
             }
         }
+
+        let (ty, args) = ty.reduce();
+
+        for field in &kind.fields {
+            if let Ty::Type(type_) = ty
+                && let type_ = self.get_type(type_)
+                && let TypeCons::Record(ref cons) = type_.cons
+                && let Some(type_field) = cons.fields.iter().find(|f| *f.name == field.name)
+            {
+                let mut subst = type_
+                    .args
+                    .iter()
+                    .map(Var::unique)
+                    .zip(args.iter().map(|ty| (*ty).clone()))
+                    .collect();
+
+                let mut ty = type_field.ty.clone();
+                self.instantiate(kinds, &mut subst, &mut ty);
+
+                self.unify(kinds, &ty, &field.ty, span)?;
+            } else {
+                return Err(
+                    Diagnostic::error("kind mismatch").label(
+                        span,
+                        format!(
+                            "type `{}` does not have field `{}`",
+                            self.format_ty(kinds, ty),
+                            field.name,
+                        ),
+                    ),
+                );
+            }
+        }
+
+        Ok(())
+    }
+
+    fn require_var(
+        &mut self,
+        kinds: &mut Kinds,
+        var: &Var,
+        kind: &Kind,
+        span: Span,
+    ) -> Result<(), Diagnostic> {
+        if let Some(ty) = Self::subst_shallow(kinds, var).cloned() {
+            return self.require(kinds, &ty, kind, span);
+        }
+
+        let this = kinds.entry(var.unique()).or_default();
+
+        for trait_ in &kind.traits {
+            if !(this.traits.contains(trait_) || this.infer) {
+                return Err(
+                    Diagnostic::error("kind mismatch").label(
+                        span,
+                        format!(
+                            "type `{}` does not implement trait `{}`",
+                            self.format_ty(kinds, &Ty::Var(var.clone())),
+                            trait_,
+                        ),
+                    ),
+                );
+            }
+
+            this.traits.push(trait_.clone());
+        }
+
+        let mut unify = Vec::new();
+
+        for field in &kind.fields {
+            if let Some(this) = this.fields.iter().find(|this| this.name == field.name) {
+                unify.push((this.ty.clone(), field.ty.clone()));
+            } else if this.infer {
+                this.fields.push(field.clone());
+            } else {
+                return Err(
+                    Diagnostic::error("kind mismatch").label(
+                        span,
+                        format!(
+                            "type `{}` does not have field `{}`",
+                            self.format_ty(kinds, &Ty::Var(var.clone())),
+                            field.name,
+                        ),
+                    ),
+                );
+            }
+        }
+
+        for (lhs, rhs) in unify {
+            self.unify(kinds, &lhs, &rhs, span)?;
+        }
+
+        Ok(())
     }
 
     pub fn unify(
@@ -294,11 +379,9 @@ impl TyCx {
             return Ok(());
         }
 
-        if lhs == rhs {
-            return Ok(());
-        }
-
         match (lhs, rhs) {
+            (lhs, rhs) if lhs == rhs => Ok(()),
+
             (Ty::Var(lhs), rhs) if let Some(lhs) = Self::subst_shallow(kinds, lhs).cloned() => {
                 self.unify(kinds, &lhs, rhs, span)
             }
@@ -308,7 +391,7 @@ impl TyCx {
             }
 
             (Ty::Var(var), ty) | (ty, Ty::Var(var))
-                if kinds.get(&var.unique()).is_none_or(|kind| kind.inferrable) =>
+                if kinds.get(&var.unique()).is_none_or(|kind| kind.infer) =>
             {
                 if let Some(kind) = kinds.get(&var.unique()).cloned() {
                     self.require(kinds, ty, &kind, span)?;
@@ -322,19 +405,14 @@ impl TyCx {
                 Ok(())
             }
 
-            (Ty::Cons(lhs_cons, lhs_args), Ty::Cons(rhs_cons, rhs_args))
-                if lhs_cons == rhs_cons =>
-            {
-                debug_assert_eq!(lhs_args.len(), rhs_args.len());
-
-                for (lhs, rhs) in lhs_args.iter().zip(rhs_args) {
-                    self.unify(kinds, lhs, rhs, span)?;
-                }
+            (Ty::App(lhs_lambda, lhs_input), Ty::App(rhs_lambda, rhs_input)) => {
+                self.unify(kinds, lhs_lambda, rhs_lambda, span)?;
+                self.unify(kinds, lhs_input, rhs_input, span)?;
 
                 Ok(())
             }
 
-            (_, _) => Err(
+            (lhs, rhs) => Err(
                 Diagnostic::error("type mismatch").label(
                     span,
                     format!(
@@ -353,6 +431,8 @@ impl TyCx {
         };
 
         match (lhs, rhs) {
+            (lhs, rhs) if lhs == rhs => true,
+
             (Ty::Var(lhs), rhs) if let Some(lhs) = Self::subst_shallow(kinds, lhs) => {
                 self.matches(kinds, lhs, rhs)
             }
@@ -361,15 +441,14 @@ impl TyCx {
                 self.matches(kinds, lhs, rhs)
             }
 
-            (Ty::Var(_), _) | (_, Ty::Var(_)) => true,
+            (Ty::Var(..), ..) | (.., Ty::Var(..)) => true,
 
-            (Ty::Cons(lhs_cons, lhs_args), Ty::Cons(rhs_cons, rhs_args)) => {
-                lhs_cons == rhs_cons
-                    && lhs_args
-                        .iter()
-                        .zip(rhs_args)
-                        .all(|(lhs, rhs)| self.matches(kinds, lhs, rhs))
+            (Ty::App(lhs_lambda, lhs_input), Ty::App(rhs_lambda, rhs_input)) => {
+                self.matches(kinds, lhs_lambda, rhs_lambda)
+                    && self.matches(kinds, lhs_input, rhs_input)
             }
+
+            (_, _) => false,
         }
     }
 
@@ -392,33 +471,42 @@ impl TyCx {
                     None => var.to_string(),
                 },
 
-                Ty::Cons(cons, args) => match cons {
-                    Cons::Str => String::from("str"),
-                    Cons::Int => String::from("int"),
-                    Cons::Real => String::from("real"),
+                Ty::Io => String::from("io"),
+                Ty::Str => String::from("str"),
+                Ty::Int => String::from("int"),
+                Ty::Real => String::from("real"),
 
-                    Cons::App => fmt_paren(
-                        format!(
-                            "{} {}",
-                            fmt_ty(kinds, &args[0], 1),
-                            fmt_ty(kinds, &args[1], 2)
-                        ),
-                        p,
-                        1,
-                    ),
+                Ty::Lam => String::from("(->)"),
 
-                    Cons::Lam => fmt_paren(
-                        format!(
-                            "{} -> {}",
-                            fmt_ty(kinds, &args[0], 1),
-                            fmt_ty(kinds, &args[1], 0),
-                        ),
-                        p,
-                        0,
-                    ),
+                Ty::Type(var) => var.to_string(),
 
-                    Cons::Type(var, _) => var.to_string(),
-                },
+                Ty::App(..) => {
+                    let (ty, args) = ty.reduce();
+
+                    match ty {
+                        Ty::Lam if args.len() == 2 => {
+                            let input = fmt_ty(kinds, args[0], 1);
+                            let output = fmt_ty(kinds, args[1], 0);
+
+                            fmt_paren(format!("{input} -> {output}"), p, 0)
+                        }
+
+                        _ => {
+                            let mut items = args.clone();
+                            items.insert(0, ty);
+
+                            fmt_paren(
+                                items
+                                    .iter()
+                                    .map(|ty| fmt_ty(kinds, ty, 2))
+                                    .collect::<Vec<_>>()
+                                    .join(" "),
+                                p,
+                                1,
+                            )
+                        }
+                    }
+                }
             }
         }
 

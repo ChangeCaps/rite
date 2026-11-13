@@ -22,21 +22,32 @@ where
 
     pub fn write(&mut self, diagnostics: &[Diagnostic]) -> io::Result<bool> {
         let mut errors = 0;
+        let mut warnings = 0;
 
         for diagnostic in diagnostics {
             match diagnostic.severity() {
                 Severity::Error => errors += 1,
+                Severity::Warning => warnings += 1,
             }
 
             self.diagnostic(diagnostic)?;
         }
 
-        if errors > 0 {
-            let plural = if errors > 1 { "s" } else { "" };
+        fn plural(count: usize) -> &'static str {
+            if count > 1 { "s" } else { "" }
+        }
 
+        if errors > 0 {
             writeln!(
                 self.writer,
-                "{RED}{BOLD}error{RESET}: failed to compile due to {errors} error{plural}",
+                "{RED}{BOLD}error{RESET}: failed to compile due to {errors} error{}",
+                plural(errors),
+            )?;
+        } else if warnings > 0 {
+            writeln!(
+                self.writer,
+                "{YELLOW}{BOLD}warning{RESET}: compiled with {warnings} warning{}",
+                plural(warnings),
             )?;
         }
 
@@ -75,7 +86,7 @@ where
 
     fn label(
         &mut self,
-        _diagnostic: &Diagnostic,
+        diagnostic: &Diagnostic,
         indent: usize,
         label: &ResolvedLabel,
     ) -> io::Result<()> {
@@ -111,9 +122,11 @@ where
             .count()
             .max(1);
 
+        let color = Self::severity_color(diagnostic.severity());
+
         writeln!(
             self.writer,
-            "{}{BLUE}{BOLD}|{}{RED}{} {WHITE}{}{RESET}",
+            "{}{BLUE}{BOLD}|{}{color}{} {WHITE}{}{RESET}",
             " ".repeat(indent + 1),
             " ".repeat(label.column),
             "^".repeat(highlight),
@@ -128,6 +141,7 @@ where
     fn severity_color(severity: Severity) -> &'static str {
         match severity {
             Severity::Error => RED,
+            Severity::Warning => YELLOW,
         }
     }
 

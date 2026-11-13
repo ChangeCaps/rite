@@ -13,6 +13,7 @@ pub use writer::*;
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Severity {
     Error,
+    Warning,
 }
 
 #[derive(Debug)]
@@ -48,6 +49,11 @@ impl Diagnostic {
     #[track_caller]
     pub fn error(message: impl Into<String>) -> Self {
         Self::new(Severity::Error, message)
+    }
+
+    #[track_caller]
+    pub fn warn(message: impl Into<String>) -> Self {
+        Self::new(Severity::Warning, message)
     }
 
     pub fn label(mut self, span: Span, message: impl Into<String>) -> Self {

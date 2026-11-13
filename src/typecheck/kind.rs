@@ -1,5 +1,4 @@
 use crate::{
-    diagnostic::{Diagnostic, Span},
     rename,
     typecheck::{State, Ty},
     var::Var,
@@ -7,69 +6,63 @@ use crate::{
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
 pub struct Kind {
-    pub inferrable: bool,
-    pub subst:      Option<Ty>,
-    pub arity:      Option<usize>,
-    pub traits:     Vec<Var>,
+    pub infer:  bool,
+    pub subst:  Option<Ty>,
+    pub arity:  Arity,
+    pub traits: Vec<Var>,
+    pub fields: Vec<Field>,
+}
+
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct Field {
+    pub name: String,
+    pub ty:   Ty,
 }
 
 impl Default for Kind {
     fn default() -> Self {
         Self {
-            inferrable: true,
-            subst:      None,
-            arity:      None,
-            traits:     Vec::new(),
+            infer:  true,
+            subst:  None,
+            arity:  Arity::min(0),
+            traits: Vec::new(),
+            fields: Vec::new(),
         }
     }
 }
 
-impl Kind {
-    pub fn arity(arity: usize) -> Self {
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Arity {
+    pub arity: usize,
+    pub exact: bool,
+}
+
+impl Arity {
+    pub fn min(arity: usize) -> Self {
         Self {
-            arity: Some(arity),
+            arity,
+            exact: false,
+        }
+    }
+
+    pub fn exact(arity: usize) -> Self {
+        Self { arity, exact: true }
+    }
+}
+
+impl Kind {
+    pub fn arity(arity: Arity) -> Self {
+        Self {
+            arity,
             ..Default::default()
         }
     }
 
-    pub fn intersect(&mut self, other: &Self, var: &Var, span: Span) -> Result<(), Diagnostic> {
-        if let Some(other_arity) = other.arity {
-            if let Some(self_arity) = self.arity
-                && other_arity != self_arity
-            {
-                let diagnostic = Diagnostic::error("kind mismatch").label(
-                    span,
-                    format!(
-                        "expected `{}` but found `{}`",
-                        Self::format_arity(self_arity),
-                        Self::format_arity(other_arity),
-                    ),
-                );
-
-                return Err(diagnostic);
-            }
-
-            self.arity = Some(other_arity);
+    pub fn field(name: String, ty: Ty) -> Self {
+        Self {
+            fields: vec![Field { name, ty }],
+            ..Default::default()
         }
-
-        for trait_ in &other.traits {
-            if self.traits.contains(trait_) {
-                continue;
-            };
-
-            if !self.inferrable {
-                let diagnostic = Diagnostic::error("kind mismatch").label(
-                    span,
-                    format!("`{var}` does not implement `{trait_}`"),
-                );
-
-                return Err(diagnostic);
-            }
-
-            self.traits.push(trait_.clone());
-        }
-
-        Ok(())
     }
 
     pub fn format_arity(arity: usize) -> String {
@@ -94,10 +87,7 @@ impl State<'_> {
     }
 
     fn arity_kind(&mut self, kind: rename::ArityKind) -> Kind {
-        Kind {
-            arity: Some(kind.arity),
-            ..Default::default()
-        }
+        Kind::arity(Arity::exact(kind.arity))
     }
 
     fn error_kind(&mut self, _kind: rename::ErrorKind) -> Kind {
