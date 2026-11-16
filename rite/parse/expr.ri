@@ -1,0 +1,38 @@
+import 'rite:parse/parser'
+import 'rite:diagnostic/diagnostic'
+
+type Expr =
+  | Var VarEpxr
+  | Error ErrorExpr
+
+type VarExpr = VarExpr {
+  name :: str
+  span :: Span
+}
+
+type ErrorExpr = ErrorExpr {
+  span :: Span
+}
+
+expr :: Parser Expr
+expr = varExpr
+  |> else errorExpr
+
+varExpr :: Parser Expr
+varExpr = ident
+  |> spanned
+  |> map \name, span.
+    VarExpr {
+      name = name
+      span = span
+    }
+  |> map Var
+
+errorExpr :: Parser Expr
+errorExpr = recovery
+  |> spanned
+  |> map \_, span.
+    ErrorExpr {
+      span = span
+    }
+  |> map Error

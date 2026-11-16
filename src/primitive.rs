@@ -19,6 +19,8 @@ pub enum BinPrim {
     Sub(PrimNum),
     Mul(PrimNum),
     Div(PrimNum),
+    Gt(PrimNum),
+    Lt(PrimNum),
 }
 
 #[derive(Clone, Copy, Debug, PartialOrd, Ord, PartialEq, Eq, Hash)]

@@ -111,7 +111,7 @@ pub fn cons_pat(parser: &mut Parser<'_>, allow_cons: bool) -> Pat {
     let mut args = Vec::new();
 
     while is_pat(parser.peek()) && allow_cons {
-        args.push(pat(parser, false));
+        args.push(term_pat(parser, false));
     }
 
     Pat::Cons(ConsPat { var, args, span })

@@ -1,0 +1,46 @@
+import 'rite:diagnostic/diagnostic'
+
+formatReport :: Report -> str
+formatReport report =
+  diagnostics report
+    |> map formatDiagnostic
+    |> join '\n'
+
+formatDiagnostic :: Diagnostic -> str
+formatDiagnostic diagnostic =
+  formatHeader diagnostic
+    + reset
+
+formatHeader :: Diagnostic -> str
+formatHeader diagnostic =
+  let prefix = match severity diagnostic
+    Error   -> 'error'
+    Warning -> 'warning'
+
+  let color = match severity diagnostic
+    Error   -> red
+    Warning -> yellow
+
+  color + bold + prefix + white + ': ' + message diagnostic
+
+resolveLabel :: Label -> ResolvedLabel
+resolveLabel label =
+  label
+    |> span
+    |> source
+    |> contents
+    |> split '\n'
+
+type ResolvedLabel = ResolvedLabel {
+  path    :: str
+  message :: str
+  line    :: int
+  column  :: int
+  lines   :: [str]
+}
+
+red    = '\e[31m'
+yellow = '\e[33m'
+white  = '\e[37m'
+bold   = '\e[1m'
+reset  = '\e[0m'

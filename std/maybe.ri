@@ -8,8 +8,28 @@ impl Monad Maybe
 
   pure = Some
 
+impl Show Maybe a where a :: Show
+  show x = match x
+    Some x -> 'Some ' + show x
+    None   -> 'None'
+
+impl Eq Maybe a where a :: Eq
+  (==) a b = match a, b
+    Some a, Some b -> a == b
+    None  , None   -> true
+    _     , _      -> false
+
 or :: Maybe a -> a -> a
-or x y =
-  match x
-    Some x -> x
-    None -> y
+or x y = match x
+  Some x -> x
+  None -> y
+
+isSome :: Maybe a -> bool
+isSome x = match x
+  Some _ -> true
+  None   -> false
+
+isNone :: Maybe a -> bool
+isNone x = match x
+  Some _ -> false
+  None   -> true

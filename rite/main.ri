@@ -1,7 +1,11 @@
 import 'std:fs'
 
 import 'rite:diagnostic/diagnostic'
+import 'rite:diagnostic/format'
 import 'rite:parse/lex'
+import 'rite:parse/parser'
+import 'rite:parse/token'
+import 'rite:parse/expr'
 
 main :: io ()
 main =
@@ -19,15 +23,15 @@ read =
 
   let ts, report = lex source
 
-  ts
-    |> reverse
-    |> show
-    |> println
-    |> lift
+  let result = expr
+    |> runParser ts
 
-  isFailure report
-    |> show
-    |> println
-    |> lift
+  match result
+    Some (_, report) ->
+      report
+        |> formatReport
+        |> println
+        |> lift
+    None -> pure ()
 
   pure ()

@@ -4,8 +4,9 @@ use crate::{
     ast,
     diagnostic::{Diagnostic, Span},
     rename::{
-        self, BindPat, ErrorExpr, ErrorTy, Expr, FieldExpr, Kind, LamExpr, Pat, Scope, ScopeCons,
-        ScopeImport, ScopeTy, ScopeValue, ScopeValueKind, State, Ty, TyPrim, VarExpr, Vis,
+        self, BindPat, ErrorExpr, ErrorTy, Expr, FieldExpr, FieldKind, Kind, LamExpr, LamTy, Pat,
+        Scope, ScopeCons, ScopeImport, ScopeTy, ScopeValue, ScopeValueKind, State, Ty, TyPrim,
+        VarExpr, VarTy, Vis, WhereTy,
     },
     var::{Ident, Var},
 };
@@ -340,28 +341,58 @@ impl State<'_> {
         let var = Var::from(field.name.clone());
         let input = Var::unnamed();
 
-        let def = Def {
-            ty:   None,
-            var:  var.clone(),
-            expr: Expr::Lam(LamExpr {
-                arg:    Pat::Bind(BindPat {
-                    var:  Some(input.clone()),
-                    span: field.span,
-                }),
-                output: Box::new(Expr::Field(FieldExpr {
-                    input: Box::new(Expr::Var(VarExpr {
-                        var:  input,
+        if let Some(ref name) = field.name {
+            let input_ty = Var::unnamed();
+            let output_ty = Var::unnamed();
+
+            let def = Def {
+                ty:   Some(Ty::Where(WhereTy {
+                    input:  Box::new(Ty::Lam(LamTy {
+                        input:  Box::new(Ty::Var(VarTy {
+                            var:  input_ty.clone(),
+                            span: field.span,
+                        })),
+                        output: Box::new(Ty::Var(VarTy {
+                            var:  output_ty.clone(),
+                            span: field.span,
+                        })),
+                        span:   field.span,
+                    })),
+                    target: Box::new(Ty::Var(VarTy {
+                        var:  input_ty,
                         span: field.span,
                     })),
-                    name:  field.name.clone(),
-                    span:  field.span,
+                    kinds:  vec![Kind::Field(FieldKind {
+                        name: name.as_ref().into(),
+                        ty:   Ty::Var(VarTy {
+                            var:  output_ty,
+                            span: field.span,
+                        }),
+                        span: field.span,
+                    })],
+                    span:   field.span,
                 })),
-                span:   field.span,
-            }),
-            span: field.span,
-        };
+                var:  var.clone(),
+                expr: Expr::Lam(LamExpr {
+                    arg:    Pat::Bind(BindPat {
+                        var:  Some(input.clone()),
+                        span: field.span,
+                    }),
+                    output: Box::new(Expr::Field(FieldExpr {
+                        input: Box::new(Expr::Var(VarExpr {
+                            var:  input,
+                            span: field.span,
+                        })),
+                        name:  field.name.clone(),
+                        span:  field.span,
+                    })),
+                    span:   field.span,
+                }),
+                span: field.span,
+            };
 
-        self.defs.insert(var.unique(), def);
+            self.defs.insert(var.unique(), def);
+        }
 
         let value = ScopeValue {
             vis: Vis::Public,
@@ -570,9 +601,11 @@ impl State<'_> {
                     .fields
                     .into_iter()
                     .filter_map(|field| {
+                        let ty = self.ty(&mut scope, field.ty);
+
                         Some(RecordField {
                             name: field.name?,
-                            ty:   self.ty(&mut scope, field.ty),
+                            ty,
                             span: field.span,
                         })
                     })

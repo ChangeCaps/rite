@@ -19,10 +19,18 @@ impl Default int
   default = 0
 
 impl Eq int
-  (==) a b =
-    match a - b
-      0 -> true
-      _ -> false
+  (==) a b = match a - b
+    0 -> true
+    _ -> false
+
+impl Cmp int
+  (>) a b = match intrinsic.intGt a b
+    0 -> false
+    _ -> true
+
+  (<) a b = match intrinsic.intLt a b
+    0 -> false
+    _ -> true
 
 impl Show int
   show x = intrinsic.intStr x

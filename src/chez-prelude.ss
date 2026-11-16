@@ -39,6 +39,8 @@
 (define (int-sub x y) (- (force x) (force y)))
 (define (int-mul x y) (* (force x) (force y)))
 (define (int-div x y) (/ (force x) (force y)))
+(define (int-gt x y) (if (> (force x) (force y)) 1 0))
+(define (int-lt x y) (if (< (force x) (force y)) 1 0))
 
 (define (str-int x) (number->string (force x)))
 (define (str-len x) (string-length (force x)))

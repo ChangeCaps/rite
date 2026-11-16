@@ -69,18 +69,27 @@ label span message diagnostic =
 trait Reporter a
   mapReport :: (Report -> Report) -> a
 
+joinReport a b = Report {
+  isFailure   = isFailure a || isFailure b
+  diagnostics = append (diagnostics a) (diagnostics b)
+}
+
+joinSpan a b = Span {
+  source = source a
+  start  = min (start a) (start b)
+  end    = max (end a) (end b)
+}
+
 report :: Diagnostic -> a where a :: Reporter
-report diagnostic =
-  mapReport \report.
-    report { diagnostics = diagnostic : diagnostics report }
+report diagnostic = mapReport \report.
+  report { diagnostics = diagnostic : diagnostics report }
 
 fail :: Diagnostic -> a where a :: Reporter
-fail diagnostic =
-  mapReport \report.
-    report {
-      isFailure = true
-      diagnostics = diagnostic : diagnostics report
-    }
+fail diagnostic = mapReport \report.
+  report {
+    isFailure = true
+    diagnostics = diagnostic : diagnostics report
+  }
 
 impl Show Span
   show span =

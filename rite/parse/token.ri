@@ -1,5 +1,28 @@
 import 'rite:diagnostic/diagnostic'
 
+type Tokens = Tokens [Token, Span] Span
+
+impl Show Tokens
+  show (Tokens ts eoi) = show ts
+
+peek :: Tokens -> Token, Span
+peek (Tokens ts eoi) = match ts
+  t : _ -> t
+  [] -> Eoi, eoi
+
+consume :: Tokens -> Tokens
+consume (Tokens ts eoi) = match ts
+  _ : ts -> Tokens ts eoi
+  [] -> Tokens ts eoi
+
+consumeWhile :: (Token, Span -> bool) -> Tokens -> Tokens
+consumeWhile f ts =
+  match peek ts
+    Eoi, _ -> ts
+    t -> match f t
+      true  -> consumeWhile f (consume ts)
+      false -> ts
+
 type Token =
   # literals
 
@@ -19,10 +42,34 @@ type Token =
   | Dedent
   | Eoi
 
-impl Show Token, Span
-  show t, s = match t
+impl Show Token
+  show t = match t
+    Str     -> '{str}'
+    Int     -> '{int}'
+    Real    -> '{real}'
+    Ident   -> '{ident}'
+    Symbol  -> '{symbol}'
+    Keyword -> '{keyword}'
+    Comment -> '{comment}'
+    Unknown -> '{unknown}'
     Newline -> '{newline}'
     Indent  -> '{indent}'
     Dedent  -> '{dedent}'
     Eoi     -> '{end of input}'
-    _       -> spanStr s
+
+impl Eq Token
+  (==) a b = match a, b
+    Str,     Str     -> true
+    Int,     Int     -> true
+    Real,    Real    -> true
+    Ident,   Ident   -> true
+    Symbol,  Symbol  -> true
+    Keyword, Keyword -> true
+    Comment, Comment -> true
+    Unknown, Unknown -> true
+    Newline, Newline -> true
+    Indent,  Indent  -> true
+    Dedent,  Dedent  -> true
+    Eoi,     Eoi     -> true
+
+    _ -> false

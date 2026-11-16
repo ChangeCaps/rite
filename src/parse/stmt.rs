@@ -300,7 +300,7 @@ pub fn impl_stmt(parser: &mut Parser<'_>) -> Stmt {
     let mut members = Vec::new();
 
     if is_indent(parser) {
-        parser.consume_all(Token::Newline);
+        lines(parser);
         parser.expect(Token::Indent);
 
         while !matches!(
@@ -308,7 +308,7 @@ pub fn impl_stmt(parser: &mut Parser<'_>) -> Stmt {
             Token::Dedent | Token::Eof
         ) {
             members.push(impl_member(parser));
-            parser.consume_all(Token::Newline);
+            lines(parser);
         }
 
         parser.expect(Token::Dedent);

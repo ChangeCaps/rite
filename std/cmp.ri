@@ -1,6 +1,10 @@
 trait Eq a
   (==) :: a -> a -> bool
 
+trait Cmp a
+  (>) :: a -> a -> bool
+  (<) :: a -> a -> bool
+
 not :: bool -> bool
 not x = match x
   true -> false
@@ -8,3 +12,13 @@ not x = match x
 
 (!=) :: a -> a -> bool where a :: Eq
 (!=) x y = not (x == y)
+
+max :: a -> a -> a where a :: Cmp
+max a b = match a > b
+  true  -> a
+  false -> b
+
+min :: a -> a -> a where a :: Cmp
+min a b = match a < b
+  true  -> a
+  false -> b

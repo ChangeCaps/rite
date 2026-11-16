@@ -75,6 +75,7 @@ impl State<'_> {
         match kind {
             rename::Kind::Var(kind) => self.var_kind(kind),
             rename::Kind::Arity(kind) => self.arity_kind(kind),
+            rename::Kind::Field(kind) => self.field_kind(kind),
             rename::Kind::Error(kind) => self.error_kind(kind),
         }
     }
@@ -88,6 +89,11 @@ impl State<'_> {
 
     fn arity_kind(&mut self, kind: rename::ArityKind) -> Kind {
         Kind::arity(Arity::exact(kind.arity))
+    }
+
+    fn field_kind(&mut self, kind: rename::FieldKind) -> Kind {
+        let ty = self.ty(kind.ty);
+        Kind::field(kind.name, ty)
     }
 
     fn error_kind(&mut self, _kind: rename::ErrorKind) -> Kind {

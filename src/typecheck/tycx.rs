@@ -198,6 +198,10 @@ impl TyCx {
                             recurse(kinds, subst, ty);
                         }
 
+                        for field in &mut kind.fields {
+                            recurse(kinds, subst, &mut field.ty);
+                        }
+
                         kind.infer = true;
                         kinds.insert(new.unique(), kind);
                     }

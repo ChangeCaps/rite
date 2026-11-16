@@ -41,7 +41,12 @@ impl<'a> State<'a> {
         self.unit
             .tycx
             .find_impl(&self.unit.kinds, trait_, ty)
-            .expect("finding impl should never fail during lowering")
+            .unwrap_or_else(|| {
+                panic!(
+                    "finding impl should never fail during lowering, trait: {trait_}, type: {}",
+                    self.format_ty(ty),
+                )
+            })
     }
 
     fn unify(&mut self, lhs: &Ty, rhs: &Ty) {

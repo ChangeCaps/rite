@@ -14,7 +14,7 @@ impl Reporter State Lexer ()
     let lexer <- get
     set <| lexer { report = f (report lexer) }
 
-lex :: Source -> [Token, Span], Report
+lex :: Source -> Tokens, Report
 lex input =
   let _, lexer = Lexer {
     input  = input
@@ -24,7 +24,14 @@ lex input =
     report = default
   } |> with run
 
-  tokens lexer, report lexer
+  let span = Span {
+    source = input
+    start  = len (contents input)
+    end    = len (contents input)
+  }
+
+  let tokens = tokens lexer |> reverse
+  Tokens tokens span, report lexer
 
 run :: State Lexer ()
 run =
@@ -116,7 +123,7 @@ ident =
 
       match start span == end span
         true -> pure None
-        false -> pure (Some (Symbol, span))
+        false -> pure (Some (Ident, span))
 
 # Lex a symbol
 symbol :: State Lexer (Maybe (Token, Span))
@@ -167,7 +174,7 @@ isNumeric c =
 # Check if character is a valid symbol
 isSymbolic :: str -> bool
 isSymbolic c =
-  let symbols = '=+-*><\\/|&$%~!@^'
+  let symbols = '=+-*><\\/|&$%~!@^;:,.'
   has c symbols
 
 isDelimiter :: str -> bool

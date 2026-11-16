@@ -1,6 +1,1 @@
-main = match None ()
-  Some x -> x
-    y      -> y
-
-foo = bar
-  f
+-

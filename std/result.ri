@@ -10,7 +10,7 @@ impl Monad Result e
 
 impl Show Result e a where e :: Show where a :: Show
   show x = match x
-    Ok x -> 'Ok ' + show x
+    Ok x  -> 'Ok ' + show x
     Err e -> 'Err ' + show e
 
 type Try m e a = Try (m (Result e a))

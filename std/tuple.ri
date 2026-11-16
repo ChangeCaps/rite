@@ -1,1 +1,4 @@
 type (,) a b = (,) a b
+
+impl Eq a, b where a :: Eq where b :: Eq
+  (==) (a, a') (b, b') = a == b && a' == b'

@@ -1,0 +1,169 @@
+import 'rite:parse/token'
+import 'rite:diagnostic/diagnostic'
+
+type Parsed a = Parsed {
+  output :: a
+  report :: Report
+  rest   :: Tokens
+}
+
+type Parser a = Parser {
+  start :: [Token, Maybe str] -> [Token, Maybe str]
+  parse :: [Token, Maybe str] -> Tokens -> Maybe (Parsed a)
+}
+
+impl Functor Parser
+  map f p = Parser {
+    start = start p
+    parse = \fs ts.
+      parse p fs ts
+        |> map \result.
+          Parsed {
+            output = f (output result)
+            report = report result
+            rest   = rest result
+          }
+  }
+
+runParser :: Tokens -> Parser a -> Maybe (a, Report)
+runParser ts p =
+  let result <- parse p [] ts
+  pure (output result, report result)
+
+expect :: Token -> Maybe str -> Parser Span
+expect t s = Parser {
+  start = \_. [t, s]
+  parse = \fs ts.
+    let n0 = peek ts
+
+    match is t s n0
+      true ->
+        let _, span = n0
+
+        Some (Parsed {
+          output = span
+          report = default
+          rest   = consume ts
+        })
+
+      false -> None
+}
+
+is :: Token -> Maybe str -> Token, Span -> bool
+is t' s' t, s = match s'
+  None -> t == t'
+  Some s' -> t == t' && spanStr s == s'
+
+ident :: Parser str
+ident = expect Ident None
+  |> map spanStr
+
+then :: Parser b -> Parser a -> Parser (a, b)
+then b a = a & b
+
+else :: Parser a -> Parser a -> Parser a
+else b a = a | b
+
+always :: a -> Parser a
+always x = Parser {
+  start = \_. []
+  parse = \_ ts.
+    Some (Parsed {
+      output = x
+      report = default
+      rest   = ts
+    })
+}
+
+maybe :: Parser a -> Parser (Maybe a)
+maybe p = p
+  |> map Some
+  |> else (always None)
+
+recover :: Parser a -> Parser (Maybe a)
+recover p = p
+  |> map Some
+  |> else (recovery |> map \_. None)
+
+recovery :: Parser ()
+recovery = Parser {
+  start = \_. []
+  parse = \fs ts.
+    let _, start = peek ts
+
+    let ts = ts |> consumeWhile \t.
+      fs |> all \t', s'. not (is t' s' t)
+
+    let _, end = peek ts
+
+    let span = joinSpan start end
+
+    let expected = fs
+      |> map showExpected
+      |> join ', '
+
+    let diagnostic = 'unexpected token `' + spanStr start + '`'
+      |> error
+      |> label span ('expected one of: ' + expected)
+
+    Some (Parsed {
+      output = ()
+      report = Report {
+        isFailure   = true
+        diagnostics = [diagnostic]
+      }
+      rest   = ts
+    })
+}
+
+showExpected :: Token, Maybe str -> str
+showExpected t, s = match s
+  None   -> show t
+  Some s -> s
+
+spanned :: Parser a -> Parser (a, Span)
+spanned p = Parser {
+  start = start p
+  parse = \fs ts.
+    let _, start = peek ts
+
+    parse p fs ts
+      |> map \result.
+        let _, end = peek (rest result)
+
+        Parsed {
+          output = output result, joinSpan start end
+          report = report result
+          rest   = rest result
+        }
+}
+
+(&) :: Parser a -> Parser b -> Parser (a, b)
+(&) a b = Parser {
+  start = \fs. start a (start b fs)
+  parse = \fs ts.
+    match parse a (start b fs) ts
+      None -> None
+      Some a' -> match parse b fs (rest a')
+        None -> None
+        Some b' -> Some (Parsed {
+          output = output a', output b'
+          report = joinReport (report a') (report b')
+          rest   = rest b'
+        })
+}
+
+(|) :: Parser a -> Parser a -> Parser a
+(|) a b = Parser {
+  start = \fs. union (start a fs) (start b fs)
+  parse = \fs ts.
+    match parse a fs ts
+      Some result -> Some result
+      None -> parse b fs ts
+}
+
+union a b = a
+  |> fold b \x xs.
+    match any ((==) x) xs
+      true -> xs
+      false -> x : xs

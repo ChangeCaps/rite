@@ -165,6 +165,8 @@ impl State<'_> {
         self.add_int_bin(scope, "intSub", BinPrim::Sub);
         self.add_int_bin(scope, "intMul", BinPrim::Mul);
         self.add_int_bin(scope, "intDiv", BinPrim::Div);
+        self.add_int_bin(scope, "intGt", BinPrim::Gt);
+        self.add_int_bin(scope, "intLt", BinPrim::Lt);
 
         self.add_prim_un(
             scope,
@@ -180,6 +182,8 @@ impl State<'_> {
         self.add_real_bin(scope, "realSub", BinPrim::Sub);
         self.add_real_bin(scope, "realMul", BinPrim::Mul);
         self.add_real_bin(scope, "realDiv", BinPrim::Div);
+        self.add_real_bin(scope, "realGt", BinPrim::Gt);
+        self.add_real_bin(scope, "realLt", BinPrim::Lt);
     }
 
     fn add_int_bin(&mut self, scope: &mut Scope, name: &str, prim: impl Fn(PrimNum) -> BinPrim) {

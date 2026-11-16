@@ -25,7 +25,23 @@ char :: int -> str -> str
 char n s = intrinsic.strChar n s
 
 has :: str -> str -> bool
-has x s = findRaw x s != (0 - 1)
+has x s = isSome (find x s)
+
+find :: str -> str -> Maybe int
+find x s =
+  let idx = findRaw x s
+
+  match idx != (0 - 1)
+    true  -> Some idx
+    false -> None
+
+split :: str -> str -> [str]
+split x s = match find x s
+  Some idx ->
+    let head = take idx s
+    let tail = skip (idx + len x) s
+    head : split x tail
+  None -> []
 
 findRaw :: str -> str -> int
 findRaw x s = intrinsic.strFind x s

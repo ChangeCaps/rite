@@ -34,6 +34,11 @@ impl Sequence [a]
       x : xs -> skip (n - 1) xs
       [] -> []
 
+append :: [a] -> [a] -> [a]
+append xs ys = match xs
+  x : xs -> x : append xs ys
+  []     -> ys
+
 takeInto n xs ys = match n
   0 -> ys
   _ -> match xs
@@ -45,6 +50,20 @@ join sep ss = match ss
   []     -> ''
   s : [] -> s
   s : ss -> s + sep + join sep ss
+
+any :: (a -> bool) -> [a] -> bool
+any f xs = match xs
+  x : xs -> match f x
+    true -> true
+    false -> any f xs
+  [] -> false
+
+all :: (a -> bool) -> [a] -> bool
+all f xs = match xs
+  x : xs -> match f x
+    true -> all f xs
+    false -> false
+  [] -> true
 
 sum :: t a -> a where t :: Fold where a :: Add + Zero
 sum xs = fold zero (+) xs

@@ -1,13 +1,14 @@
 use crate::{
     ast,
     diagnostic::{Diagnostic, Span},
-    rename::{Scope, State},
+    rename::{Scope, State, Ty},
     var::Var,
 };
 
 pub enum Kind {
     Var(VarKind),
     Arity(ArityKind),
+    Field(FieldKind),
     Error(ErrorKind),
 }
 
@@ -19,6 +20,12 @@ pub struct VarKind {
 pub struct ArityKind {
     pub arity: usize,
     pub span:  Span,
+}
+
+pub struct FieldKind {
+    pub name: String,
+    pub ty:   Ty,
+    pub span: Span,
 }
 
 pub struct ErrorKind {

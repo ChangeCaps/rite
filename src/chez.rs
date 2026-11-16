@@ -28,6 +28,7 @@ fn gen_lit(lit: &Lit) -> String {
             let escaped = x
                 .replace('\\', "\\\\")
                 .replace('"', "\\\"")
+                .replace('\x1b', "\\033")
                 .replace('\n', "\\n")
                 .replace('\t', "\\t")
                 .replace('\r', "\\r");
@@ -174,11 +175,15 @@ fn gen_expr(expr: &Expr) -> String {
                     BinPrim::Sub(PrimNum::Int) => "int-sub",
                     BinPrim::Mul(PrimNum::Int) => "int-mul",
                     BinPrim::Div(PrimNum::Int) => "int-div",
+                    BinPrim::Gt(PrimNum::Int) => "int-gt",
+                    BinPrim::Lt(PrimNum::Int) => "int-lt",
 
                     BinPrim::Add(PrimNum::Real) => "real-add",
                     BinPrim::Sub(PrimNum::Real) => "real-sub",
                     BinPrim::Mul(PrimNum::Real) => "real-mul",
                     BinPrim::Div(PrimNum::Real) => "real-div",
+                    BinPrim::Gt(PrimNum::Real) => "real-gt",
+                    BinPrim::Lt(PrimNum::Real) => "real-lt",
                 };
 
                 format!("({prim} {lhs} {rhs})")

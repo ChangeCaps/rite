@@ -263,6 +263,7 @@ impl<'a> Lexer<'a> {
                     '\'' => '\'',
                     '\\' => '\\',
 
+                    'e' => '\x1b',
                     'n' => '\n',
                     'r' => '\r',
                     't' => '\t',
@@ -345,6 +346,7 @@ impl<'a> Lexer<'a> {
             '\\' => Token::Back,
 
             '|' => Token::Pipe,
+            '&' => Token::Amp,
             '_' => Token::Under,
             '=' => Token::Equal,
             '+' => Token::Plus,
