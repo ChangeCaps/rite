@@ -1,10 +1,10 @@
 use crate::{
     ast::{
-        AppExpr, Assign, BinExpr, ErrorExpr, Expr, ExprField, FieldExpr, LamExpr, LetExpr,
-        ListExpr, Lit, LitExpr, MatchArm, MatchExpr, ParenExpr, RecExpr, SeqExpr, VarExpr,
+        AppExpr, Assign, BinExpr, ErrorExpr, Expr, ExprField, ExtExpr, LamExpr, LetExpr, ListExpr,
+        Lit, LitExpr, MatchArm, MatchExpr, ParenExpr, RecExpr, SeqExpr, VarExpr,
     },
-    parse::{Parser, Token, is_pat, operator, operator_from_token, pat},
-    var::{Assoc, Ident, Operator},
+    parse::{Parser, Token, binary, is_pat, operator, operator_from_token, pat},
+    var::Ident,
 };
 
 pub fn is_expr(parser: &Parser<'_>) -> bool {
@@ -15,10 +15,12 @@ pub fn is_expr(parser: &Parser<'_>) -> bool {
             | Token::Real(..)
             | Token::Ident(..)
             | Token::Match
+            | Token::Extern
             | Token::Let
             | Token::Back
             | Token::LParen
-            | Token::LBracket,
+            | Token::LBracket
+            | Token::LRParen,
     )
 }
 
@@ -105,7 +107,7 @@ pub fn block_let(parser: &mut Parser<'_>) -> Expr {
 
     let input = expr(parser);
 
-    parser.consume_all(Token::Newline);
+    lines(parser);
 
     let output = block(parser);
 
@@ -157,35 +159,44 @@ pub fn match_arm(parser: &mut Parser<'_>) -> MatchArm {
 }
 
 pub fn bin_expr(parser: &mut Parser<'_>) -> Expr {
-    let lhs = rec_expr(parser);
+    let mut is_block = false;
 
-    let Some((op, _)) = operator(parser) else {
-        if is_bin_block(parser) {
-            return bin_block(parser, lhs);
-        }
+    let expr = binary(
+        parser,
+        |parser| {
+            if !is_block && parser.peek() == Token::Newline {
+                return block_expr(parser);
+            }
 
-        return lhs;
-    };
+            let expr = rec_expr(parser);
 
-    let rhs = bin_expr(parser);
+            if is_bin_block(parser) && !is_block {
+                parser.consume_all(Token::Newline);
+                parser.expect(Token::Indent);
+                lines(parser);
 
-    bin(op, lhs, rhs)
-}
+                is_block = true;
+            } else if is_block {
+                lines(parser);
+            }
 
-pub fn bin_block(parser: &mut Parser<'_>, mut lhs: Expr) -> Expr {
-    parser.consume_all(Token::Newline);
-    parser.expect(Token::Indent);
+            expr
+        },
+        |op, lhs, rhs| {
+            Expr::Bin(BinExpr {
+                span: lhs.span().join(rhs.span()),
+                op,
+                lhs: Box::new(lhs),
+                rhs: Box::new(rhs),
+            })
+        },
+    );
 
-    while let Some((op, _)) = operator(parser) {
-        let rhs = bin_expr(parser);
-        lhs = bin(op, lhs, rhs);
-
-        parser.consume_all(Token::Newline);
+    if is_block {
+        parser.expect(Token::Dedent);
     }
 
-    parser.expect(Token::Dedent);
-
-    lhs
+    expr
 }
 
 fn is_bin_block(parser: &Parser<'_>) -> bool {
@@ -196,35 +207,6 @@ fn is_bin_block(parser: &Parser<'_>) -> bool {
     }
 
     parser.peek_nth(n) == Token::Indent && operator_from_token(&parser.peek_nth(n + 1)).is_some()
-}
-
-fn bin(op: Operator, lhs: Expr, rhs: Expr) -> Expr {
-    let span = lhs.span().join(rhs.span());
-
-    if let Expr::Bin(ref right) = rhs
-        && op.precedence() >= right.op.precedence()
-        && op.assoc() == Assoc::Left
-        && let Expr::Bin(rhs) = rhs
-    {
-        return Expr::Bin(BinExpr {
-            op:   rhs.op,
-            lhs:  Box::new(Expr::Bin(BinExpr {
-                op,
-                lhs: Box::new(lhs),
-                rhs: rhs.lhs,
-                span,
-            })),
-            rhs:  rhs.rhs,
-            span: rhs.span,
-        });
-    }
-
-    Expr::Bin(BinExpr {
-        op,
-        lhs: Box::new(lhs),
-        rhs: Box::new(rhs),
-        span,
-    })
 }
 
 pub fn rec_expr(parser: &mut Parser<'_>) -> Expr {
@@ -288,10 +270,10 @@ fn expr_field(parser: &mut Parser<'_>) -> ExprField {
 }
 
 pub fn app_expr(parser: &mut Parser<'_>) -> Expr {
-    let mut expr = field_expr(parser);
+    let mut expr = term_expr(parser);
 
     while is_expr(parser) {
-        let input = field_expr(parser);
+        let input = term_expr(parser);
         let span = expr.span().join(input.span());
 
         expr = Expr::App(AppExpr {
@@ -304,34 +286,18 @@ pub fn app_expr(parser: &mut Parser<'_>) -> Expr {
     expr
 }
 
-pub fn field_expr(parser: &mut Parser<'_>) -> Expr {
-    let mut expr = term_expr(parser);
-
-    while parser.peek() == Token::Dot {
-        parser.expect(Token::Dot);
-
-        let span = expr.span().join(parser.span());
-        let name = parser.expect_ident();
-
-        expr = Expr::Field(FieldExpr {
-            input: Box::new(expr),
-            name,
-            span,
-        });
-    }
-
-    expr
-}
-
 pub fn term_expr(parser: &mut Parser<'_>) -> Expr {
     match parser.peek() {
+        Token::Ident(..) => item_expr(parser),
+
         Token::Str(str) => Expr::Lit(str_expr(parser, str)),
         Token::Int(int) => Expr::Lit(int_expr(parser, int)),
         Token::Real(real) => Expr::Lit(real_expr(parser, real)),
-        Token::Ident(..) => Expr::Var(item_expr(parser)),
+        Token::Extern => Expr::Ext(extern_expr(parser)),
         Token::Back => Expr::Lam(lambda_expr(parser)),
         Token::LParen => Expr::Paren(paren_expr(parser)),
         Token::LBracket => Expr::List(list_expr(parser)),
+        Token::LRParen => Expr::Var(unit_expr(parser)),
 
         _ => {
             let span = parser.expected("expression");
@@ -345,8 +311,9 @@ pub fn paren_expr(parser: &mut Parser<'_>) -> ParenExpr {
 
     let expr = match operator(parser) {
         Some((operator, span)) => Expr::Var(VarExpr {
+            path: Vec::new(),
             span,
-            var: Some(Ident::operator(operator, span)),
+            var: Ident::operator(operator, span),
         }),
 
         None => expr(parser),
@@ -385,6 +352,23 @@ pub fn real_expr(parser: &mut Parser<'_>, real: f64) -> LitExpr {
         lit: Lit::Real(real),
         span,
     }
+}
+
+pub fn unit_expr(parser: &mut Parser<'_>) -> VarExpr {
+    let span = parser.expect(Token::LRParen);
+
+    VarExpr {
+        path: Vec::new(),
+        var: Ident::new("()", span),
+        span,
+    }
+}
+
+pub fn extern_expr(parser: &mut Parser<'_>) -> ExtExpr {
+    let span = parser.expect(Token::Extern);
+    let name = parser.expect_str();
+
+    ExtExpr { name, span }
 }
 
 pub fn list_expr(parser: &mut Parser<'_>) -> ListExpr {
@@ -427,9 +411,29 @@ pub fn lambda_expr(parser: &mut Parser<'_>) -> LamExpr {
     LamExpr { args, output, span }
 }
 
-pub fn item_expr(parser: &mut Parser<'_>) -> VarExpr {
+pub fn item_expr(parser: &mut Parser<'_>) -> Expr {
     let span = parser.span();
-    let var = parser.expect_ident();
 
-    VarExpr { var, span }
+    let Some(mut var) = parser.expect_ident() else {
+        return Expr::Error(ErrorExpr { span });
+    };
+
+    let mut path = Vec::new();
+
+    while parser.peek() == Token::Dot {
+        parser.expect(Token::Dot);
+
+        match parser.expect_ident() {
+            Some(ident) => {
+                path.push(var);
+                var = ident;
+            }
+
+            None => {
+                return Expr::Error(ErrorExpr { span });
+            }
+        }
+    }
+
+    Expr::Var(VarExpr { path, var, span })
 }

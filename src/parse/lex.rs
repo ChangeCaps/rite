@@ -218,6 +218,7 @@ impl<'a> Lexer<'a> {
 
         let token = match ident.as_str() {
             "as" => Token::As,
+            "extern" => Token::Extern,
             "impl" => Token::Impl,
             "import" => Token::Import,
             "let" => Token::Let,
@@ -250,10 +251,43 @@ impl<'a> Lexer<'a> {
         }
 
         let start = self.consume();
-        let (string, span) = self.take_while(|c| c != '\'');
+
+        let mut is_escape = false;
+        let mut string = String::new();
+
+        while let Some(c) = self.peek() {
+            if c == '\'' && !is_escape {
+                break;
+            } else if is_escape {
+                let c = match c {
+                    '\'' => '\'',
+                    '\\' => '\\',
+
+                    'n' => '\n',
+                    'r' => '\r',
+                    't' => '\t',
+                    '0' => '\0',
+
+                    _ => {
+                        self.consume();
+                        continue;
+                    }
+                };
+
+                string.push(c);
+                is_escape = false;
+            } else if c == '\\' {
+                is_escape = true;
+            } else {
+                string.push(c);
+                is_escape = false;
+            }
+
+            self.consume();
+        }
 
         if self.remaining().is_empty() {
-            let span = start.join(span);
+            let span = start.join(self.consume());
 
             let diagnostic = Diagnostic::error("invalid string literal").label(span, "found here");
             self.reporter.report(diagnostic);
@@ -282,6 +316,7 @@ impl<'a> Lexer<'a> {
             "\\>" => Token::BackGt,
             "<\\" => Token::LtBack,
 
+            "()" => Token::LRParen,
             "::" => Token::ColonColon,
             "==" => Token::EqualEqual,
             "!=" => Token::BangEqual,

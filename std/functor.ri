@@ -1,19 +1,19 @@
-trait functor f
+trait Functor f
   map :: (a -> b) -> f a -> f b
 
-impl functor maybe
+impl Functor Maybe
   map f x =
     match x
-      some x -> some (f x)
-      none -> none
+      Some x -> Some (f x)
+      None -> None
 
-impl functor result e
+impl Functor Result e
   map f x =
     match x
-      ok x -> ok (f x)
-      err e -> err e
+      Ok x -> Ok (f x)
+      Err e -> Err e
 
-impl functor ([])
+impl Functor ([])
   map f xs =
     match xs
       x : xs -> f x : map f xs

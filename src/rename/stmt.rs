@@ -4,8 +4,8 @@ use crate::{
     ast,
     diagnostic::{Diagnostic, Span},
     rename::{
-        self, ErrorExpr, ErrorTy, Expr, Kind, Scope, ScopeCons, ScopeTy, ScopeValue,
-        ScopeValueKind, State, Ty, TyPrim, Vis,
+        self, BindPat, ErrorExpr, ErrorTy, Expr, FieldExpr, Kind, LamExpr, Pat, Scope, ScopeCons,
+        ScopeImport, ScopeTy, ScopeValue, ScopeValueKind, State, Ty, TyPrim, VarExpr, Vis,
     },
     var::{Ident, Var},
 };
@@ -77,7 +77,7 @@ pub struct ImplMethod {
 }
 
 impl State<'_> {
-    pub fn modules(&mut self, modules: Vec<ast::Module>) {
+    pub fn modules(&mut self, modules: Vec<ast::Module>) -> Option<Var> {
         let intrinsic = self.intrinsic();
         self.modules.insert(String::from("intrinsic"), intrinsic);
 
@@ -94,7 +94,10 @@ impl State<'_> {
                 .iter()
                 .copied()
                 .filter(|path| imports.contains(*path))
-                .map(Into::into),
+                .map(|path| ScopeImport {
+                    path:  path.into(),
+                    alias: None,
+                }),
         );
 
         let mut define_stmts = Vec::new();
@@ -102,6 +105,8 @@ impl State<'_> {
         let mut type_stmts = Vec::new();
         let mut trait_stmts = Vec::new();
         let mut impl_stmts = Vec::new();
+
+        let mut main = None;
 
         for module in modules {
             let mut scope = scope.clone();
@@ -165,6 +170,13 @@ impl State<'_> {
                 }
             }
 
+            if module.is_main
+                && let Some(value) = scope.find_value("main")
+                && let ScopeValueKind::Def = value.kind
+            {
+                main = Some(value.var.clone());
+            }
+
             self.modules.insert(module.path, scope);
         }
 
@@ -192,6 +204,8 @@ impl State<'_> {
             let scope = self.modules[&module].clone();
             self.impl_stmt(scope, stmt);
         }
+
+        main
     }
 
     fn register_import_stmt(
@@ -210,32 +224,16 @@ impl State<'_> {
 
             return;
         }
-        scope.imports.push(path.clone());
 
-        let Some(alias) = stmt.alias else { return };
-
-        if let Some(prev) = scope.find_value(Some(&alias))
-            && let Some(prev) = prev.var.ident()
-        {
-            let diagnostic = Diagnostic::error("redefinition of import")
-                .label(alias.span(), "found here")
-                .label(prev.span(), "other definition here");
-
-            self.reporter.report(diagnostic);
-        }
-
-        let value = ScopeValue {
-            vis:  Vis::Local,
-            var:  Var::new(alias),
-            kind: ScopeValueKind::Import(path.clone()),
-        };
-
-        scope.values.push(value);
+        scope.imports.push(ScopeImport {
+            path:  path.clone(),
+            alias: stmt.alias,
+        });
     }
 
     fn register_type_stmt(&mut self, scope: &mut Scope, stmt: &ast::TypeStmt) -> Var {
         if let Some(ref ident) = stmt.var
-            && let Some(prev) = scope.find_ty(Some(ident))
+            && let Some(prev) = scope.find_ty(ident)
             && let Some(prev) = prev.ident()
         {
             let diagnostic = Diagnostic::error("redefinition of type")
@@ -283,21 +281,95 @@ impl State<'_> {
         type_: Var,
         cons: &ast::RecordCons,
     ) -> RecordCons {
+        if let Some(ref ident) = cons.var
+            && let Some(cons) = scope.find_cons(ident)
+            && let Some(prev) = cons.var.ident()
+        {
+            let diagnostic = Diagnostic::error("redefinition of constructor")
+                .label(ident.span(), "found here")
+                .label(prev.span(), "other definition here");
+
+            self.reporter.report(diagnostic);
+        }
+
+        if let Some(ref ident) = cons.var
+            && let Some(value) = scope.find_value(ident)
+            && let Some(prev) = value.var.ident()
+        {
+            let diagnostic = Diagnostic::error("redefinition of variable")
+                .label(ident.span(), "found here")
+                .label(prev.span(), "other definition here");
+
+            self.reporter.report(diagnostic);
+        }
+
         let var = Var::from(cons.var.clone());
 
         let value = ScopeValue {
             vis:  Vis::Public,
             var:  var.clone(),
-            kind: ScopeValueKind::Cons(type_),
+            kind: ScopeValueKind::Cons(type_.clone()),
         };
 
         scope.values.push(value);
+
+        for field in &cons.fields {
+            self.register_record_field(scope, field);
+        }
 
         RecordCons {
             var,
             fields: Vec::new(),
             span: cons.span,
         }
+    }
+
+    fn register_record_field(&mut self, scope: &mut Scope, field: &ast::RecordField) {
+        if let Some(ref ident) = field.name
+            && let Some(value) = scope.find_value(ident)
+            && let Some(prev) = value.var.ident()
+            && value.kind != ScopeValueKind::Field
+        {
+            let diagnostic = Diagnostic::error("redefinition of variable")
+                .label(ident.span(), "found here")
+                .label(prev.span(), "other definition here");
+
+            self.reporter.report(diagnostic);
+        }
+
+        let var = Var::from(field.name.clone());
+        let input = Var::unnamed();
+
+        let def = Def {
+            ty:   None,
+            var:  var.clone(),
+            expr: Expr::Lam(LamExpr {
+                arg:    Pat::Bind(BindPat {
+                    var:  Some(input.clone()),
+                    span: field.span,
+                }),
+                output: Box::new(Expr::Field(FieldExpr {
+                    input: Box::new(Expr::Var(VarExpr {
+                        var:  input,
+                        span: field.span,
+                    })),
+                    name:  field.name.clone(),
+                    span:  field.span,
+                })),
+                span:   field.span,
+            }),
+            span: field.span,
+        };
+
+        self.defs.insert(var.unique(), def);
+
+        let value = ScopeValue {
+            vis: Vis::Public,
+            var,
+            kind: ScopeValueKind::Field,
+        };
+
+        scope.values.push(value);
     }
 
     fn register_tuple_cons(
@@ -307,7 +379,7 @@ impl State<'_> {
         ast: &ast::TupleCons,
     ) -> TupleCons {
         if let Some(ref ident) = ast.var
-            && let Some(cons) = scope.find_cons(Some(ident))
+            && let Some(cons) = scope.find_cons(ident)
             && let Some(prev) = cons.var.ident()
         {
             let diagnostic = Diagnostic::error("redefinition of constructor")
@@ -318,7 +390,7 @@ impl State<'_> {
         }
 
         if let Some(ref ident) = ast.var
-            && let Some(value) = scope.find_value(Some(ident))
+            && let Some(value) = scope.find_value(ident)
             && let Some(prev) = value.var.ident()
         {
             let diagnostic = Diagnostic::error("redefinition of variable")
@@ -353,7 +425,7 @@ impl State<'_> {
 
     fn register_trait_stmt(&mut self, scope: &mut Scope, stmt: &ast::TraitStmt) -> Var {
         if let Some(ref ident) = stmt.var
-            && let Some(var) = scope.find_kind(Some(ident))
+            && let Some(var) = scope.find_kind(ident)
             && let Some(prev) = var.ident()
         {
             let diagnostic = Diagnostic::error("redefinition of kind")
@@ -398,7 +470,7 @@ impl State<'_> {
         member: &ast::AscribeStmt,
     ) -> TraitMethod {
         if let Some(ref ident) = member.var
-            && let Some(value) = scope.find_value(Some(ident))
+            && let Some(value) = scope.find_value(ident)
             && let Some(prev) = value.var.ident()
         {
             let diagnostic = Diagnostic::error("redefinition of method")
@@ -427,7 +499,7 @@ impl State<'_> {
 
     fn register_define_stmt(&mut self, scope: &mut Scope, stmt: &ast::DefineStmt) -> Var {
         if let Some(ref ident) = stmt.var
-            && let Some(value) = scope.find_value(Some(ident))
+            && let Some(value) = scope.find_value(ident)
             && let Some(prev) = value.var.ident()
         {
             let diagnostic = Diagnostic::error("redefinition of variable")
@@ -462,7 +534,7 @@ impl State<'_> {
     fn ascribe_stmt(&mut self, mut scope: Scope, stmt: ast::AscribeStmt) {
         let ty = self.ty(&mut scope, stmt.ty);
 
-        let Some(value) = scope.find_value(stmt.var.as_deref()).cloned() else {
+        let Some(value) = stmt.var.and_then(|var| scope.find_value(&var)).cloned() else {
             let diagnostic = Diagnostic::error("undefined variable").label(stmt.span, "found here");
             self.reporter.report(diagnostic);
             return;
@@ -564,7 +636,11 @@ impl State<'_> {
     }
 
     fn impl_stmt(&mut self, mut scope: Scope, stmt: ast::ImplStmt) {
-        let Some(var) = self.find_kind(&scope, stmt.var.as_ref()).cloned() else {
+        let Some(var) = stmt
+            .var
+            .and_then(|var| self.find_kind(&scope, &var))
+            .cloned()
+        else {
             let diagnostic = Diagnostic::error("undefined trait").label(stmt.span, "here");
             self.reporter.report(diagnostic);
 
@@ -604,7 +680,10 @@ impl State<'_> {
         for member in assign_members {
             let expr = self.expr_with_args(scope.clone(), member.args, member.expr);
 
-            let Some(trait_member) = self.find_trait_member(trait_, member.var.as_deref()) else {
+            let Some(trait_member) = member
+                .var
+                .and_then(|var| self.find_trait_member(trait_, &var))
+            else {
                 let diagnostic = Diagnostic::error("undefined member").label(member.span, "here");
                 self.reporter.report(diagnostic);
                 continue;

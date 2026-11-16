@@ -1,20 +1,16 @@
 use std::collections::HashMap;
 
 use crate::{
-    ir::{Alt, Cons, Expr, Lit, Prim},
-    typecheck::{self, Impl, Pat, Ty, TypeCons, Unit},
+    diagnostic::Span,
+    ir::{Case, Expr, Lit, Prim},
+    typecheck::{self, BindPat, Impl, Pat, Ty, TypeCons, Unit},
     var::{Unique, Var},
 };
 
-pub fn lower(unit: Unit) -> Expr {
+pub fn lower(unit: Unit, main: Var) -> Expr {
     let mut state = State::new(&unit);
 
-    let main = unit
-        .defs
-        .values()
-        .find(|def| def.var.as_str() == Some("main"))
-        .unwrap();
-
+    let main = &unit.defs[&main.unique()];
     let main = state.expr(&main.expr);
 
     Expr::Rec(state.globals, Box::new(main))
@@ -188,7 +184,7 @@ impl<'a> State<'a> {
             .collect::<Vec<_>>();
 
         let cons = Expr::Cons(
-            Cons::Var(expr.var.clone()),
+            expr.var.clone(),
             args.iter().cloned().map(Expr::Var).collect(),
         );
 
@@ -275,7 +271,7 @@ impl<'a> State<'a> {
             })
             .collect();
 
-        Expr::Cons(Cons::Var(expr.type_.clone()), args)
+        Expr::Cons(expr.type_.clone(), args)
     }
 
     fn with_expr(&mut self, expr: &typecheck::WithExpr) -> Expr {
@@ -310,17 +306,19 @@ impl<'a> State<'a> {
 
         Expr::Case(
             Box::new(input),
-            vec![Alt {
-                cons: Cons::Var(type_.clone()),
+            Case::Cons(vec![(
+                type_.clone(),
                 args,
-                expr: Expr::Cons(Cons::Var(type_.clone()), exprs),
-            }],
+                Expr::Cons(type_.clone(), exprs),
+            )]),
             None,
         )
     }
 
     fn prim_expr(&mut self, expr: &typecheck::PrimExpr) -> Expr {
         let prim = match expr.prim {
+            typecheck::ExprPrim::Extern(ref name) => Prim::Extern(name.clone()),
+
             typecheck::ExprPrim::Un(prim, ref input) => {
                 let input = self.expr(input);
 
@@ -368,11 +366,11 @@ impl<'a> State<'a> {
 
         Expr::Case(
             Box::new(input),
-            vec![Alt {
-                cons: Cons::Var(type_.clone()),
+            Case::Cons(vec![(
+                type_.clone(),
                 args,
-                expr: Expr::Var(var),
-            }],
+                Expr::Var(var),
+            )]),
             None,
         )
     }
@@ -396,8 +394,11 @@ impl<'a> State<'a> {
         self.bind(vec![input], rows)
     }
 
-    fn error_expr(&mut self, _expr: &typecheck::ErrorExpr) -> Expr {
-        unreachable!()
+    fn error_expr(&mut self, expr: &typecheck::ErrorExpr) -> Expr {
+        unreachable!(
+            "{:?}, {:?}",
+            expr.span, expr.span.source,
+        )
     }
 
     fn bind(&mut self, mut inputs: Vec<Expr>, mut rows: Vec<Row<'_>>) -> Expr {
@@ -410,10 +411,98 @@ impl<'a> State<'a> {
         let pat = row.pats.last().unwrap();
 
         match pat {
+            Pat::Str(..) => self.bind_str(input, inputs, rows),
+            Pat::Int(..) => self.bind_int(input, inputs, rows),
             Pat::Bind(..) => self.bind_bind(input, inputs, rows),
             Pat::Cons(..) => self.bind_cons(input, inputs, rows),
             Pat::Error(..) => unreachable!(),
         }
+    }
+
+    fn bind_str(&mut self, input: Expr, inputs: Vec<Expr>, rows: Vec<Row<'_>>) -> Expr {
+        let mut ints = HashMap::<_, Vec<_>>::new();
+        let mut defaults = Vec::new();
+
+        for mut arm in rows {
+            let pat = arm.pats.pop().unwrap();
+
+            match pat {
+                Pat::Bind(..) => {
+                    defaults.push(arm);
+                }
+
+                Pat::Str(pat) => {
+                    ints.entry(pat.str.clone()).or_default().push(arm);
+                }
+
+                _ => panic!(),
+            }
+        }
+
+        let alts = ints
+            .into_iter()
+            .map(|(str, rows)| {
+                let expr = self.bind(inputs.clone(), rows);
+                (Lit::Str(str), expr)
+            })
+            .collect();
+
+        let default = match defaults.is_empty() {
+            true => None,
+            false => {
+                let expr = self.bind(inputs, defaults);
+                Some(Box::new(expr))
+            }
+        };
+
+        Expr::Case(
+            Box::new(input),
+            Case::Lit(alts),
+            default,
+        )
+    }
+
+    fn bind_int(&mut self, input: Expr, inputs: Vec<Expr>, rows: Vec<Row<'_>>) -> Expr {
+        let mut ints = HashMap::<_, Vec<_>>::new();
+        let mut defaults = Vec::new();
+
+        for mut arm in rows {
+            let pat = arm.pats.pop().unwrap();
+
+            match pat {
+                Pat::Bind(..) => {
+                    defaults.push(arm);
+                }
+
+                Pat::Int(pat) => {
+                    ints.entry(pat.int).or_default().push(arm);
+                }
+
+                _ => panic!(),
+            }
+        }
+
+        let alts = ints
+            .into_iter()
+            .map(|(int, rows)| {
+                let expr = self.bind(inputs.clone(), rows);
+                (Lit::Int(int), expr)
+            })
+            .collect();
+
+        let default = match defaults.is_empty() {
+            true => None,
+            false => {
+                let expr = self.bind(inputs, defaults);
+                Some(Box::new(expr))
+            }
+        };
+
+        Expr::Case(
+            Box::new(input),
+            Case::Lit(alts),
+            default,
+        )
     }
 
     fn bind_bind(&mut self, input: Expr, inputs: Vec<Expr>, mut rows: Vec<Row<'_>>) -> Expr {
@@ -435,54 +524,85 @@ impl<'a> State<'a> {
     }
 
     fn bind_cons(&mut self, input: Expr, inputs: Vec<Expr>, rows: Vec<Row<'_>>) -> Expr {
-        let mut conss = Vec::new();
+        let mut conses = HashMap::new();
         let mut defaults = Vec::new();
 
         for mut arm in rows {
             let pat = arm.pats.pop().unwrap();
 
             match pat {
-                Pat::Bind(_) => {
+                pat @ Pat::Bind(..) => {
+                    arm.pats.push(pat);
                     defaults.push(arm);
                 }
 
                 Pat::Cons(pat) => {
                     arm.pats.extend(pat.args.iter());
 
-                    let args: Vec<_> = pat.args.iter().map(|_| Var::unnamed()).collect();
+                    let (_, arms) = conses.entry(pat.var.clone()).or_insert_with(|| {
+                        let args = pat.args.iter().map(|_| Var::unnamed()).collect::<Vec<_>>();
+                        (args, Vec::new())
+                    });
 
-                    conss.push((pat.var.clone(), args, vec![arm]));
+                    arms.push(arm);
                 }
 
                 _ => panic!(),
             }
         }
 
-        let alts = conss
+        let alts = conses
             .into_iter()
-            .map(|(var, args, rows)| {
+            .map(|(cons, (args, mut rows))| {
                 let mut inputs = inputs.clone();
                 inputs.extend(args.iter().cloned().map(Expr::Var));
 
-                let cons = Cons::Var(var);
+                let arg_pats = args
+                    .iter()
+                    .map(|arg| {
+                        Pat::Bind(BindPat {
+                            var:  Some(arg.clone()),
+                            span: Span::DUMMY,
+                        })
+                    })
+                    .collect::<Vec<_>>();
+
+                rows.extend(defaults.iter().map(|arm| {
+                    let mut pats = arm.pats.clone();
+                    pats.extend(arg_pats.iter());
+
+                    Row {
+                        pats,
+                        output: arm.output.clone(),
+                    }
+                }));
+
                 let expr = self.bind(inputs.clone(), rows);
 
-                Alt { cons, args, expr }
+                (cons, args, expr)
             })
             .collect();
 
         let default = match defaults.is_empty() {
             true => None,
             false => {
+                let mut inputs = inputs.clone();
+                inputs.push(input.clone());
+
                 let expr = self.bind(inputs, defaults);
                 Some(Box::new(expr))
             }
         };
 
-        Expr::Case(Box::new(input), alts, default)
+        Expr::Case(
+            Box::new(input),
+            Case::Cons(alts),
+            default,
+        )
     }
 }
 
+#[derive(Debug)]
 struct Row<'a> {
     pats:   Vec<&'a Pat>,
     output: Expr,

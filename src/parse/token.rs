@@ -17,6 +17,7 @@ pub enum Token {
 
     /* keywords */
     As,
+    Extern,
     Impl,
     Import,
     Let,
@@ -30,6 +31,7 @@ pub enum Token {
     GtGtEqual,
 
     /* two-character symbols */
+    LRParen,
     ColonColon,
     EqualEqual,
     BangEqual,
@@ -52,6 +54,7 @@ pub enum Token {
     Equal,
     Back,
     Pipe,
+    Amp,
     Plus,
     Minus,
     Star,
@@ -90,6 +93,7 @@ impl Token {
 
             /* keywords */
             Self::As => "as",
+            Self::Extern => "extern",
             Self::Impl => "impl",
             Self::Import => "import",
             Self::Let => "let",
@@ -103,6 +107,7 @@ impl Token {
             Self::GtGtEqual => ">>=",
 
             /* two-character symbols */
+            Self::LRParen => "()",
             Self::ColonColon => "::",
             Self::EqualEqual => "==",
             Self::BangEqual => "!=",
@@ -125,6 +130,7 @@ impl Token {
             Self::Equal => "=",
             Self::Back => "\\",
             Self::Pipe => "|",
+            Self::Amp => "&",
             Self::Plus => "+",
             Self::Minus => "-",
             Self::Star => "*",

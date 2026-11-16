@@ -13,14 +13,15 @@ pub enum Expr {
     App(Box<Expr>, Box<Expr>),
     Rec(Vec<(Expr, Var)>, Box<Expr>),
     Let(Box<Expr>, Var, Box<Expr>),
-    Cons(Cons, Vec<Expr>),
-    Case(Box<Expr>, Vec<Alt>, Option<Box<Expr>>),
+    Cons(Var, Vec<Expr>),
+    Case(Box<Expr>, Case, Option<Box<Expr>>),
     Prim(Prim),
     Note(String, Box<Expr>),
 }
 
 #[derive(Clone)]
 pub enum Prim {
+    Extern(String),
     Un(UnPrim, Box<Expr>),
     Bin(BinPrim, Box<Expr>, Box<Expr>),
 }
@@ -33,15 +34,9 @@ pub enum Lit {
 }
 
 #[derive(Clone)]
-pub struct Alt {
-    pub cons: Cons,
-    pub args: Vec<Var>,
-    pub expr: Expr,
-}
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Cons {
-    Var(Var),
+pub enum Case {
+    Cons(Vec<(Var, Vec<Var>, Expr)>),
+    Lit(Vec<(Lit, Expr)>),
 }
 
 impl fmt::Debug for Expr {
@@ -51,6 +46,14 @@ impl fmt::Debug for Expr {
                 match p > q {
                     true => format!("({input})"),
                     false => input,
+                }
+            }
+
+            fn fmt_lit(lit: &Lit) -> String {
+                match lit {
+                    Lit::Str(str) => format!("\"{str}\""),
+                    Lit::Int(int) => format!("{int}_int"),
+                    Lit::Real(real) => format!("{real}_real"),
                 }
             }
 
@@ -64,20 +67,9 @@ impl fmt::Debug for Expr {
                     .unwrap_or_else(|| format!("_{}", var.unique()))
             }
 
-            fn fmt_cons(cons: &Cons) -> String {
-                match cons {
-                    Cons::Var(var) => fmt_var(var),
-                }
-            }
-
             match expr {
                 Expr::Var(var) => fmt_var(var),
-
-                Expr::Lit(lit) => match lit {
-                    Lit::Str(str) => format!("\"{str}\""),
-                    Lit::Int(int) => format!("{int}_int"),
-                    Lit::Real(real) => format!("{real}_real"),
-                },
+                Expr::Lit(lit) => fmt_lit(lit),
 
                 Expr::Lam(var, expr) => {
                     let expr = fmt_expr(expr, i + 1, p);
@@ -141,25 +133,38 @@ impl fmt::Debug for Expr {
                         .map(|arg| fmt_expr(arg, i, 1))
                         .collect::<Vec<_>>();
 
-                    args.insert(0, fmt_cons(cons));
+                    args.insert(0, fmt_var(cons));
 
                     args.join(" ")
                 }
 
                 Expr::Case(input, alts, default) => {
-                    let mut alts = alts
-                        .iter()
-                        .map(|alt| {
-                            let mut args = alt.args.iter().map(fmt_var).collect::<Vec<_>>();
-                            args.insert(0, fmt_cons(&alt.cons));
+                    let mut alts = match alts {
+                        Case::Cons(cons) => cons
+                            .iter()
+                            .map(|(cons, args, expr)| {
+                                let mut args = args.iter().map(fmt_var).collect::<Vec<_>>();
+                                args.insert(0, fmt_var(cons));
 
-                            format!(
-                                "{} -> {}",
-                                args.join(" "),
-                                fmt_expr(&alt.expr, i + 2, 0)
-                            )
-                        })
-                        .collect::<Vec<_>>();
+                                format!(
+                                    "{} -> {}",
+                                    args.join(" "),
+                                    fmt_expr(expr, i + 2, 0)
+                                )
+                            })
+                            .collect::<Vec<_>>(),
+
+                        Case::Lit(lits) => lits
+                            .iter()
+                            .map(|(lit, expr)| {
+                                format!(
+                                    "{} -> {}",
+                                    fmt_lit(lit),
+                                    fmt_expr(expr, i + 2, 0)
+                                )
+                            })
+                            .collect::<Vec<_>>(),
+                    };
 
                     if let Some(default) = default {
                         alts.push(format!(
@@ -182,6 +187,8 @@ impl fmt::Debug for Expr {
                 }
 
                 Expr::Prim(prim) => match prim {
+                    Prim::Extern(name) => format!("extern '{name}'"),
+
                     Prim::Un(prim, input) => {
                         let input = fmt_expr(input, i, 0);
 

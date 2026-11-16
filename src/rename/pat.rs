@@ -6,9 +6,21 @@ use crate::{
 };
 
 pub enum Pat {
+    Str(StrPat),
+    Int(IntPat),
     Bind(BindPat),
     Cons(ConsPat),
     Error(ErrorPat),
+}
+
+pub struct StrPat {
+    pub str:  String,
+    pub span: Span,
+}
+
+pub struct IntPat {
+    pub int:  i64,
+    pub span: Span,
 }
 
 pub struct BindPat {
@@ -30,6 +42,8 @@ pub struct ErrorPat {
 impl Pat {
     pub fn span(&self) -> Span {
         match self {
+            Pat::Str(pat) => pat.span,
+            Pat::Int(pat) => pat.span,
             Pat::Bind(pat) => pat.span,
             Pat::Cons(pat) => pat.span,
             Pat::Error(pat) => pat.span,
@@ -40,6 +54,8 @@ impl Pat {
 impl State<'_> {
     pub fn pat(&self, scope: &mut Scope, pat: ast::Pat) -> Pat {
         match pat {
+            ast::Pat::Str(pat) => self.str_pat(scope, pat),
+            ast::Pat::Int(pat) => self.int_pat(scope, pat),
             ast::Pat::Bin(pat) => self.bin_pat(scope, pat),
             ast::Pat::Wild(pat) => self.wild_pat(scope, pat),
             ast::Pat::Cons(pat) => self.cons_pat(scope, pat),
@@ -49,8 +65,22 @@ impl State<'_> {
         }
     }
 
+    fn str_pat(&self, _scope: &mut Scope, pat: ast::StrPat) -> Pat {
+        Pat::Str(StrPat {
+            str:  pat.str,
+            span: pat.span,
+        })
+    }
+
+    fn int_pat(&self, _scope: &mut Scope, pat: ast::IntPat) -> Pat {
+        Pat::Int(IntPat {
+            int:  pat.int,
+            span: pat.span,
+        })
+    }
+
     fn bin_pat(&self, scope: &mut Scope, pat: ast::BinPat) -> Pat {
-        let Some(found) = self.find_cons(scope, Some(pat.op.as_str())).cloned() else {
+        let Some(found) = self.find_cons(scope, pat.op.as_str()).cloned() else {
             let diagnostic = Diagnostic::error("operator not defined").label(
                 pat.span,
                 format!("`{}` used here", pat.op.as_str()),
@@ -86,7 +116,7 @@ impl State<'_> {
             .map(|arg| self.pat(scope, arg))
             .collect::<Vec<_>>();
 
-        if let Some(cons) = self.find_cons(scope, pat.var.as_deref()).cloned() {
+        if let Some(cons) = self.find_cons(scope, &pat.var).cloned() {
             return Pat::Cons(ConsPat {
                 var: cons.var,
                 type_: cons.type_,
@@ -102,7 +132,7 @@ impl State<'_> {
             return Pat::Error(ErrorPat { span: pat.span });
         };
 
-        let var = Var::from(pat.var);
+        let var = Var::new(pat.var);
 
         let value = ScopeValue {
             vis:  Vis::Local,
@@ -119,7 +149,7 @@ impl State<'_> {
     }
 
     fn list_pat(&self, scope: &mut Scope, pat: ast::ListPat) -> Pat {
-        let Some(found) = self.find_cons(scope, Some("[]")).cloned() else {
+        let Some(found) = self.find_cons(scope, "[]").cloned() else {
             let diagnostic =
                 Diagnostic::error("operator not defined").label(pat.span, "`[]` used here");
 

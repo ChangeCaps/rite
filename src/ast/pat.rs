@@ -4,12 +4,24 @@ use crate::{
 };
 
 pub enum Pat {
+    Str(StrPat),
+    Int(IntPat),
     Bin(BinPat),
     Wild(WildPat),
     Cons(ConsPat),
     List(ListPat),
     Paren(ParenPat),
     Error(ErrorPat),
+}
+
+pub struct StrPat {
+    pub str:  String,
+    pub span: Span,
+}
+
+pub struct IntPat {
+    pub int:  i64,
+    pub span: Span,
 }
 
 pub struct BinPat {
@@ -24,7 +36,7 @@ pub struct WildPat {
 }
 
 pub struct ConsPat {
-    pub var:  Option<Ident>,
+    pub var:  Ident,
     pub args: Vec<Pat>,
     pub span: Span,
 }
@@ -45,6 +57,8 @@ pub struct ErrorPat {
 impl Pat {
     pub fn span(&self) -> Span {
         match self {
+            Pat::Str(pat) => pat.span,
+            Pat::Int(pat) => pat.span,
             Pat::Bin(pat) => pat.span,
             Pat::Wild(pat) => pat.span,
             Pat::Cons(pat) => pat.span,

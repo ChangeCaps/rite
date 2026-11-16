@@ -113,6 +113,7 @@ pub struct PrimExpr {
 }
 
 pub enum ExprPrim {
+    Extern(String),
     Un(UnPrim, Box<Expr>),
     Bin(BinPrim, Box<Expr>, Box<Expr>),
 }
@@ -410,6 +411,8 @@ impl State<'_> {
 
     fn prim_expr_down(&mut self, expr: rename::PrimExpr) -> Expr {
         let prim = match expr.prim {
+            rename::ExprPrim::Extern(name) => ExprPrim::Extern(name),
+
             rename::ExprPrim::Un(prim, input) => {
                 let input = self.expr_down(*input);
 

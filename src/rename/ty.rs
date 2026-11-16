@@ -55,7 +55,7 @@ pub enum TyPrim {
 pub struct WhereTy {
     pub input:  Box<Ty>,
     pub target: Box<Ty>,
-    pub kind:   Kind,
+    pub kinds:  Vec<Kind>,
     pub span:   Span,
 }
 
@@ -92,11 +92,11 @@ impl State<'_> {
     }
 
     fn var_ty(&self, scope: &mut Scope, ty: ast::VarTy) -> Ty {
-        match self.find_ty(scope, ty.var.as_deref()) {
+        match self.find_ty(scope, &ty.var) {
             Some(found) => self.scope_ty(found, ty.span),
 
             None => {
-                let var = Var::from(ty.var);
+                let var = Var::new(ty.var);
 
                 scope.tys.push(var.clone().into());
 
@@ -133,7 +133,7 @@ impl State<'_> {
     }
 
     fn bin_ty(&self, scope: &mut Scope, ty: ast::BinTy) -> Ty {
-        let op = match self.find_ty(scope, Some(ty.op.as_str())) {
+        let op = match self.find_ty(scope, ty.op.as_str()) {
             Some(found) => self.scope_ty(found, ty.span),
 
             None => {
@@ -174,7 +174,7 @@ impl State<'_> {
     }
 
     fn list_ty(&self, scope: &mut Scope, ty: ast::ListTy) -> Ty {
-        let op = match self.find_ty(scope, Some("[]")) {
+        let op = match self.find_ty(scope, "[]") {
             Some(found) => self.scope_ty(found, ty.span),
 
             None => {
@@ -203,12 +203,16 @@ impl State<'_> {
     fn where_ty(&self, scope: &mut Scope, ty: ast::WhereTy) -> Ty {
         let input = self.ty(scope, *ty.input);
         let target = self.ty(scope, *ty.target);
-        let kind = self.kind(scope, ty.kind);
+        let kinds = ty
+            .kinds
+            .into_iter()
+            .map(|kind| self.kind(scope, kind))
+            .collect();
 
         Ty::Where(WhereTy {
             input: Box::new(input),
             target: Box::new(target),
-            kind,
+            kinds,
             span: ty.span,
         })
     }

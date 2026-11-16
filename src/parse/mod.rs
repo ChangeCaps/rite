@@ -23,10 +23,20 @@ use crate::{
     diagnostic::{Reporter, SourceId},
 };
 
-pub fn module(reporter: &dyn Reporter, source: SourceId, input: &str, path: String) -> Module {
+pub fn module(
+    reporter: &dyn Reporter,
+    source: SourceId,
+    input: &str,
+    path: String,
+    is_main: bool,
+) -> Module {
     let tokens = lex(reporter, source, input);
     let mut parser = Parser::new(reporter, &tokens);
     let stmts = stmts(&mut parser);
 
-    Module { path, stmts }
+    Module {
+        path,
+        stmts,
+        is_main,
+    }
 }

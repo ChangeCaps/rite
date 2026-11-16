@@ -1,0 +1,29 @@
+readFile :: str -> io (Result IoError str)
+readFile path =
+  let exists <- isFile path
+
+  match exists
+    true ->
+      let contents <- readFileRaw path
+      pure (Ok contents)
+
+    false ->
+      let error = IoError {
+        description = 'not a file'
+      }
+
+      pure (Err error)
+
+readFileRaw :: str -> io str
+readFileRaw = extern 'fs::readFile'
+
+pathExistsRaw :: str -> io int
+pathExistsRaw = extern 'fs::pathExists'
+
+isFile :: str -> io bool
+isFile path =
+  let isFile <- isFileRaw path
+  pure (isFile != 0)
+
+isFileRaw :: str -> io int
+isFileRaw = extern 'fs::isFile'

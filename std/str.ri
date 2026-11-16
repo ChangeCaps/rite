@@ -1,0 +1,31 @@
+import 'intrinsic' as intrinsic
+
+impl Show str
+  show x = x
+
+impl Eq str
+  (==) a b = intrinsic.strCmp a b == 0
+
+impl Add str
+  (+) a b = intrinsic.strConcat a b
+
+impl Sequence str
+  len s = intrinsic.strLen s
+  take n s = intrinsic.strTake n s
+  skip n s = intrinsic.strSkip n s
+
+slice :: int -> int -> str -> str
+slice start end = skip start \> take (end - start)
+
+startsWith :: str -> str -> bool
+startsWith prefix s = take (len prefix) s == prefix
+
+# Get the character starting at offset `n`.
+char :: int -> str -> str
+char n s = intrinsic.strChar n s
+
+has :: str -> str -> bool
+has x s = findRaw x s != (0 - 1)
+
+findRaw :: str -> str -> int
+findRaw x s = intrinsic.strFind x s

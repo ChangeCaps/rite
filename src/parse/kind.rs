@@ -5,7 +5,7 @@ use crate::{
 
 pub fn kind(parser: &mut Parser<'_>) -> Kind {
     match parser.peek() {
-        Token::Ident(..) => Kind::Var(var_kind(parser)),
+        Token::Ident(..) => var_kind(parser),
         Token::Star => Kind::Arity(arity_kind(parser)),
 
         _ => {
@@ -15,11 +15,13 @@ pub fn kind(parser: &mut Parser<'_>) -> Kind {
     }
 }
 
-pub fn var_kind(parser: &mut Parser<'_>) -> VarKind {
+pub fn var_kind(parser: &mut Parser<'_>) -> Kind {
     let span = parser.span();
-    let var = parser.expect_ident();
+    let Some(var) = parser.expect_ident() else {
+        return Kind::Error(ErrorKind { span });
+    };
 
-    VarKind { var, span }
+    Kind::Var(VarKind { var, span })
 }
 
 pub fn arity_kind(parser: &mut Parser<'_>) -> ArityKind {

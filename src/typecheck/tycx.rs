@@ -6,7 +6,7 @@ use std::{
 use crate::{
     diagnostic::{Diagnostic, Span},
     typecheck::{Expr, Kind, Ty},
-    var::{Ident, Unique, Var},
+    var::{Ident, Operator, Unique, Var},
 };
 
 pub type Kinds = HashMap<Unique, Kind>;
@@ -456,6 +456,33 @@ impl TyCx {
         kinds.get(&var.unique())?.subst.as_ref()
     }
 
+    pub fn enumerate(kinds: &Kinds, ty: &Ty) -> HashSet<Var> {
+        fn recurse(kinds: &Kinds, ty: &Ty, vars: &mut HashSet<Var>) {
+            match ty {
+                Ty::Var(var) if let Some(ty) = TyCx::subst_shallow(kinds, var) => {
+                    recurse(kinds, ty, vars);
+                }
+
+                Ty::Var(var) if kinds.get(&var.unique()).is_none_or(|kind| kind.infer) => {
+                    if !vars.contains(var) {
+                        vars.insert(var.clone());
+                    }
+                }
+
+                Ty::App(lambda, input) => {
+                    recurse(kinds, lambda, vars);
+                    recurse(kinds, input, vars);
+                }
+
+                _ => {}
+            }
+        }
+
+        let mut vars = HashSet::new();
+        recurse(kinds, ty, &mut vars);
+        vars
+    }
+
     pub fn format_ty(&self, kinds: &Kinds, ty: &Ty) -> String {
         fn fmt_paren(input: String, p: u8, q: u8) -> String {
             match p > q {
@@ -464,11 +491,11 @@ impl TyCx {
             }
         }
 
-        fn fmt_ty(kinds: &Kinds, ty: &Ty, p: u8) -> String {
+        fn fmt_ty(kinds: &Kinds, names: &HashMap<Var, String>, ty: &Ty, p: u8) -> String {
             match ty {
                 Ty::Var(var) => match TyCx::subst_shallow(kinds, var) {
-                    Some(ty) => fmt_ty(kinds, ty, p),
-                    None => var.to_string(),
+                    Some(ty) => fmt_ty(kinds, names, ty, p),
+                    None => names.get(var).cloned().unwrap_or_else(|| var.to_string()),
                 },
 
                 Ty::Io => String::from("io"),
@@ -485,10 +512,47 @@ impl TyCx {
 
                     match ty {
                         Ty::Lam if args.len() == 2 => {
-                            let input = fmt_ty(kinds, args[0], 1);
-                            let output = fmt_ty(kinds, args[1], 0);
+                            let input = fmt_ty(kinds, names, args[0], 1);
+                            let output = fmt_ty(kinds, names, args[1], 0);
 
                             fmt_paren(format!("{input} -> {output}"), p, 0)
+                        }
+
+                        Ty::Type(var) if var.as_str() == Some("[]") => {
+                            format!("[{}]", fmt_ty(kinds, names, args[0], 0))
+                        }
+
+                        Ty::Type(var)
+                            if let Some(operator) = var.ident().and_then(Ident::as_operator)
+                                && args.len() == 2 =>
+                        {
+                            let lhs = fmt_ty(
+                                kinds,
+                                names,
+                                args[0],
+                                operator.precedence() + 2,
+                            );
+
+                            let rhs = fmt_ty(
+                                kinds,
+                                names,
+                                args[1],
+                                operator.precedence() + 2,
+                            );
+
+                            if operator == Operator::Comma {
+                                fmt_paren(
+                                    format!("{lhs}, {rhs}"),
+                                    p,
+                                    operator.precedence() + 1,
+                                )
+                            } else {
+                                fmt_paren(
+                                    format!("{lhs} {} {rhs}", operator.as_str()),
+                                    p,
+                                    operator.precedence() + 1,
+                                )
+                            }
                         }
 
                         _ => {
@@ -498,7 +562,7 @@ impl TyCx {
                             fmt_paren(
                                 items
                                     .iter()
-                                    .map(|ty| fmt_ty(kinds, ty, 2))
+                                    .map(|ty| fmt_ty(kinds, names, ty, 2))
                                     .collect::<Vec<_>>()
                                     .join(" "),
                                 p,
@@ -510,6 +574,31 @@ impl TyCx {
             }
         }
 
-        fmt_ty(kinds, ty, 0)
+        let vars = Self::enumerate(kinds, ty);
+        let names = vars
+            .into_iter()
+            .enumerate()
+            .map(|(i, var)| {
+                let name = format!("_{}", Self::generate_name(i));
+                (var, name)
+            })
+            .collect();
+
+        fmt_ty(kinds, &names, ty, 0)
+    }
+
+    fn generate_name(index: usize) -> String {
+        let letters = "abcdefghijklmnopqrstuvwxyz";
+
+        let mut name = String::new();
+        let mut i = index + 1;
+
+        while i > 0 {
+            let letter_index = (i - 1) % letters.len();
+            name.push(letters.chars().nth(letter_index).unwrap());
+            i = (i - 1) / letters.len();
+        }
+
+        name.chars().rev().collect()
     }
 }

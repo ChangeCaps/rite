@@ -1,7 +1,7 @@
-use std::{cell::RefCell, collections::HashMap, fmt, mem, rc::Rc};
+use std::{cell::RefCell, collections::HashMap, fmt, fs, mem, path::Path, rc::Rc};
 
 use crate::{
-    ir::{Cons, Expr, Lit, Prim},
+    ir::{Case, Expr, Lit, Prim},
     primitive::{BinPrim, PrimNum, UnPrim},
     var::{Unique, Var},
 };
@@ -15,8 +15,8 @@ pub enum Value<'a> {
     Str(String),
     Int(i64),
     Real(f64),
-    Lam(Env<'a>, &'a Var, &'a Expr),
-    Cons(&'a Cons, Vec<Thunk<'a>>),
+    Lam(Lam<'a>),
+    Cons(&'a Var, Vec<Thunk<'a>>),
 }
 
 impl Value<'_> {
@@ -33,14 +33,41 @@ impl Value<'_> {
             _ => panic!(),
         }
     }
+
+    pub fn as_str(&self) -> &str {
+        match self {
+            Self::Str(s) => s.as_str(),
+            _ => panic!(),
+        }
+    }
 }
+
+impl PartialEq<Lit> for Value<'_> {
+    fn eq(&self, other: &Lit) -> bool {
+        match other {
+            Lit::Str(str) => matches!(self, Value::Str(this) if this == str),
+            Lit::Int(int) => matches!(self, Value::Int(this) if this == int),
+            Lit::Real(real) => matches!(self, Value::Real(this) if this == real),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub enum Lam<'a> {
+    Lam(Env<'a>, &'a Var, &'a Expr),
+    Extern(ExternLam<'a>),
+}
+
+pub type ExternLam<'a> = Rc<dyn Fn(&mut Runtime, Thunk<'a>) -> Thunk<'a> + 'a>;
 
 #[derive(Clone)]
 pub enum Io<'a> {
     Pure(Thunk<'a>),
     Bind(Thunk<'a>, Thunk<'a>),
-    Extern(Rc<dyn Fn() -> Value<'a>>),
+    Extern(ExternIo<'a>),
 }
+
+pub type ExternIo<'a> = Rc<dyn Fn(&mut Runtime) -> Value<'a> + 'a>;
 
 impl fmt::Debug for Value<'_> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
@@ -96,6 +123,14 @@ impl<'a> Thunk<'a> {
         if let ThunkInner::Thunk(current, _) = &mut *self.inner.borrow_mut() {
             *current = env;
         }
+    }
+
+    pub fn lam(f: impl Fn(&mut Runtime, Thunk<'a>) -> Thunk<'a> + 'a) -> Self {
+        Self::value(Value::Lam(Lam::Extern(Rc::new(f))))
+    }
+
+    pub fn io(f: impl Fn(&mut Runtime) -> Value<'a> + 'a) -> Self {
+        Self::value(Value::Io(Io::Extern(Rc::new(f))))
     }
 }
 
@@ -163,8 +198,18 @@ impl<'a> Env<'a> {
                 Expr::Case(expr, alts, default) => {
                     recurse(env, cap, expr);
 
-                    for alt in alts {
-                        recurse(env, cap, &alt.expr);
+                    match alts {
+                        Case::Cons(cons) => {
+                            for (_, _, expr) in cons {
+                                recurse(env, cap, expr);
+                            }
+                        }
+
+                        Case::Lit(lits) => {
+                            for (_, expr) in lits {
+                                recurse(env, cap, expr);
+                            }
+                        }
                     }
 
                     if let Some(default) = default {
@@ -173,6 +218,8 @@ impl<'a> Env<'a> {
                 }
 
                 Expr::Prim(prim) => match prim {
+                    Prim::Extern(..) => {}
+
                     Prim::Un(_, input) => recurse(env, cap, input),
 
                     Prim::Bin(_, lhs, rhs) => {
@@ -233,16 +280,22 @@ impl Runtime {
                 let input = self.eval_io(input);
                 let lambda = self.force(lambda);
 
-                let Value::Lam(mut env, var, output) = lambda else {
+                let Value::Lam(lam) = lambda else {
                     panic!();
                 };
 
-                env.vars.insert(var.unique(), input);
-                let output = self.eval(&mut env, output);
-                self.eval_io(output)
+                match lam {
+                    Lam::Lam(mut env, var, output) => {
+                        env.vars.insert(var.unique(), input);
+                        let output = self.eval(&mut env, output);
+                        self.eval_io(output)
+                    }
+
+                    Lam::Extern(f) => f(self, input),
+                }
             }
 
-            Io::Extern(f) => Thunk::value(f()),
+            Io::Extern(f) => Thunk::value(f(self)),
         }
     }
 
@@ -262,7 +315,7 @@ impl Runtime {
 
             Expr::Lam(var, expr) => {
                 let env = env.capture(expr);
-                Thunk::value(Value::Lam(env, var, expr))
+                Thunk::value(Value::Lam(Lam::Lam(env, var, expr)))
             }
 
             Expr::App(lambda, input) => {
@@ -271,12 +324,18 @@ impl Runtime {
 
                 let input = self.eval(env, input);
 
-                let Value::Lam(mut env, var, expr) = lambda else {
+                let Value::Lam(lam) = lambda else {
                     panic!();
                 };
 
-                env.vars.insert(var.unique(), input);
-                self.eval(&mut env, expr)
+                match lam {
+                    Lam::Lam(mut env, var, output) => {
+                        env.vars.insert(var.unique(), input);
+                        self.eval(&mut env, output)
+                    }
+
+                    Lam::Extern(f) => f(self, input),
+                }
             }
 
             Expr::Rec(vars, output) => {
@@ -309,20 +368,32 @@ impl Runtime {
                 let input = self.eval(env, input);
                 let input = self.force(input);
 
-                let Value::Cons(cons, args) = input else {
-                    panic!("{input:?}");
-                };
+                match alts {
+                    Case::Cons(alts) => {
+                        let Value::Cons(cons, args) = input else {
+                            panic!("{input:?}");
+                        };
 
-                for alt in alts {
-                    if alt.cons != *cons {
-                        continue;
-                    };
+                        for (cond, vars, expr) in alts {
+                            if cond != cons {
+                                continue;
+                            };
 
-                    for (var, arg) in alt.args.iter().zip(args) {
-                        env.vars.insert(var.unique(), arg);
+                            for (var, arg) in vars.iter().zip(args) {
+                                env.vars.insert(var.unique(), arg);
+                            }
+
+                            return self.eval(env, expr);
+                        }
                     }
 
-                    return self.eval(env, &alt.expr);
+                    Case::Lit(alts) => {
+                        for (cond, expr) in alts {
+                            if input == *cond {
+                                return self.eval(env, expr);
+                            }
+                        }
+                    }
                 }
 
                 if let Some(default) = default {
@@ -333,11 +404,45 @@ impl Runtime {
             }
 
             Expr::Prim(prim) => match prim {
+                Prim::Extern(name) => match name.as_str() {
+                    "io::print" => Thunk::lam(|_, input| {
+                        Thunk::io(move |rt| {
+                            let input = rt.force(input.clone());
+                            print!("{}", input.as_str());
+                            Value::Int(0)
+                        })
+                    }),
+
+                    "fs::readFile" => Thunk::lam(|_, input| {
+                        Thunk::io(move |rt| {
+                            let input = rt.force(input.clone());
+                            let contents = fs::read_to_string(input.as_str()).unwrap_or_default();
+                            Value::Str(contents)
+                        })
+                    }),
+
+                    "fs::isFile" => Thunk::lam(|_, input| {
+                        Thunk::io(move |rt| {
+                            let input = rt.force(input.clone());
+                            Value::Int(Path::new(input.as_str()).is_file() as i64)
+                        })
+                    }),
+
+                    _ => panic!("invalid extern `{name}`"),
+                },
+
                 Prim::Un(prim, input) => {
                     let input = self.eval(env, input);
 
                     match prim {
                         UnPrim::IoPure => Thunk::value(Value::Io(Io::Pure(input))),
+
+                        UnPrim::Str(PrimNum::Int) => {
+                            let input = self.force(input);
+                            Thunk::value(Value::Str(input.as_i64().to_string()))
+                        }
+
+                        _ => unimplemented!("{prim:?}"),
                     }
                 }
 
@@ -353,6 +458,8 @@ impl Runtime {
                     let rhs = self.force(rhs);
 
                     Thunk::value(match prim {
+                        BinPrim::StrConcat => Value::Str(lhs.as_str().to_owned() + rhs.as_str()),
+
                         BinPrim::Add(PrimNum::Int) => Value::Int(lhs.as_i64() + rhs.as_i64()),
                         BinPrim::Sub(PrimNum::Int) => Value::Int(lhs.as_i64() - rhs.as_i64()),
                         BinPrim::Mul(PrimNum::Int) => Value::Int(lhs.as_i64() * rhs.as_i64()),

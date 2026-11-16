@@ -3,7 +3,7 @@ use std::{
     path::PathBuf,
 };
 
-use crate::diagnostic::{Diagnostic, Label, Sources};
+use crate::diagnostic::{Diagnostic, Label, Note, Sources};
 
 use super::Severity;
 
@@ -67,6 +67,10 @@ where
 
         for label in labels {
             self.label(diagnostic, label_indent, &label)?;
+        }
+
+        for note in diagnostic.notes() {
+            self.note(diagnostic, label_indent, note)?;
         }
 
         Ok(())
@@ -134,6 +138,17 @@ where
         )?;
 
         writeln!(self.writer)?;
+
+        Ok(())
+    }
+
+    fn note(&mut self, _diagnostic: &Diagnostic, indent: usize, note: &Note) -> io::Result<()> {
+        writeln!(
+            self.writer,
+            "{}{BLUE}{BOLD}= {WHITE}note: {RESET}{}",
+            " ".repeat(indent + 1),
+            note.message,
+        )?;
 
         Ok(())
     }

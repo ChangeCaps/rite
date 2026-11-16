@@ -1,0 +1,28 @@
+import 'rite:diagnostic/diagnostic'
+
+type Token =
+  # literals
+
+  | Str
+  | Int
+  | Real
+  | Ident
+  | Symbol
+  | Keyword
+  | Comment
+
+  # control
+
+  | Unknown
+  | Newline
+  | Indent
+  | Dedent
+  | Eoi
+
+impl Show Token, Span
+  show t, s = match t
+    Newline -> '{newline}'
+    Indent  -> '{indent}'
+    Dedent  -> '{dedent}'
+    Eoi     -> '{end of input}'
+    _       -> spanStr s

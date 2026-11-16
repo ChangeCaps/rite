@@ -35,7 +35,7 @@ impl State<'_> {
     }
 
     fn var_kind(&self, scope: &Scope, kind: ast::VarKind) -> Kind {
-        match self.find_kind(scope, kind.var.as_ref()) {
+        match self.find_kind(scope, &kind.var) {
             Some(var) => Kind::Var(VarKind {
                 var:  var.clone(),
                 span: kind.span,

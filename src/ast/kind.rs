@@ -9,7 +9,7 @@ pub enum Kind {
 
 #[derive(Debug)]
 pub struct VarKind {
-    pub var:  Option<Ident>,
+    pub var:  Ident,
     pub span: Span,
 }
 

@@ -1,0 +1,96 @@
+type Source = Source {
+  path     :: str
+  contents :: str
+}
+
+type Span = Span {
+  source :: Source
+  start  :: int
+  end    :: int
+}
+
+type Report = Report {
+  isFailure   :: bool
+  diagnostics :: [Diagnostic]
+}
+
+impl Default Report
+  default = Report {
+    isFailure   = false
+    diagnostics = []
+  }
+
+type Diagnostic = Diagnostic {
+  severity :: Severity 
+  message  :: str
+  labels   :: [Label]
+  notes    :: [Note]
+}
+
+type Severity =
+  | Error
+  | Warning
+
+type Label = Label {
+  message :: str
+  span    :: Span
+}
+
+type Note = Note {
+  message :: str
+}
+
+diagnostic :: Severity -> str -> Diagnostic
+diagnostic severity message =
+  Diagnostic {
+    severity = severity
+    message  = message
+    labels   = []
+    notes    = []
+  }
+
+error :: str -> Diagnostic
+error = diagnostic Error
+
+warning :: str -> Diagnostic
+warning = diagnostic Warning
+
+label :: Span -> str -> Diagnostic -> Diagnostic
+label span message diagnostic =
+  let label = Label {
+    message = message
+    span    = span
+  }
+
+  diagnostic {
+    labels = label : labels diagnostic
+  }
+
+trait Reporter a
+  mapReport :: (Report -> Report) -> a
+
+report :: Diagnostic -> a where a :: Reporter
+report diagnostic =
+  mapReport \report.
+    report { diagnostics = diagnostic : diagnostics report }
+
+fail :: Diagnostic -> a where a :: Reporter
+fail diagnostic =
+  mapReport \report.
+    report {
+      isFailure = true
+      diagnostics = diagnostic : diagnostics report
+    }
+
+impl Show Span
+  show span =
+    show (start span)
+      + ':'
+      + show (end span)
+      + ':'
+      + path (source span)
+
+spanStr :: Span -> str
+spanStr span =
+  contents (source span)
+    |> slice (start span) (end span)

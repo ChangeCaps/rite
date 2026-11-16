@@ -1,5 +1,5 @@
 use crate::{
-    ast::{BinPat, ConsPat, ErrorPat, ListPat, ParenPat, Pat, WildPat},
+    ast::{BinPat, ConsPat, ErrorPat, IntPat, ListPat, ParenPat, Pat, StrPat, WildPat},
     parse::{Parser, Token, operator},
     var::{Assoc, Operator},
 };
@@ -7,7 +7,12 @@ use crate::{
 pub fn is_pat(token: Token) -> bool {
     matches!(
         token,
-        Token::Ident(..) | Token::Under | Token::LParen | Token::LBracket,
+        Token::Int(..)
+            | Token::Str(..)
+            | Token::Ident(..)
+            | Token::Under
+            | Token::LParen
+            | Token::LBracket,
     )
 }
 
@@ -58,6 +63,8 @@ fn bin(op: Operator, lhs: Pat, rhs: Pat) -> Pat {
 
 pub fn term_pat(parser: &mut Parser<'_>, allow_cons: bool) -> Pat {
     match parser.peek() {
+        Token::Str(str) => str_pat(parser, str),
+        Token::Int(int) => int_pat(parser, int),
         Token::Ident(..) => cons_pat(parser, allow_cons),
         Token::Under => wild_pat(parser),
         Token::LParen => paren_pat(parser),
@@ -72,6 +79,7 @@ pub fn term_pat(parser: &mut Parser<'_>, allow_cons: bool) -> Pat {
 
 pub fn paren_pat(parser: &mut Parser<'_>) -> Pat {
     let start = parser.expect(Token::LParen);
+
     let pat = pat(parser, true);
     let end = parser.expect(Token::RParen);
 
@@ -81,9 +89,24 @@ pub fn paren_pat(parser: &mut Parser<'_>) -> Pat {
     })
 }
 
+pub fn str_pat(parser: &mut Parser<'_>, str: String) -> Pat {
+    let span = parser.consume();
+
+    Pat::Str(StrPat { str, span })
+}
+
+pub fn int_pat(parser: &mut Parser<'_>, int: i64) -> Pat {
+    let span = parser.consume();
+
+    Pat::Int(IntPat { int, span })
+}
+
 pub fn cons_pat(parser: &mut Parser<'_>, allow_cons: bool) -> Pat {
     let span = parser.span();
-    let var = parser.expect_ident();
+
+    let Some(var) = parser.expect_ident() else {
+        return Pat::Error(ErrorPat { span });
+    };
 
     let mut args = Vec::new();
 

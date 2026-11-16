@@ -110,6 +110,12 @@ pub fn ident_or_operator(parser: &mut Parser<'_>) -> Option<Ident> {
             Some(Ident::new("[]", span))
         }
 
+        Token::LRParen => {
+            let span = parser.expect(Token::LRParen);
+
+            Some(Ident::new("()", span))
+        }
+
         _ => parser.expect_ident(),
     }
 }
@@ -143,11 +149,28 @@ pub fn type_cons(parser: &mut Parser<'_>) -> TypeCons {
     } else {
         let mut cons = Vec::new();
 
-        cons.push(self::tuple_cons(parser));
+        if parser.peek() == Token::Newline {
+            lines(parser);
+            parser.expect(Token::Indent);
+            lines(parser);
 
-        while parser.peek() == Token::Pipe {
-            parser.expect(Token::Pipe);
+            while !matches!(
+                parser.peek(),
+                Token::Dedent | Token::Eof,
+            ) {
+                parser.expect(Token::Pipe);
+                cons.push(tuple_cons(parser));
+                lines(parser);
+            }
+
+            parser.expect(Token::Dedent);
+        } else {
             cons.push(self::tuple_cons(parser));
+
+            while parser.peek() == Token::Pipe {
+                parser.expect(Token::Pipe);
+                cons.push(self::tuple_cons(parser));
+            }
         }
 
         TypeCons::Tuple(cons)

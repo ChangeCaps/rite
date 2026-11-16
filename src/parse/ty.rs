@@ -1,13 +1,13 @@
 use crate::{
     ast::{AppTy, BinTy, ErrorTy, LamTy, ListTy, ParenTy, Ty, VarTy, WhereTy},
-    parse::{Parser, Token, kind, operator},
-    var::{Assoc, Ident, Operator},
+    parse::{Parser, Token, binary, kind, operator},
+    var::Ident,
 };
 
 pub fn is_ty(token: Token) -> bool {
     matches!(
         token,
-        Token::Ident(..) | Token::Star | Token::LParen | Token::LBracket,
+        Token::Ident(..) | Token::Star | Token::LParen | Token::LBracket | Token::LRParen,
     )
 }
 
@@ -25,13 +25,20 @@ pub fn where_ty(parser: &mut Parser<'_>) -> Ty {
 
         parser.expect(Token::ColonColon);
 
-        let kind = kind(parser);
-        let span = ty.span().join(kind.span());
+        let mut kinds = Vec::new();
+        kinds.push(kind(parser));
+
+        while parser.peek() == Token::Plus {
+            parser.expect(Token::Plus);
+            kinds.push(kind(parser));
+        }
+
+        let span = ty.span().join(kinds.last().unwrap().span());
 
         ty = Ty::Where(WhereTy {
             input: Box::new(ty),
             target: Box::new(input),
-            kind,
+            kinds,
             span,
         });
     }
@@ -59,43 +66,13 @@ pub fn lambda_ty(parser: &mut Parser<'_>) -> Ty {
 }
 
 pub fn bin_ty(parser: &mut Parser<'_>) -> Ty {
-    let lhs = apply_ty(parser);
-
-    let Some((op, _)) = operator(parser) else {
-        return lhs;
-    };
-
-    let rhs = bin_ty(parser);
-
-    bin(op, lhs, rhs)
-}
-
-fn bin(op: Operator, lhs: Ty, rhs: Ty) -> Ty {
-    let span = lhs.span().join(rhs.span());
-
-    if let Ty::Bin(ref right) = rhs
-        && op.precedence() >= right.op.precedence()
-        && op.assoc() == Assoc::Left
-        && let Ty::Bin(rhs) = rhs
-    {
-        return Ty::Bin(BinTy {
-            op:   rhs.op,
-            lhs:  Box::new(Ty::Bin(BinTy {
-                op,
-                lhs: Box::new(lhs),
-                rhs: rhs.lhs,
-                span,
-            })),
-            rhs:  rhs.rhs,
-            span: rhs.span,
-        });
-    }
-
-    Ty::Bin(BinTy {
-        op,
-        lhs: Box::new(lhs),
-        rhs: Box::new(rhs),
-        span,
+    binary(parser, apply_ty, |op, lhs, rhs| {
+        Ty::Bin(BinTy {
+            span: lhs.span().join(rhs.span()),
+            lhs: Box::new(lhs),
+            rhs: Box::new(rhs),
+            op,
+        })
     })
 }
 
@@ -118,10 +95,11 @@ pub fn apply_ty(parser: &mut Parser<'_>) -> Ty {
 
 pub fn term_ty(parser: &mut Parser<'_>) -> Ty {
     match parser.peek() {
-        Token::Ident(..) => Ty::Var(var_ty(parser)),
+        Token::Ident(..) => var_ty(parser),
 
         Token::LParen => Ty::Paren(paren_ty(parser)),
         Token::LBracket => Ty::List(list_ty(parser)),
+        Token::LRParen => Ty::Var(unit_ty(parser)),
 
         _ => {
             let span = parser.expected("type");
@@ -140,14 +118,14 @@ pub fn paren_ty(parser: &mut Parser<'_>) -> ParenTy {
             let span = start.join(end);
 
             Ty::Var(VarTy {
-                var: Some(Ident::new("[]", span)),
+                var: Ident::new("[]", span),
                 span,
             })
         }
 
         _ if let Some((operator, span)) = operator(parser) => Ty::Var(VarTy {
             span,
-            var: Some(Ident::operator(operator, span)),
+            var: Ident::operator(operator, span),
         }),
 
         _ => ty(parser),
@@ -161,11 +139,23 @@ pub fn paren_ty(parser: &mut Parser<'_>) -> ParenTy {
     }
 }
 
-pub fn var_ty(parser: &mut Parser<'_>) -> VarTy {
+pub fn var_ty(parser: &mut Parser<'_>) -> Ty {
     let span = parser.span();
-    let var = parser.expect_ident();
 
-    VarTy { var, span }
+    let Some(var) = parser.expect_ident() else {
+        return Ty::Error(ErrorTy { span });
+    };
+
+    Ty::Var(VarTy { var, span })
+}
+
+pub fn unit_ty(parser: &mut Parser<'_>) -> VarTy {
+    let span = parser.expect(Token::LRParen);
+
+    VarTy {
+        var: Ident::new("()", span),
+        span,
+    }
 }
 
 pub fn list_ty(parser: &mut Parser<'_>) -> ListTy {

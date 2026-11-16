@@ -1,0 +1,7 @@
+import 'intrinsic' as intrinsic
+
+trace :: str -> a -> a
+trace msg a = intrinsic.trace (msg + '\n') a
+
+debug :: a -> a where a :: Show
+debug a = trace (show a) a

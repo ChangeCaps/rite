@@ -1,0 +1,14 @@
+type bool = true | false
+
+impl Show bool
+  show x = match x
+    true -> 'true'
+    false -> 'false'
+
+(&&) a b = match a
+  true -> b
+  false -> false
+
+(||) a b = match a
+  true -> true
+  false -> b

@@ -1,17 +1,22 @@
-type state s a = state (s -> a, s)
+type State s a = State (s -> a, s)
 
-impl monad state s
-  (>>=) m f = state \s.
-    let x, s = run m s
-    run (f x) s
+impl Monad State s
+  (>>=) m f = State \s.
+    let x, s = with m s
+    with (f x) s
 
-  pure x = state \s. x, s
+  pure x = State \s. x, s
 
-run :: state s a -> s -> a, s
-run (state f) s = f s
+impl Functor State s
+  map f m = State \s.
+    let x, s = with m s
+    f x, s
 
-get :: state s s
-get = state \s. s, s
+with :: State s a -> s -> a, s
+with (State f) s = f s
 
-put :: s -> state s void
-put s = state \_. (void, s)
+get :: State s s
+get = State \s. s, s
+
+set :: s -> State s ()
+set s = State \_. (), s

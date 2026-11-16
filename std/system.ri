@@ -1,5 +1,18 @@
-import 'intrinsic'
+import 'intrinsic' as intrinsic
 
-impl monad io
-  (>>=) = io-bind
-  pure = io-pure
+impl Monad io
+  (>>=) = intrinsic.ioBind
+  pure = intrinsic.ioPure
+
+type IoError = IoError {
+  description :: str
+}
+
+impl Show IoError
+  show e = 'IO error: ' + description e
+
+print :: str -> io ()
+print = extern 'io::print'
+
+println :: str -> io ()
+println s = print (s + '\n')

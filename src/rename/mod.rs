@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use crate::{
     ast,
-    diagnostic::Reporter,
+    diagnostic::{Diagnostic, Reporter},
     var::{Ident, Unique, Var},
 };
 
@@ -20,6 +20,10 @@ pub use stmt::*;
 pub use ty::*;
 
 pub const PRELUDE: &[&str] = &[
+    "std:bool",
+    "std:cmp",
+    "std:debug",
+    "std:default",
     "std:flow",
     "std:functor",
     "std:list",
@@ -27,11 +31,12 @@ pub const PRELUDE: &[&str] = &[
     "std:maybe",
     "std:monad",
     "std:result",
+    "std:show",
     "std:state",
     "std:str",
     "std:system",
     "std:tuple",
-    "std:void",
+    "std:unit",
 ];
 
 pub struct Unit {
@@ -39,17 +44,19 @@ pub struct Unit {
     pub types:  HashMap<Unique, Type>,
     pub traits: HashMap<Unique, Trait>,
     pub impls:  Vec<Impl>,
+    pub main:   Option<Var>,
 }
 
 pub fn rename(reporter: &dyn Reporter, modules: Vec<ast::Module>) -> Unit {
     let mut state = State::new(reporter);
-    state.modules(modules);
+    let main = state.modules(modules);
 
     Unit {
-        defs:   state.defs,
-        types:  state.types,
+        defs: state.defs,
+        types: state.types,
         traits: state.traits,
-        impls:  state.impls,
+        impls: state.impls,
+        main,
     }
 }
 
@@ -64,7 +71,7 @@ struct State<'a> {
 
 #[derive(Clone)]
 struct Scope {
-    imports: Vec<String>,
+    imports: Vec<ScopeImport>,
     values:  Vec<ScopeValue>,
     cons:    Vec<ScopeCons>,
     tys:     Vec<ScopeTy>,
@@ -81,6 +88,12 @@ impl Scope {
             kinds:   Vec::new(),
         }
     }
+}
+
+#[derive(Clone)]
+struct ScopeImport {
+    path:  String,
+    alias: Option<Ident>,
 }
 
 #[derive(Clone)]
@@ -115,39 +128,42 @@ enum Vis {
     Public,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 enum ScopeValueKind {
     Local,
     Def,
+    Field,
     Cons(Var),
     Method(Var),
-    Import(String),
 }
 
 impl Scope {
-    fn find_value(&self, name: Option<&str>) -> Option<&ScopeValue> {
+    fn find_value(&self, name: &str) -> Option<&ScopeValue> {
         self.values
             .iter()
             .rev()
-            .find(|value| value.var.ident().map(Ident::as_str) == name)
+            .find(|value| value.var.ident().map(Ident::as_str) == Some(name))
     }
 
-    fn find_cons(&self, name: Option<&str>) -> Option<&ScopeCons> {
+    fn find_cons(&self, name: &str) -> Option<&ScopeCons> {
         self.cons
             .iter()
             .rev()
-            .find(|cons| cons.var.ident().map(Ident::as_str) == name)
+            .find(|cons| cons.var.ident().map(Ident::as_str) == Some(name))
     }
 
-    fn find_ty(&self, name: Option<&str>) -> Option<&ScopeTy> {
+    fn find_ty(&self, name: &str) -> Option<&ScopeTy> {
         self.tys
             .iter()
             .rev()
-            .find(|var| var.name.as_deref() == name)
+            .find(|var| var.name.as_deref() == Some(name))
     }
 
-    fn find_kind(&self, name: Option<&Ident>) -> Option<&Var> {
-        self.kinds.iter().rev().find(|var| var.ident() == name)
+    fn find_kind(&self, name: &Ident) -> Option<&Var> {
+        self.kinds
+            .iter()
+            .rev()
+            .find(|var| var.ident() == Some(name))
     }
 }
 
@@ -181,53 +197,75 @@ impl<'a> State<'a> {
         }
     }
 
-    fn find_value<'b>(&'b self, scope: &'b Scope, name: Option<&str>) -> Option<&'b ScopeValue> {
+    fn find_module<'b>(&'b self, mut scope: &'b Scope, path: &[Ident]) -> Option<&'b Scope> {
+        for module in path {
+            match scope
+                .imports
+                .iter()
+                .find(|import| import.alias.as_ref() == Some(module))
+            {
+                Some(import) => scope = &self.modules[&import.path],
+                None => {
+                    let diagnostic = Diagnostic::error(format!("undefined module `{module}`"))
+                        .label(module.span(), "here");
+
+                    self.reporter.report(diagnostic);
+
+                    return None;
+                }
+            }
+        }
+
+        Some(scope)
+    }
+
+    fn find_value<'b>(&'b self, scope: &'b Scope, name: &str) -> Option<&'b ScopeValue> {
         scope.find_value(name).or_else(|| {
             scope.imports.iter().rev().find_map(|import| {
-                self.modules[import]
+                self.modules[&import.path]
                     .find_value(name)
                     .filter(|value| value.vis == Vis::Public)
             })
         })
     }
 
-    fn find_cons<'b>(&'b self, scope: &'b Scope, name: Option<&str>) -> Option<&'b ScopeCons> {
+    fn find_cons<'b>(&'b self, scope: &'b Scope, name: &str) -> Option<&'b ScopeCons> {
         scope.find_cons(name).or_else(|| {
             scope
                 .imports
                 .iter()
                 .rev()
-                .find_map(|import| self.modules[import].find_cons(name))
+                .find_map(|import| self.modules[&import.path].find_cons(name))
         })
     }
 
-    fn find_ty<'b>(&'b self, scope: &'b Scope, name: Option<&str>) -> Option<&'b ScopeTy> {
+    fn find_ty<'b>(&'b self, scope: &'b Scope, name: &str) -> Option<&'b ScopeTy> {
         scope.find_ty(name).or_else(|| {
             scope
                 .imports
                 .iter()
                 .rev()
-                .find_map(|import| self.modules[import].find_ty(name))
+                .find_map(|import| self.modules[&import.path].find_ty(name))
         })
     }
 
-    fn find_kind<'b>(&'b self, scope: &'b Scope, name: Option<&Ident>) -> Option<&'b Var> {
+    fn find_kind<'b>(&'b self, scope: &'b Scope, name: &Ident) -> Option<&'b Var> {
         scope.find_kind(name).or_else(|| {
             scope
                 .imports
                 .iter()
                 .rev()
-                .find_map(|import| self.modules[import].find_kind(name))
+                .find_map(|import| self.modules[&import.path].find_kind(name))
         })
     }
 
-    fn find_trait_member(&self, trait_: &Var, name: Option<&str>) -> Option<&TraitMethod> {
+    fn find_trait_member(&self, trait_: &Var, name: &str) -> Option<&TraitMethod> {
         self.traits
             .get(&trait_.unique())
             .unwrap()
             .methods
             .iter()
-            .find(|member| member.var.ident().map(|ident| ident.as_str()) == name)
+            .find(|member| member.var.ident().map(|ident| ident.as_str()) == Some(name))
     }
 
     #[track_caller]

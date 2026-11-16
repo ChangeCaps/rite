@@ -25,12 +25,18 @@ pub struct Diagnostic {
     message:  String,
 
     labels: Vec<Label>,
+    notes:  Vec<Note>,
 }
 
 #[derive(Debug)]
 pub struct Label {
     message: String,
     span:    Span,
+}
+
+#[derive(Debug)]
+pub struct Note {
+    message: String,
 }
 
 impl Diagnostic {
@@ -43,6 +49,7 @@ impl Diagnostic {
             message: message.into(),
 
             labels: Vec::new(),
+            notes: Vec::new(),
         }
     }
 
@@ -60,6 +67,14 @@ impl Diagnostic {
         self.labels.push(Label {
             message: message.into(),
             span,
+        });
+
+        self
+    }
+
+    pub fn note(mut self, message: impl Into<String>) -> Self {
+        self.notes.push(Note {
+            message: message.into(),
         });
 
         self
@@ -84,6 +99,10 @@ impl Diagnostic {
     pub fn labels(&self) -> &[Label] {
         &self.labels
     }
+
+    pub fn notes(&self) -> &[Note] {
+        &self.notes
+    }
 }
 
 impl Label {
@@ -93,5 +112,11 @@ impl Label {
 
     pub fn span(&self) -> Span {
         self.span
+    }
+}
+
+impl Note {
+    pub fn message(&self) -> &str {
+        &self.message
     }
 }

@@ -13,9 +13,9 @@ pub enum Expr {
     Bin(BinExpr),
     Seq(SeqExpr),
     Rec(RecExpr),
+    Ext(ExtExpr),
     List(ListExpr),
     Paren(ParenExpr),
-    Field(FieldExpr),
     Match(MatchExpr),
     Error(ErrorExpr),
 }
@@ -46,7 +46,8 @@ pub enum Assign {
 }
 
 pub struct VarExpr {
-    pub var:  Option<Ident>,
+    pub path: Vec<Ident>,
+    pub var:  Ident,
     pub span: Span,
 }
 
@@ -84,6 +85,11 @@ pub struct RecExpr {
 pub struct ExprField {
     pub name: Option<Ident>,
     pub expr: Expr,
+    pub span: Span,
+}
+
+pub struct ExtExpr {
+    pub name: Option<String>,
     pub span: Span,
 }
 
@@ -130,9 +136,9 @@ impl Expr {
             Self::Bin(expr) => expr.span,
             Self::Seq(expr) => expr.span,
             Self::Rec(expr) => expr.span,
+            Self::Ext(expr) => expr.span,
             Self::List(expr) => expr.span,
             Self::Paren(expr) => expr.span,
-            Self::Field(expr) => expr.span,
             Self::Match(expr) => expr.span,
             Self::Error(expr) => expr.span,
         }

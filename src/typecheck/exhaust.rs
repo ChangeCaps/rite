@@ -19,7 +19,14 @@ pub struct Row {
 #[derive(Clone, Debug)]
 pub enum Pat {
     Wild,
-    Cons(Var, Var, Vec<Pat>),
+    Cons(Cons, Vec<Pat>),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum Cons {
+    Str(String),
+    Int(i64),
+    Var(Var, Var),
 }
 
 impl Matrix {
@@ -31,7 +38,7 @@ impl Matrix {
         self.rows.push(row);
     }
 
-    fn specialize(self, cons: &Var, arity: usize) -> Self {
+    fn specialize(self, cons: &Cons, arity: usize) -> Self {
         Self {
             rows: self
                 .rows
@@ -43,7 +50,7 @@ impl Matrix {
 
     fn type_(&self) -> Option<Var> {
         self.rows.iter().find_map(|row| match row.pats.last() {
-            Some(Pat::Cons(type_, ..)) => Some(type_.clone()),
+            Some(Pat::Cons(Cons::Var(type_, ..), ..)) => Some(type_.clone()),
             _ => None,
         })
     }
@@ -69,13 +76,13 @@ impl Row {
         Some(self)
     }
 
-    fn specialize(mut self, cons: &Var, arity: usize) -> Option<Self> {
+    fn specialize(mut self, cons: &Cons, arity: usize) -> Option<Self> {
         match self.pats.pop()? {
             Pat::Wild => {
                 self.pats.extend(iter::repeat_n(Pat::Wild, arity));
             }
 
-            Pat::Cons(_, var, args) if var == *cons => {
+            Pat::Cons(this, args) if this == *cons => {
                 self.pats.extend(args.into_iter().rev());
             }
 
@@ -95,15 +102,25 @@ impl fmt::Display for Pat {
             }
         }
 
+        fn fmt_cons(cons: &Cons) -> String {
+            match cons {
+                Cons::Str(str) => format!("'{str}'"),
+                Cons::Int(int) => int.to_string(),
+                Cons::Var(_, var) => var.to_string(),
+            }
+        }
+
         fn recurse(pat: &Pat, p: u8) -> String {
             match pat {
                 Pat::Wild => String::from("_"),
-                Pat::Cons(_, var, args) => {
+                Pat::Cons(cons, args) => {
                     if args.is_empty() {
-                        return var.to_string();
+                        return fmt_cons(cons);
                     }
 
-                    if let Some(operator) = var.ident().and_then(Ident::as_operator) {
+                    if let Cons::Var(_, var) = cons
+                        && let Some(operator) = var.ident().and_then(Ident::as_operator)
+                    {
                         if let Operator::Comma = operator {
                             return format!(
                                 "{}{} {}",
@@ -121,7 +138,7 @@ impl fmt::Display for Pat {
                         );
                     }
 
-                    let mut items = vec![var.to_string()];
+                    let mut items = vec![fmt_cons(cons)];
                     items.extend(args.iter().map(|pat| recurse(pat, 101)));
 
                     paren(items.join(" "), p, 100)
@@ -143,9 +160,14 @@ impl State<'_> {
     fn exhaust_pat(&self, pat: &rename::Pat) -> Pat {
         match pat {
             rename::Pat::Bind(..) | rename::Pat::Error(..) => Pat::Wild,
+            rename::Pat::Str(pat) => Pat::Cons(Cons::Str(pat.str.clone()), Vec::new()),
+            rename::Pat::Int(pat) => Pat::Cons(Cons::Int(pat.int), Vec::new()),
             rename::Pat::Cons(pat) => {
                 let args = pat.args.iter().map(|pat| self.exhaust_pat(pat)).collect();
-                Pat::Cons(pat.type_.clone(), pat.var.clone(), args)
+                Pat::Cons(
+                    Cons::Var(pat.type_.clone(), pat.var.clone()),
+                    args,
+                )
             }
         }
     }
@@ -156,7 +178,7 @@ impl State<'_> {
         };
 
         match pat {
-            Pat::Cons(_, cons, args) => {
+            Pat::Cons(cons, args) => {
                 let matrix = matrix.specialize(&cons, args.len());
                 let row = row.specialize(&cons, args.len()).unwrap();
                 self.is_useful(matrix, row)
@@ -164,8 +186,11 @@ impl State<'_> {
 
             Pat::Wild => match matrix.type_() {
                 Some(type_) => self.tycx.get_tuple_conses(&type_).iter().any(|cons| {
-                    let matrix = matrix.clone().specialize(&cons.var, cons.args.len());
-                    let row = row.clone().specialize(&cons.var, cons.args.len()).unwrap();
+                    let arity = cons.args.len();
+                    let cons = Cons::Var(type_.clone(), cons.var.clone());
+
+                    let matrix = matrix.clone().specialize(&cons, arity);
+                    let row = row.clone().specialize(&cons, arity).unwrap();
                     self.is_useful(matrix, row)
                 }),
 
@@ -186,17 +211,14 @@ impl State<'_> {
                     .get_tuple_conses(&type_)
                     .iter()
                     .flat_map(|cons| {
-                        let matrix = matrix.clone().specialize(&cons.var, cons.args.len());
+                        let arity = cons.args.len();
+                        let cons = Cons::Var(type_.clone(), cons.var.clone());
 
-                        recurse(state, matrix).into_iter().map(|mut stack| {
-                            let args = stack.drain(stack.len() - cons.args.len()..).rev().collect();
+                        let matrix = matrix.clone().specialize(&cons, arity);
 
-                            stack.push(Pat::Cons(
-                                type_.clone(),
-                                cons.var.clone(),
-                                args,
-                            ));
-
+                        recurse(state, matrix).into_iter().map(move |mut stack| {
+                            let args = stack.drain(stack.len() - arity..).rev().collect();
+                            stack.push(Pat::Cons(cons.clone(), args));
                             stack
                         })
                     })

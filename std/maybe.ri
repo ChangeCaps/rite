@@ -1,1 +1,15 @@
-type maybe a = some a | none
+type Maybe a = Some a | None
+
+impl Monad Maybe
+  (>>=) m f =
+    match m
+      Some x -> f x
+      None -> None
+
+  pure = Some
+
+or :: Maybe a -> a -> a
+or x y =
+  match x
+    Some x -> x
+    None -> y

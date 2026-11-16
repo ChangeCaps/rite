@@ -1,0 +1,33 @@
+import 'std:fs'
+
+import 'rite:diagnostic/diagnostic'
+import 'rite:parse/lex'
+
+main :: io ()
+main =
+  let result <- unwrap read
+  print (show result)
+
+read :: Try io IoError ()
+read =
+  let contents <- try <| readFile 'test.ri'
+
+  let source = Source {
+    path     = 'test.ri'
+    contents = contents
+  }
+
+  let ts, report = lex source
+
+  ts
+    |> reverse
+    |> show
+    |> println
+    |> lift
+
+  isFailure report
+    |> show
+    |> println
+    |> lift
+
+  pure ()

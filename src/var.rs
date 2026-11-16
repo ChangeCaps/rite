@@ -19,12 +19,18 @@ pub enum Operator {
     GtGtEqual,
     GtGt,
     LtLt,
+    Gt,
+    Lt,
+    GtEqual,
+    LtEqual,
     EqualEqual,
     BangEqual,
     Comma,
     Colon,
     PipePipe,
     AmpAmp,
+    Pipe,
+    Amp,
     Plus,
     Minus,
     Star,
@@ -33,81 +39,105 @@ pub enum Operator {
 
 impl Operator {
     pub const ALL: &[Self] = &[
-        Operator::PipeGt,
-        Operator::LtPipe,
-        Operator::BackGt,
-        Operator::LtBack,
-        Operator::GtGtEqual,
-        Operator::GtGt,
-        Operator::LtLt,
-        Operator::EqualEqual,
-        Operator::BangEqual,
-        Operator::Comma,
-        Operator::Colon,
-        Operator::PipePipe,
-        Operator::AmpAmp,
-        Operator::Plus,
-        Operator::Minus,
-        Operator::Star,
-        Operator::Slash,
+        Self::PipeGt,
+        Self::LtPipe,
+        Self::BackGt,
+        Self::LtBack,
+        Self::GtGtEqual,
+        Self::GtGt,
+        Self::LtLt,
+        Self::Gt,
+        Self::Lt,
+        Self::GtEqual,
+        Self::LtEqual,
+        Self::EqualEqual,
+        Self::BangEqual,
+        Self::Comma,
+        Self::Colon,
+        Self::PipePipe,
+        Self::AmpAmp,
+        Self::Pipe,
+        Self::Amp,
+        Self::Plus,
+        Self::Minus,
+        Self::Star,
+        Self::Slash,
     ];
 
     pub fn as_token(self) -> &'static Token {
         match self {
-            Operator::PipeGt => &Token::PipeGt,
-            Operator::LtPipe => &Token::LtPipe,
-            Operator::BackGt => &Token::BackGt,
-            Operator::LtBack => &Token::LtBack,
-            Operator::GtGtEqual => &Token::GtGtEqual,
-            Operator::GtGt => &Token::GtGt,
-            Operator::LtLt => &Token::LtLt,
-            Operator::EqualEqual => &Token::EqualEqual,
-            Operator::BangEqual => &Token::BangEqual,
-            Operator::Comma => &Token::Comma,
-            Operator::Colon => &Token::Colon,
-            Operator::PipePipe => &Token::PipePipe,
-            Operator::AmpAmp => &Token::AmpAmp,
-            Operator::Plus => &Token::Plus,
-            Operator::Minus => &Token::Minus,
-            Operator::Star => &Token::Star,
-            Operator::Slash => &Token::Slash,
+            Self::PipeGt => &Token::PipeGt,
+            Self::LtPipe => &Token::LtPipe,
+            Self::BackGt => &Token::BackGt,
+            Self::LtBack => &Token::LtBack,
+            Self::GtGtEqual => &Token::GtGtEqual,
+            Self::GtGt => &Token::GtGt,
+            Self::LtLt => &Token::LtLt,
+            Self::Gt => &Token::Gt,
+            Self::Lt => &Token::Lt,
+            Self::GtEqual => &Token::GtEqual,
+            Self::LtEqual => &Token::LtEqual,
+            Self::EqualEqual => &Token::EqualEqual,
+            Self::BangEqual => &Token::BangEqual,
+            Self::Comma => &Token::Comma,
+            Self::Colon => &Token::Colon,
+            Self::PipePipe => &Token::PipePipe,
+            Self::AmpAmp => &Token::AmpAmp,
+            Self::Pipe => &Token::Pipe,
+            Self::Amp => &Token::Amp,
+            Self::Plus => &Token::Plus,
+            Self::Minus => &Token::Minus,
+            Self::Star => &Token::Star,
+            Self::Slash => &Token::Slash,
         }
     }
 
     pub fn precedence(self) -> u8 {
         match self {
-            Self::PipeGt | Self::BackGt | Self::GtGtEqual | Self::GtGt => 0,
-            Self::LtPipe | Self::LtBack | Self::LtLt => 1,
-            Self::EqualEqual | Self::BangEqual => 2,
-            Self::Comma => 3,
-            Self::Colon => 4,
-            Self::PipePipe => 5,
-            Self::AmpAmp => 6,
-            Self::Plus | Self::Minus => 7,
-            Self::Star | Self::Slash => 8,
+            Self::PipePipe => 0,
+            Self::AmpAmp => 1,
+            Self::EqualEqual
+            | Self::BangEqual
+            | Self::Gt
+            | Self::Lt
+            | Self::GtEqual
+            | Self::LtEqual => 2,
+            Self::PipeGt | Self::BackGt | Self::GtGtEqual | Self::GtGt => 3,
+            Self::LtPipe | Self::LtBack | Self::LtLt => 4,
+            Self::Comma => 5,
+            Self::Colon => 6,
+            Self::Pipe | Self::Amp => 7,
+            Self::Plus | Self::Minus => 8,
+            Self::Star | Self::Slash => 9,
         }
     }
 
     pub fn assoc(self) -> Assoc {
         match self {
-            Operator::PipeGt
-            | Operator::LtPipe
-            | Operator::BackGt
-            | Operator::LtBack
-            | Operator::GtGtEqual
-            | Operator::GtGt
-            | Operator::LtLt
-            | Operator::EqualEqual
-            | Operator::BangEqual
-            | Operator::Comma
-            | Operator::PipePipe
-            | Operator::AmpAmp
-            | Operator::Plus
-            | Operator::Minus
-            | Operator::Star
-            | Operator::Slash => Assoc::Left,
+            Self::PipeGt
+            | Self::LtPipe
+            | Self::BackGt
+            | Self::LtBack
+            | Self::GtGtEqual
+            | Self::GtGt
+            | Self::LtLt
+            | Self::Gt
+            | Self::Lt
+            | Self::GtEqual
+            | Self::LtEqual
+            | Self::EqualEqual
+            | Self::BangEqual
+            | Self::Comma
+            | Self::PipePipe
+            | Self::AmpAmp
+            | Self::Pipe
+            | Self::Amp
+            | Self::Plus
+            | Self::Minus
+            | Self::Star
+            | Self::Slash => Assoc::Left,
 
-            Operator::Colon => Assoc::Right,
+            Self::Colon => Assoc::Right,
         }
     }
 
@@ -189,6 +219,12 @@ impl PartialEq for Ident {
 impl PartialEq<str> for Ident {
     fn eq(&self, other: &str) -> bool {
         self.as_str() == other
+    }
+}
+
+impl AsRef<str> for Ident {
+    fn as_ref(&self) -> &str {
+        self.as_str()
     }
 }
 
@@ -296,6 +332,10 @@ impl Unique {
         let data = NEXT.fetch_add(1, Ordering::SeqCst);
 
         Self { data }
+    }
+
+    pub fn data(&self) -> u64 {
+        self.data
     }
 }
 

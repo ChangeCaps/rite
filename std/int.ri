@@ -1,16 +1,28 @@
-import 'intrinsic'
+import 'intrinsic' as intrinsic
 
-impl add int
-  (+) a b = int-add a b
+impl Add int
+  (+) a b = intrinsic.intAdd a b
 
-impl sub int
-  (-) a b = int-sub a b
+impl Sub int
+  (-) a b = intrinsic.intSub a b
 
-impl mul int
-  (*) a b = int-mul a b
+impl Mul int
+  (*) a b = intrinsic.intMul a b
 
-impl div int
-  (/) a b = int-div a b
+impl Div int
+  (/) a b = intrinsic.intDiv a b
 
-impl zero int
+impl Zero int
   zero = 0
+
+impl Default int
+  default = 0
+
+impl Eq int
+  (==) a b =
+    match a - b
+      0 -> true
+      _ -> false
+
+impl Show int
+  show x = intrinsic.intStr x

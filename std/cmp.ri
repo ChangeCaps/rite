@@ -1,0 +1,10 @@
+trait Eq a
+  (==) :: a -> a -> bool
+
+not :: bool -> bool
+not x = match x
+  true -> false
+  false -> true
+
+(!=) :: a -> a -> bool where a :: Eq
+(!=) x y = not (x == y)

@@ -14,15 +14,45 @@ impl State<'_> {
     pub(super) fn intrinsic(&mut self) -> Scope {
         let mut scope = Scope::new();
 
+        self.add_trace(&mut scope);
         self.add_io_intrinsics(&mut scope);
+        self.add_str_intrinsics(&mut scope);
         self.add_num_intrinsics(&mut scope);
 
         scope
     }
 
+    fn add_trace(&mut self, scope: &mut Scope) {
+        let var = Var::unnamed();
+
+        self.add_bin(
+            scope,
+            "trace",
+            prim_ty(TyPrim::Str),
+            var_ty(&var),
+            var_ty(&var),
+            BinPrim::Trace,
+        );
+    }
+
     fn add_io_intrinsics(&mut self, scope: &mut Scope) {
         self.add_io_bind(scope);
         self.add_io_pure(scope);
+    }
+
+    fn add_str_intrinsics(&mut self, scope: &mut Scope) {
+        self.add_str_len(scope);
+        self.add_str_concat(scope);
+        self.add_str_take(scope);
+        self.add_str_skip(scope);
+        self.add_str_char(scope);
+        self.add_str_find(scope);
+        self.add_str_cmp(scope);
+    }
+
+    fn add_num_intrinsics(&mut self, scope: &mut Scope) {
+        self.add_int_intrinsics(scope);
+        self.add_real_intrinsics(scope);
     }
 
     fn add_io_bind(&mut self, scope: &mut Scope) {
@@ -31,7 +61,7 @@ impl State<'_> {
 
         self.add_bin(
             scope,
-            "io-bind",
+            "ioBind",
             app_ty(prim_ty(TyPrim::Io), var_ty(&a)),
             lam_ty(
                 var_ty(&a),
@@ -47,30 +77,109 @@ impl State<'_> {
 
         self.add_un(
             scope,
-            "io-pure",
+            "ioPure",
             var_ty(&a),
             app_ty(prim_ty(TyPrim::Io), var_ty(&a)),
             UnPrim::IoPure,
         );
     }
 
-    fn add_num_intrinsics(&mut self, scope: &mut Scope) {
-        self.add_int_intrinsics(scope);
-        self.add_real_intrinsics(scope);
+    fn add_str_len(&mut self, scope: &mut Scope) {
+        self.add_prim_un(
+            scope,
+            "strLen",
+            TyPrim::Str,
+            TyPrim::Int,
+            UnPrim::StrLen,
+        );
+    }
+
+    fn add_str_concat(&mut self, scope: &mut Scope) {
+        self.add_prim_bin(
+            scope,
+            "strConcat",
+            TyPrim::Str,
+            TyPrim::Str,
+            TyPrim::Str,
+            BinPrim::StrConcat,
+        );
+    }
+
+    fn add_str_take(&mut self, scope: &mut Scope) {
+        self.add_prim_bin(
+            scope,
+            "strTake",
+            TyPrim::Int,
+            TyPrim::Str,
+            TyPrim::Str,
+            BinPrim::StrTake,
+        );
+    }
+
+    fn add_str_skip(&mut self, scope: &mut Scope) {
+        self.add_prim_bin(
+            scope,
+            "strSkip",
+            TyPrim::Int,
+            TyPrim::Str,
+            TyPrim::Str,
+            BinPrim::StrSkip,
+        );
+    }
+
+    fn add_str_char(&mut self, scope: &mut Scope) {
+        self.add_prim_bin(
+            scope,
+            "strChar",
+            TyPrim::Int,
+            TyPrim::Str,
+            TyPrim::Str,
+            BinPrim::StrChar,
+        );
+    }
+
+    fn add_str_find(&mut self, scope: &mut Scope) {
+        self.add_prim_bin(
+            scope,
+            "strFind",
+            TyPrim::Str,
+            TyPrim::Str,
+            TyPrim::Int,
+            BinPrim::StrFind,
+        );
+    }
+
+    fn add_str_cmp(&mut self, scope: &mut Scope) {
+        self.add_prim_bin(
+            scope,
+            "strCmp",
+            TyPrim::Str,
+            TyPrim::Str,
+            TyPrim::Int,
+            BinPrim::StrCmp,
+        );
     }
 
     fn add_int_intrinsics(&mut self, scope: &mut Scope) {
-        self.add_int_bin(scope, "int-add", BinPrim::Add);
-        self.add_int_bin(scope, "int-sub", BinPrim::Sub);
-        self.add_int_bin(scope, "int-mul", BinPrim::Mul);
-        self.add_int_bin(scope, "int-div", BinPrim::Div);
+        self.add_int_bin(scope, "intAdd", BinPrim::Add);
+        self.add_int_bin(scope, "intSub", BinPrim::Sub);
+        self.add_int_bin(scope, "intMul", BinPrim::Mul);
+        self.add_int_bin(scope, "intDiv", BinPrim::Div);
+
+        self.add_prim_un(
+            scope,
+            "intStr",
+            TyPrim::Int,
+            TyPrim::Str,
+            UnPrim::Str(PrimNum::Int),
+        );
     }
 
     fn add_real_intrinsics(&mut self, scope: &mut Scope) {
-        self.add_real_bin(scope, "real-add", BinPrim::Add);
-        self.add_real_bin(scope, "real-sub", BinPrim::Sub);
-        self.add_real_bin(scope, "real-mul", BinPrim::Mul);
-        self.add_real_bin(scope, "real-div", BinPrim::Div);
+        self.add_real_bin(scope, "realAdd", BinPrim::Add);
+        self.add_real_bin(scope, "realSub", BinPrim::Sub);
+        self.add_real_bin(scope, "realMul", BinPrim::Mul);
+        self.add_real_bin(scope, "realDiv", BinPrim::Div);
     }
 
     fn add_int_bin(&mut self, scope: &mut Scope, name: &str, prim: impl Fn(PrimNum) -> BinPrim) {
@@ -111,6 +220,23 @@ impl State<'_> {
             prim_ty(lhs),
             prim_ty(rhs),
             prim_ty(out),
+            prim,
+        );
+    }
+
+    fn add_prim_un(
+        &mut self,
+        scope: &mut Scope,
+        name: &str,
+        input: TyPrim,
+        output: TyPrim,
+        prim: UnPrim,
+    ) {
+        self.add_un(
+            scope,
+            name,
+            prim_ty(input),
+            prim_ty(output),
             prim,
         );
     }

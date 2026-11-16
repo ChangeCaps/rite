@@ -1,22 +1,31 @@
-use std::io;
+use std::{
+    fs, io,
+    process::{Command, Stdio},
+};
 
-use rite::{compiler::Compiler, runtime::Runtime};
+use rite::{chez, compiler::Compiler};
 
 fn main() -> io::Result<()> {
     let mut compiler = Compiler::new();
-    compiler.add_module("test", "test.ri")?;
-    compiler.add_module("std", "std")?;
+    compiler.add_module("std", "std", false)?;
+    compiler.add_module("rite", "rite", true)?;
 
     let Ok(expr) = compiler.lower() else {
         return Ok(());
     };
 
-    println!("{expr:?}");
+    let output = chez::codegen(&expr);
+    fs::write("out.ss", &output)?;
 
-    let mut runtime = Runtime::new();
-    let output = runtime.run(&expr);
-
-    println!("{output:?}");
+    Command::new("scheme")
+        .arg("--optimize-level")
+        .arg("3")
+        .arg("--script")
+        .arg("out.ss")
+        .stdin(Stdio::inherit())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .output()?;
 
     Ok(())
 }

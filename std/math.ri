@@ -1,14 +1,14 @@
-trait add a
+trait Add a
   (+) :: a -> a -> a
 
-trait sub a
+trait Sub a
   (-) :: a -> a -> a
 
-trait mul a
+trait Mul a
   (*) :: a -> a -> a
 
-trait div a
+trait Div a
   (/) :: a -> a -> a
 
-trait zero a
+trait Zero a
   zero :: a

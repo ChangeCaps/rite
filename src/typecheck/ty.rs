@@ -103,9 +103,11 @@ impl State<'_> {
     fn where_ty(&mut self, ty: rename::WhereTy) -> Ty {
         let input = self.ty(*ty.input);
         let target = self.ty(*ty.target);
-        let kind = self.kind(ty.kind);
 
-        self.require(&target, &kind, ty.span);
+        for kind in ty.kinds {
+            let kind = self.kind(kind);
+            self.require(&target, &kind, ty.span);
+        }
 
         input
     }

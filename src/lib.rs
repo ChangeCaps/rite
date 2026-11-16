@@ -1,6 +1,7 @@
 #![allow(clippy::module_inception)]
 
 pub mod ast;
+pub mod chez;
 pub mod compiler;
 pub mod diagnostic;
 pub mod ir;

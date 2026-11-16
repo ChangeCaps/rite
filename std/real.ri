@@ -1,13 +1,13 @@
-import 'intrinsic'
+import 'intrinsic' as intrinsic
 
-impl add real
-  (+) a b = real-add a b
+impl Add real
+  (+) a b = intrinsic.realAdd a b
 
-impl sub real
-  (-) a b = real-sub a b
+impl Sub real
+  (-) a b = intrinsic.realSub a b
 
-impl mul real
-  (*) a b = real-mul a b
+impl Mul real
+  (*) a b = intrinsic.realMul a b
 
-impl div real
-  (/) a b = real-div a b
+impl Div real
+  (/) a b = intrinsic.realDiv a b

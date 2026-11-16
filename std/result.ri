@@ -1,1 +1,34 @@
-type result e a = ok a | err e
+type Result e a = Ok a | Err e
+
+impl Monad Result e
+  (>>=) m f =
+    match m
+      Ok x -> f x
+      Err e -> Err e
+
+  pure = Ok
+
+impl Show Result e a where e :: Show where a :: Show
+  show x = match x
+    Ok x -> 'Ok ' + show x
+    Err e -> 'Err ' + show e
+
+type Try m e a = Try (m (Result e a))
+
+try :: m (Result e a) -> Try m e a
+try m = Try m
+
+lift :: m a -> Try m e a where m :: Monad
+lift m = m >>= (Ok \> pure) |> try
+
+unwrap :: Try m e a -> m (Result e a)
+unwrap (Try m) = m
+
+impl Monad Try m e where m :: Monad
+  (>>=) m f = try <|
+    let x <- unwrap m
+    match x
+      Ok x -> unwrap (f x)
+      Err e -> pure (Err e)
+
+  pure = try <\ pure <\ Ok

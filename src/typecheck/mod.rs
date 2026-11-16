@@ -82,8 +82,14 @@ impl<'a> State<'a> {
             }
         }
 
-        for impl_ in unit.impls {
-            self.add_impl(impl_);
+        let impls = unit
+            .impls
+            .into_iter()
+            .filter_map(|impl_| self.register_impl(impl_))
+            .collect::<Vec<_>>();
+
+        for (index, var, input, methods, span) in impls {
+            self.add_impl(index, var, input, methods, span);
         }
 
         for def in unit.defs.into_values() {
@@ -203,10 +209,16 @@ impl<'a> State<'a> {
         self.tycx.add_trait(trait_.var, trait_.input, trait_.span);
     }
 
-    fn add_impl(&mut self, impl_: rename::Impl) {
-        let trait_ = self.tycx.get_trait(&impl_.var);
-
-        let var = trait_.input.clone();
+    fn register_impl(
+        &mut self,
+        impl_: rename::Impl,
+    ) -> Option<(
+        usize,
+        Var,
+        Ty,
+        Vec<rename::ImplMethod>,
+        Span,
+    )> {
         let input = self.ty(impl_.input);
 
         if let Some(found) = self.find_impl(&impl_.var, &input) {
@@ -216,16 +228,36 @@ impl<'a> State<'a> {
 
             self.reporter.report(diagnostic);
 
-            return;
+            return None;
         }
-
-        let mut subst = HashMap::from([(var.unique(), input.clone())]);
 
         let index = self.tycx.add_impl(&impl_.var, input.clone(), impl_.span);
 
+        Some((
+            index,
+            impl_.var,
+            input,
+            impl_.methods,
+            impl_.span,
+        ))
+    }
+
+    fn add_impl(
+        &mut self,
+        index: usize,
+        impl_: Var,
+        input: Ty,
+        methods: Vec<rename::ImplMethod>,
+        span: Span,
+    ) {
+        let trait_ = self.tycx.get_trait(&impl_);
+        let var = trait_.input.clone();
+
+        let mut subst = HashMap::from([(var.unique(), input.clone())]);
+
         let mut members = Vec::new();
 
-        for member in impl_.methods {
+        for member in methods {
             let mut ty = Ty::Var(member.var.clone());
             self.instantiate(&mut subst, &mut ty);
             self.set_inferrable(&ty, false);
@@ -239,12 +271,12 @@ impl<'a> State<'a> {
             });
         }
 
-        self.tycx.set_members(&impl_.var, index, members);
+        self.tycx.set_members(&impl_, index, members);
 
         {
             let mut var = Ty::Var(var.clone());
             self.instantiate(&mut HashMap::new(), &mut var);
-            self.unify(&input, &var, impl_.span);
+            self.unify(&input, &var, span);
         }
     }
 
@@ -298,7 +330,15 @@ impl<'a> State<'a> {
 
     fn unify(&mut self, lhs: &Ty, rhs: &Ty, span: Span) {
         if let Err(diagnostic) = self.tycx.unify(&mut self.kinds, lhs, rhs, span) {
-            self.reporter.report(diagnostic);
+            self.reporter.report(diagnostic.note(format!(
+                "while trying to unify `{}` and `{}`",
+                self.format_ty(lhs),
+                self.format_ty(rhs),
+            )));
         }
+    }
+
+    fn format_ty(&self, ty: &Ty) -> String {
+        self.tycx.format_ty(&self.kinds, ty)
     }
 }

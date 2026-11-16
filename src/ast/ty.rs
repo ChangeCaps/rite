@@ -18,7 +18,7 @@ pub enum Ty {
 
 #[derive(Debug)]
 pub struct VarTy {
-    pub var:  Option<Ident>,
+    pub var:  Ident,
     pub span: Span,
 }
 
@@ -60,7 +60,7 @@ pub struct ParenTy {
 pub struct WhereTy {
     pub input:  Box<Ty>,
     pub target: Box<Ty>,
-    pub kind:   Kind,
+    pub kinds:  Vec<Kind>,
     pub span:   Span,
 }
 

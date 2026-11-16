@@ -100,6 +100,7 @@ pub struct PrimExpr {
 }
 
 pub enum ExprPrim {
+    Extern(String),
     Un(UnPrim, Box<Expr>),
     Bin(BinPrim, Box<Expr>, Box<Expr>),
 }
@@ -156,9 +157,9 @@ impl State<'_> {
             ast::Expr::Bin(expr) => self.bin_expr(scope, expr),
             ast::Expr::Seq(expr) => self.seq_expr(scope, expr),
             ast::Expr::Rec(expr) => self.rec_expr(scope, expr),
+            ast::Expr::Ext(expr) => self.ext_expr(scope, expr),
             ast::Expr::List(expr) => self.list_expr(scope, expr),
             ast::Expr::Paren(expr) => self.paren_expr(scope, expr),
-            ast::Expr::Field(expr) => self.field_expr(scope, expr),
             ast::Expr::Match(expr) => self.match_expr(scope, expr),
             ast::Expr::Error(expr) => self.error_expr(scope, expr),
         }
@@ -193,11 +194,7 @@ impl State<'_> {
             }),
 
             ast::Assign::Bind => {
-                let Some(operator) = self.find_value(&scope, Some(">>=")) else {
-                    todo!()
-                };
-
-                let operator = self.scope_expr(operator.clone(), expr.span);
+                let operator = self.expr_operator(&scope, ">>=", expr.span);
 
                 Expr::App(AppExpr {
                     lambda: Box::new(Expr::App(AppExpr {
@@ -217,22 +214,31 @@ impl State<'_> {
     }
 
     fn var_expr(&self, scope: &Scope, expr: ast::VarExpr) -> Expr {
-        if let Some(value) = self.find_value(scope, expr.var.as_deref()) {
-            return self.scope_expr(value.clone(), expr.span);
+        if !expr.path.is_empty() {
+            if let Some(scope) = self.find_module(scope, &expr.path) {
+                if let Some(value) = scope.find_value(&expr.var) {
+                    return self.scope_expr(value.clone(), expr.span);
+                } else {
+                    let diagnostic =
+                        Diagnostic::error("undefined variable").label(expr.span, "found here");
+                    self.reporter.report(diagnostic);
+                }
+            }
+        } else {
+            if let Some(value) = self.find_value(scope, &expr.var) {
+                return self.scope_expr(value.clone(), expr.span);
+            }
+
+            let diagnostic = Diagnostic::error("undefined variable").label(expr.span, "found here");
+            self.reporter.report(diagnostic);
         }
-
-        let diagnostic = Diagnostic::error("undefined variable").label(expr.span, "found here");
-
-        self.reporter.report(diagnostic);
 
         Expr::Error(ErrorExpr { span: expr.span })
     }
 
     fn scope_expr(&self, value: ScopeValue, span: Span) -> Expr {
         match value.kind {
-            ScopeValueKind::Import(..) => todo!(),
-
-            ScopeValueKind::Def => {
+            ScopeValueKind::Def | ScopeValueKind::Field => {
                 let def = self.defs.get(&value.var.unique()).unwrap();
 
                 Expr::Def(DefExpr {
@@ -293,7 +299,7 @@ impl State<'_> {
     }
 
     fn expr_operator(&self, scope: &Scope, operator: &str, span: Span) -> Expr {
-        match self.find_value(scope, Some(operator)) {
+        match self.find_value(scope, operator) {
             Some(value) => self.scope_expr(value.clone(), span),
 
             None => {
@@ -313,11 +319,7 @@ impl State<'_> {
         let input = self.expr(scope, *expr.input);
         let output = self.expr(scope, *expr.output);
 
-        let Some(operator) = self.find_value(scope, Some(">>")) else {
-            todo!()
-        };
-
-        let operator = self.scope_expr(operator.clone(), expr.span);
+        let operator = self.expr_operator(scope, ">>", expr.span);
 
         Expr::App(AppExpr {
             lambda: Box::new(Expr::App(AppExpr {
@@ -332,7 +334,7 @@ impl State<'_> {
 
     fn rec_expr(&self, scope: &Scope, expr: ast::RecExpr) -> Expr {
         if let ast::Expr::Var(input) = expr.input.as_ref()
-            && let Some(value) = self.find_value(scope, input.var.as_deref())
+            && let Some(value) = self.find_value(scope, input.var.as_str())
             && let ScopeValueKind::Cons(type_) = value.kind.clone()
             && let TypeCons::Rec(ref cons) = self.types[&type_.unique()].cons
         {
@@ -405,6 +407,17 @@ impl State<'_> {
         })
     }
 
+    fn ext_expr(&self, _scope: &Scope, expr: ast::ExtExpr) -> Expr {
+        match expr.name {
+            Some(name) => Expr::Prim(PrimExpr {
+                prim: ExprPrim::Extern(name),
+                span: expr.span,
+            }),
+
+            None => Expr::Error(ErrorExpr { span: expr.span }),
+        }
+    }
+
     fn list_expr(&self, scope: &Scope, expr: ast::ListExpr) -> Expr {
         let empty = self.expr_operator(scope, "[]", expr.span);
 
@@ -426,16 +439,6 @@ impl State<'_> {
 
     fn paren_expr(&self, scope: &Scope, expr: ast::ParenExpr) -> Expr {
         self.expr(scope, *expr.expr)
-    }
-
-    fn field_expr(&self, scope: &Scope, expr: ast::FieldExpr) -> Expr {
-        let input = self.expr(scope, *expr.input);
-
-        Expr::Field(FieldExpr {
-            input: Box::new(input),
-            name:  expr.name,
-            span:  expr.span,
-        })
     }
 
     fn match_expr(&self, scope: &Scope, expr: ast::MatchExpr) -> Expr {

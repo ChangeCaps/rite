@@ -5,23 +5,41 @@ use crate::{
     var::Var,
 };
 
+#[derive(Debug)]
 pub enum Pat {
+    Str(StrPat),
+    Int(IntPat),
     Bind(BindPat),
     Cons(ConsPat),
     Error(ErrorPat),
 }
 
+#[derive(Debug)]
+pub struct StrPat {
+    pub str:  String,
+    pub span: Span,
+}
+
+#[derive(Debug)]
+pub struct IntPat {
+    pub int:  i64,
+    pub span: Span,
+}
+
+#[derive(Debug)]
 pub struct BindPat {
     pub var:  Option<Var>,
     pub span: Span,
 }
 
+#[derive(Debug)]
 pub struct ConsPat {
     pub var:  Var,
     pub args: Vec<Pat>,
     pub span: Span,
 }
 
+#[derive(Debug)]
 pub struct ErrorPat {
     pub span: Span,
 }
@@ -29,10 +47,30 @@ pub struct ErrorPat {
 impl State<'_> {
     pub fn pat(&mut self, pat: rename::Pat, ty: &Ty) -> Pat {
         match pat {
+            rename::Pat::Str(pat) => self.str_pat(pat, ty),
+            rename::Pat::Int(pat) => self.int_pat(pat, ty),
             rename::Pat::Bind(pat) => self.bind_pat(pat, ty),
             rename::Pat::Cons(pat) => self.cons_pat(pat, ty),
             rename::Pat::Error(pat) => self.error_pat(pat),
         }
+    }
+
+    fn str_pat(&mut self, pat: rename::StrPat, ty: &Ty) -> Pat {
+        self.unify(ty, &Ty::Str, pat.span);
+
+        Pat::Str(StrPat {
+            str:  pat.str,
+            span: pat.span,
+        })
+    }
+
+    fn int_pat(&mut self, pat: rename::IntPat, ty: &Ty) -> Pat {
+        self.unify(ty, &Ty::Int, pat.span);
+
+        Pat::Int(IntPat {
+            int:  pat.int,
+            span: pat.span,
+        })
     }
 
     fn bind_pat(&mut self, pat: rename::BindPat, ty: &Ty) -> Pat {
