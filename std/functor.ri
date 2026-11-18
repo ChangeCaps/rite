@@ -1,20 +1,2 @@
 trait Functor f
   map :: (a -> b) -> f a -> f b
-
-impl Functor Maybe
-  map f x =
-    match x
-      Some x -> Some (f x)
-      None -> None
-
-impl Functor Result e
-  map f x =
-    match x
-      Ok x -> Ok (f x)
-      Err e -> Err e
-
-impl Functor ([])
-  map f xs =
-    match xs
-      x : xs -> f x : map f xs
-      [] -> []

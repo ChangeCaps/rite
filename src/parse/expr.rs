@@ -376,14 +376,31 @@ pub fn list_expr(parser: &mut Parser<'_>) -> ListExpr {
 
     let mut items = Vec::new();
 
-    while is_expr(parser) {
-        items.push(expr(parser));
+    if parser.peek() == Token::Newline {
+        lines(parser);
+        parser.expect(Token::Indent);
+        lines(parser);
 
-        if parser.peek() != Token::Semi {
-            break;
+        while !matches!(
+            parser.peek(),
+            Token::Dedent | Token::Eof,
+        ) {
+            items.push(expr(parser));
+            lines(parser);
         }
 
-        parser.expect(Token::Semi);
+        parser.expect(Token::Dedent);
+        lines(parser);
+    } else {
+        while is_expr(parser) {
+            items.push(expr(parser));
+
+            if parser.peek() != Token::Semi {
+                break;
+            }
+
+            parser.expect(Token::Semi);
+        }
     }
 
     let end = parser.expect(Token::RBracket);

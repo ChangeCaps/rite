@@ -1,0 +1,26 @@
+import 'rite:diagnostic/diagnostic'
+import 'rite:parse/parser'
+
+type Kind =
+  | Var   VarKind   Span
+  | Arity ArityKind Span
+  | Error           Span
+
+type VarKind = VarKind {
+  name :: str
+}
+
+type ArityKind = ArityKind {
+  arity :: int
+}
+
+parseKind :: Parser Kind
+parseKind = parseVarKind
+
+parseVarKind :: Parser Kind
+parseVarKind = spanned Var <|
+  let name <- ident
+
+  pure <| VarKind {
+    name = name
+  }

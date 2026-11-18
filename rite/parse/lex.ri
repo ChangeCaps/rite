@@ -47,7 +47,7 @@ line :: State Lexer ()
 line =
   let ws <- whitespace
   let lexer <- get
-  indents (indent lexer |> reverse) (spanStr ws) ws
+  indents (indent lexer |> reverse) (spanText ws) ws
   lineTokens
   let span <- consume
   addToken (Newline, span)

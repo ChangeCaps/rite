@@ -5,23 +5,18 @@ type Tokens = Tokens [Token, Span] Span
 impl Show Tokens
   show (Tokens ts eoi) = show ts
 
-peek :: Tokens -> Token, Span
-peek (Tokens ts eoi) = match ts
+eoiSpan :: Tokens -> Span
+eoiSpan (Tokens _ eoi) = eoi
+
+nextToken :: Tokens -> Token, Span
+nextToken (Tokens ts eoi) = match ts
   t : _ -> t
   [] -> Eoi, eoi
 
-consume :: Tokens -> Tokens
-consume (Tokens ts eoi) = match ts
+consumeToken :: Tokens -> Tokens
+consumeToken (Tokens ts eoi) = match ts
   _ : ts -> Tokens ts eoi
   [] -> Tokens ts eoi
-
-consumeWhile :: (Token, Span -> bool) -> Tokens -> Tokens
-consumeWhile f ts =
-  match peek ts
-    Eoi, _ -> ts
-    t -> match f t
-      true  -> consumeWhile f (consume ts)
-      false -> ts
 
 type Token =
   # literals
@@ -31,7 +26,6 @@ type Token =
   | Real
   | Ident
   | Symbol
-  | Keyword
   | Comment
 
   # control
@@ -47,9 +41,8 @@ impl Show Token
     Str     -> '{str}'
     Int     -> '{int}'
     Real    -> '{real}'
-    Ident   -> '{ident}'
+    Ident   -> '{identifier}'
     Symbol  -> '{symbol}'
-    Keyword -> '{keyword}'
     Comment -> '{comment}'
     Unknown -> '{unknown}'
     Newline -> '{newline}'
@@ -64,7 +57,6 @@ impl Eq Token
     Real,    Real    -> true
     Ident,   Ident   -> true
     Symbol,  Symbol  -> true
-    Keyword, Keyword -> true
     Comment, Comment -> true
     Unknown, Unknown -> true
     Newline, Newline -> true

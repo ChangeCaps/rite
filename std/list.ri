@@ -1,7 +1,7 @@
 type [] a = [] | (:) a [a]
 
-trait Fold t
-  fold :: b -> (a -> b -> b) -> t a -> b
+impl Functor ([])
+  map f xs = mapInto f xs []
 
 trait Sequence a
   len :: a -> int
@@ -12,14 +12,6 @@ impl Fold ([])
   fold acc f xs = match xs
     x : xs -> fold (f x acc) f xs
     []     -> acc
-
-impl Show [a] where a :: Show
-  show xs =
-    let xs = xs
-      |> map show
-      |> join '; '
-
-    '[' + xs + ']'
 
 impl Sequence [a]
   len xs = match xs
@@ -34,16 +26,47 @@ impl Sequence [a]
       x : xs -> skip (n - 1) xs
       [] -> []
 
+impl Semigroup [a]
+  (<>) x y = append x y
+
+impl Show [a] where a :: Show
+  show xs =
+    let xs = xs
+      |> map show
+      |> join '; '
+
+    '[' + xs + ']'
+
+mapInto f xs ys =
+  match xs
+    x : xs -> mapInto f xs (f x : ys)
+    [] -> ys
+
 append :: [a] -> [a] -> [a]
 append xs ys = match xs
   x : xs -> x : append xs ys
   []     -> ys
+
+contains :: a -> [a] -> bool where a :: Eq
+contains x xs = any ((==) x) xs
+
+flatten :: [Maybe a] -> [a]
+flatten xs = match xs
+  x : xs -> match x
+    Some x -> x : flatten xs
+    None   -> flatten xs
+  [] -> []
 
 takeInto n xs ys = match n
   0 -> ys
   _ -> match xs
     x : xs -> takeInto (n - 1) xs (x : ys)
     [] -> ys
+
+head :: [a] -> Maybe a
+head xs = match xs
+  x : _ -> Some x
+  []    -> None
 
 join :: str -> [str] -> str
 join sep ss = match ss

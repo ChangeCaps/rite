@@ -303,6 +303,7 @@ impl<'a> Lexer<'a> {
     fn three_character_symbol(&mut self) -> Option<(Token, Span)> {
         let token = match self.remaining().get(..3).unwrap_or("") {
             ">>=" => Token::GtGtEqual,
+            "<|>" => Token::LtPipeGt,
 
             _ => return None,
         };

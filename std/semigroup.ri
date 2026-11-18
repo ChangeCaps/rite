@@ -1,0 +1,2 @@
+trait Semigroup a
+  (<>) :: a -> a -> a

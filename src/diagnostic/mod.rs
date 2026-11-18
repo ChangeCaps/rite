@@ -43,6 +43,7 @@ impl Diagnostic {
     #[track_caller]
     pub fn new(severity: Severity, message: impl Into<String>) -> Self {
         Self {
+            #[cfg(debug_assertions)]
             location: Location::caller(),
 
             severity,

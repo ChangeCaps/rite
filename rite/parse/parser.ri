@@ -1,169 +1,360 @@
 import 'rite:parse/token'
 import 'rite:diagnostic/diagnostic'
 
-type Parsed a = Parsed {
-  output :: a
+type Hint =
+  | Token Token (Maybe str)
+  | Label str
+
+type ParseError = ParseError {
+  start :: int
+  found :: Token, Span
+  hints :: [Hint]
+}
+
+impl Semigroup ParseError
+  (<>) a b = ParseError {
+    start = min (start a) (start b)
+    found = found a
+    hints = hints a <> hints b
+  }
+
+type Reply a =
+  | Success a State
+  | Failure ParseError
+  | Recover a State ParseError
+
+type Consumption =
+  | Consumed
+  | Empty
+
+type State  = State {
+  offset :: int
+  tokens :: Tokens
   report :: Report
-  rest   :: Tokens
 }
 
 type Parser a = Parser {
-  start :: [Token, Maybe str] -> [Token, Maybe str]
-  parse :: [Token, Maybe str] -> Tokens -> Maybe (Parsed a)
+  parse :: State -> Reply a, Consumption
 }
+
+runParser :: Parser a -> Tokens -> Maybe a, Report
+runParser p input =
+  let state = State {
+    offset = 0
+    tokens = input
+    report = default
+  }
+
+  let reply, consumption = parse p state
+
+  match reply
+    Success x state -> Some x, report state
+
+    Failure err ->
+      None, failure (diagnose err state)
+
+    Recover x state err ->
+      Some x, report state <> failure (diagnose err state)
+
+impl Functor Reply
+  map f r = match r
+    Success x state     -> Success (f x) state
+    Recover x state err -> Recover (f x) state err
+    Failure         err -> Failure err
 
 impl Functor Parser
   map f p = Parser {
-    start = start p
-    parse = \fs ts.
-      parse p fs ts
-        |> map \result.
-          Parsed {
-            output = f (output result)
-            report = report result
-            rest   = rest result
-          }
+    parse = \state.
+      let reply, consumption = parse p state
+      map f reply, consumption
   }
 
-runParser :: Tokens -> Parser a -> Maybe (a, Report)
-runParser ts p =
-  let result <- parse p [] ts
-  pure (output result, report result)
+impl Monad Parser
+  (>>=) p f = Parser {
+    parse = \state.
+      match parse p state
+        Success a state, Consumed ->
+          left (parse (f a) state), Consumed
 
-expect :: Token -> Maybe str -> Parser Span
-expect t s = Parser {
-  start = \_. [t, s]
-  parse = \fs ts.
-    let n0 = peek ts
+        Success a state, Empty ->
+          parse (f a) state
 
-    match is t s n0
-      true ->
-        let _, span = n0
+        Failure err, consumption ->
+          Failure err, consumption
 
-        Some (Parsed {
-          output = span
-          report = default
-          rest   = consume ts
-        })
+        Recover a state err, consumption ->
+          let reply, _, state = recoverState (f a) state
 
-      false -> None
+          let reply = match reply
+            Success a state' ->
+              let diagnostic = diagnose err state
+              Success a (addFailure diagnostic state')
+
+            Recover a state err' -> Recover a state (err <> err')
+            Failure         err' -> Failure         (err <> err')
+
+          reply, consumption
+  }
+
+  pure x = Parser {
+    parse = \state. Success x state, Empty
+  }
+
+recoverState :: Parser a -> State -> Reply a, Consumption, State
+recoverState p state =
+  match state |> tokens |> nextToken |> left
+    Eoi     -> parse p state, state
+    Newline -> parse p state, state
+    Dedent  -> parse p state, state
+
+    _ -> match parse p state
+      reply, Consumed -> reply, Consumed, state
+      other -> recoverState p (consume state)
+
+(<|>) :: Parser a -> Parser a -> Parser a
+(<|>) a b = Parser {
+  parse = \state.
+    match parse a state
+      reply, Consumed -> reply, Consumed
+      Success a state, consumption -> Success a state, consumption
+
+      Failure err, Empty -> match parse b state
+        Failure         err', Empty -> Failure         (err <> err'), Empty
+        Recover a state err', Empty -> Recover a state (err <> err'), Empty
+        other -> other
+
+      Recover a state' err, Empty -> match parse b state
+        Failure     err', Empty -> Recover a state' (err <> err'), Empty
+        Recover _ _ err', Empty -> Recover a state' (err <> err'), Empty
+        other -> other
 }
-
-is :: Token -> Maybe str -> Token, Span -> bool
-is t' s' t, s = match s'
-  None -> t == t'
-  Some s' -> t == t' && spanStr s == s'
 
 ident :: Parser str
-ident = expect Ident None
-  |> map spanStr
+ident = token Ident None |> map spanText
 
-then :: Parser b -> Parser a -> Parser (a, b)
-then b a = a & b
+word :: str -> Parser Span
+word word = token Ident (Some word)
 
-else :: Parser a -> Parser a -> Parser a
-else b a = a | b
+symbol :: str -> Parser Span
+symbol sym = token Symbol (Some sym)
 
-always :: a -> Parser a
-always x = Parser {
-  start = \_. []
-  parse = \_ ts.
-    Some (Parsed {
-      output = x
-      report = default
-      rest   = ts
-    })
-}
+newline :: Parser Span
+newline = token Newline None
+
+indent :: Parser Span
+indent = token Indent None
+
+dedent :: Parser Span
+dedent = token Dedent None
+
+comment :: Parser Span
+comment = token Comment None
+
+line :: Parser ()
+line = newline
+  <|> comment
+  |> map \_. ()
+
+lines1Recover :: Parser ()
+lines1Recover = newline
+  <|> (recover (\s. s) newline >> newline)
+  >> lines0
+
+lines1 :: Parser ()
+lines1 = newline >> lines0
+
+lines0 :: Parser ()
+lines0 = many0 line |> map \_. ()
+
+many1 :: Parser a -> Parser [a]
+many1 p =
+  let head <- p
+  let tail <- many0 p
+  pure (tail <> [head])
+
+many0 :: Parser a -> Parser [a]
+many0 p =
+  let tail =
+    let head <- p
+    let tail <- many0 p
+    pure (tail <> [head])
+
+  tail <|> pure []
 
 maybe :: Parser a -> Parser (Maybe a)
-maybe p = p
-  |> map Some
-  |> else (always None)
+maybe p = map Some p <|> pure None
 
-recover :: Parser a -> Parser (Maybe a)
-recover p = p
-  |> map Some
-  |> else (recovery |> map \_. None)
+spanned :: (a -> Span -> b) -> Parser a -> Parser b
+spanned f p = Parser {
+  parse = \state.
+    let span = state
+      |> tokens
+      |> nextToken
+      |> right
 
-recovery :: Parser ()
-recovery = Parser {
-  start = \_. []
-  parse = \fs ts.
-    let _, start = peek ts
+    match parse p state
+      Success a state, Consumed ->
+        let span = span { end = offset state }
+        Success (f a span) state, Consumed
 
-    let ts = ts |> consumeWhile \t.
-      fs |> all \t', s'. not (is t' s' t)
+      Success a state, Empty ->
+        Success (f a span) state, Empty
 
-    let _, end = peek ts
+      Failure err, consumption ->
+        Failure err, consumption
 
-    let span = joinSpan start end
-
-    let expected = fs
-      |> map showExpected
-      |> join ', '
-
-    let diagnostic = 'unexpected token `' + spanStr start + '`'
-      |> error
-      |> label span ('expected one of: ' + expected)
-
-    Some (Parsed {
-      output = ()
-      report = Report {
-        isFailure   = true
-        diagnostics = [diagnostic]
-      }
-      rest   = ts
-    })
+      Recover a state err, consumption ->
+        Recover (f a span) state err, consumption
 }
 
-showExpected :: Token, Maybe str -> str
-showExpected t, s = match s
-  None   -> show t
-  Some s -> s
+token :: Token -> Maybe str -> Parser Span
+token token text = Parser {
+  parse = \state.
+    let actual, span = state
+      |> tokens
+      |> nextToken
 
-spanned :: Parser a -> Parser (a, Span)
-spanned p = Parser {
-  start = start p
-  parse = \fs ts.
-    let _, start = peek ts
+    match isExpected token text actual span
+      true ->
+        Success span (consume state), Consumed
 
-    parse p fs ts
-      |> map \result.
-        let _, end = peek (rest result)
-
-        Parsed {
-          output = output result, joinSpan start end
-          report = report result
-          rest   = rest result
-        }
+      false ->
+        let err = makeError state [Token token text]
+        Failure err, Empty
 }
 
-(&) :: Parser a -> Parser b -> Parser (a, b)
-(&) a b = Parser {
-  start = \fs. start a (start b fs)
-  parse = \fs ts.
-    match parse a (start b fs) ts
-      None -> None
-      Some a' -> match parse b fs (rest a')
-        None -> None
-        Some b' -> Some (Parsed {
-          output = output a', output b'
-          report = joinReport (report a') (report b')
-          rest   = rest b'
-        })
+reservedIdents = [
+  'as'
+  'extern'
+  'impl'
+  'import'
+  'let'
+  'local'
+  'match'
+  'trait'
+  'type'
+  'where'
+]
+
+reservedSymbols = [
+  '\\'
+  '.'
+  '->'
+  '<-'
+  '::'
+  '('
+  ')'
+  '['
+  ']'
+  '{'
+  '}'
+]
+
+isExpected expected text actual span =
+  match text
+    Some text -> text == spanText span
+    None ->
+      let isReserved = match actual
+        Ident  -> contains (spanText span) reservedIdents
+        Symbol -> contains (spanText span) reservedSymbols
+        _ -> false
+
+      expected == actual && not isReserved
+
+named :: str -> Parser a -> Parser a
+named s p = Parser {
+  parse = \state.
+    match parse p state
+      Failure err, Empty ->
+        let err = err { hints = [Label s] }
+        Failure err, Empty
+
+      other -> other
 }
 
-(|) :: Parser a -> Parser a -> Parser a
-(|) a b = Parser {
-  start = \fs. union (start a fs) (start b fs)
-  parse = \fs ts.
-    match parse a fs ts
-      Some result -> Some result
-      None -> parse b fs ts
+recover :: (Span -> a) -> Parser a -> Parser a
+recover f p = Parser {
+  parse = \state.
+    let span = state
+      |> tokens
+      |> nextToken
+      |> right
+
+    match parse p state
+      Failure err, consumption ->
+        Recover (f span) state err, consumption
+
+      other -> other
 }
 
-union a b = a
-  |> fold b \x xs.
-    match any ((==) x) xs
-      true -> xs
-      false -> x : xs
+addError :: ParseError -> State -> State
+addError err state =
+  addFailure (diagnose err state) state
+
+addFailure :: Diagnostic -> State -> State
+addFailure diagnostic state =
+  state {
+    report = report state <> failure diagnostic
+  }
+
+diagnose :: ParseError -> State -> Diagnostic
+diagnose err state =
+  let found, span = found err
+
+  let fullSpan = span {
+    end = max (end span) (offset state)
+  }
+
+  let hints = err
+    |> hints
+    |> map showHint
+    |> map \s. '`' + s + '`'
+    |> join ', '
+
+  let message = 'expected ' + hints
+
+  'unexpected `' + showActual found span + '`'
+    |> error |> label fullSpan message
+
+consume :: State -> State
+consume state =
+  state {
+    offset = state
+      |> tokens
+      |> nextToken
+      |> right
+      |> end
+
+    tokens = state
+      |> tokens
+      |> consumeToken
+  }
+
+makeError :: State -> [Hint] -> ParseError
+makeError state hints =
+  ParseError {
+    start = state
+      |> tokens
+      |> nextToken
+      |> right
+      |> start
+
+    found = state
+      |> tokens
+      |> nextToken
+
+    hints = hints
+  }
+
+showActual :: Token -> Span -> str
+showActual token span = match token
+  Newline -> show token
+  Indent  -> show token
+  Dedent  -> show token
+  Eoi     -> show token
+  _       -> spanText span
+
+showHint :: Hint -> str
+showHint hint = match hint
+  Token token text -> text |> or (show token)
+  Label label -> label

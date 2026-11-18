@@ -69,16 +69,25 @@ label span message diagnostic =
 trait Reporter a
   mapReport :: (Report -> Report) -> a
 
-joinReport a b = Report {
-  isFailure   = isFailure a || isFailure b
-  diagnostics = append (diagnostics a) (diagnostics b)
-}
+impl Semigroup Report
+  (<>) a b = Report {
+    isFailure   = isFailure a || isFailure b
+    diagnostics = diagnostics a <> diagnostics b
+  }
 
-joinSpan a b = Span {
-  source = source a
-  start  = min (start a) (start b)
-  end    = max (end a) (end b)
-}
+impl Semigroup Span
+  (<>) a b = Span {
+    source = source a
+    start  = min (start a) (start b)
+    end    = max (end a) (end b)
+  }
+
+failure :: Diagnostic -> Report
+failure diagnostic =
+  Report {
+    isFailure   = true
+    diagnostics = [diagnostic]
+  }
 
 report :: Diagnostic -> a where a :: Reporter
 report diagnostic = mapReport \report.
@@ -99,7 +108,7 @@ impl Show Span
       + ':'
       + path (source span)
 
-spanStr :: Span -> str
-spanStr span =
+spanText :: Span -> str
+spanText span =
   contents (source span)
     |> slice (start span) (end span)

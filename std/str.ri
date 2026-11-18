@@ -43,5 +43,10 @@ split x s = match find x s
     head : split x tail
   None -> []
 
+replicate :: int -> str -> str
+replicate n s = match n
+  0 -> ''
+  n -> s + replicate (n - 1) s
+
 findRaw :: str -> str -> int
 findRaw x s = intrinsic.strFind x s

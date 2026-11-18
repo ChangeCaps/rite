@@ -1,0 +1,80 @@
+import 'rite:diagnostic/diagnostic'
+import 'rite:parse/parser'
+import 'rite:parse/kind'
+
+type Ty =
+  | Var   VarTy   Span
+  | Lam   LamTy   Span
+  | Bin   BinTy   Span
+  | App   AppTy   Span
+  | List  ListTy  Span
+  | Where WhereTy Span
+  | Error         Span
+
+type VarTy = VarTy {
+  name :: str
+}
+
+type LamTy = LamTy {
+  in  :: Ty
+  out :: Ty
+}
+
+type BinTy = BinTy {
+  op  :: str
+  lhs :: Ty
+  rhs :: Ty
+}
+
+type AppTy = AppTy {
+  lam :: Ty
+  in  :: Ty
+}
+
+type ListTy = ListTy {
+  item :: Ty
+}
+
+type WhereTy = WhereTy {
+  for  :: Ty
+  in   :: Ty
+  kind :: Kind
+}
+
+impl Show Ty
+  show ty = match ty
+    Var ty _ -> '(Var '
+      + name ty + ')'
+
+    Lam ty _ -> '(Lam '
+      + show (in ty) + ' '
+      + show (out ty) + ')'
+
+    Bin ty _ -> '(Bin '
+      + op ty + ' '
+      + show (lhs ty) + ' '
+      + show (rhs ty) + ')'
+
+    App ty _ -> '(App '
+      + show (lam ty) + ' '
+      + show (in ty) + ')'
+
+    List ty _ -> '(List '
+      + show (item ty) + ')'
+
+    Where ty _ -> '(Where '
+      + show (for ty) + ' '
+      + show (in ty) + ')'
+
+    Error _ -> 'Error'
+
+parseTy :: Parser Ty
+parseTy = parseVarTy
+  |> named '{type}'
+
+parseVarTy = spanned Var <|
+  let name <- ident
+
+  pure <| VarTy {
+    name = name
+  }

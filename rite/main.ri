@@ -5,7 +5,7 @@ import 'rite:diagnostic/format'
 import 'rite:parse/lex'
 import 'rite:parse/parser'
 import 'rite:parse/token'
-import 'rite:parse/expr'
+import 'rite:parse/stmt'
 
 main :: io ()
 main =
@@ -21,17 +21,17 @@ read =
     contents = contents
   }
 
-  let ts, report = lex source
+  let ts, lexReport = lex source
+  let expr, parseReport = runParser parseStmts ts
 
-  let result = expr
-    |> runParser ts
+  lexReport <> parseReport
+    |> formatReport
+    |> println
+    |> lift
 
-  match result
-    Some (_, report) ->
-      report
-        |> formatReport
-        |> println
-        |> lift
-    None -> pure ()
+  expr
+    |> show
+    |> println
+    |> lift
 
   pure ()

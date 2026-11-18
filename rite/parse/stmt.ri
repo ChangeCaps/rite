@@ -1,0 +1,155 @@
+import 'rite:diagnostic/diagnostic'
+import 'rite:parse/parser'
+import 'rite:parse/expr'
+import 'rite:parse/kind'
+import 'rite:parse/pat'
+import 'rite:parse/ty'
+
+type Stmt =
+  | Def   DefStmt   Span
+  | Asc   AscStmt   Span
+  | Impl  ImplStmt  Span
+  | Trait TraitStmt Span
+  | Error           Span
+
+type DefStmt = DefStmt {
+  name :: str
+  args :: [Pat]
+  out  :: Expr
+}
+
+type AscStmt = AscStmt {
+  name :: str
+  ty   :: Ty
+}
+
+type ImportStmt = ImportStmt {
+  path  :: str
+  alias :: Maybe str
+}
+
+type TypeStmt = TypeStmt {
+  name  :: str
+  in    :: [str]
+}
+
+type ImplStmt = ImplStmt {
+  name    :: str
+  in      :: Ty
+  members :: [ImplMember]
+}
+
+type ImplMember = ImplMember {
+  name :: str
+  args :: [Pat]
+  out  :: Expr
+}
+
+type TraitStmt = TraitStmt {
+  name    :: str
+  in      :: str
+  kind    :: Maybe Kind
+  members :: [TraitMethod]
+}
+
+type TraitMethod = TraitMethod {
+  name :: str
+  ty   :: Ty
+}
+
+impl Show Stmt
+  show stmt = match stmt
+    Def stmt _ -> '(Def '
+      + name stmt + ' '
+      + show (args stmt) + ' '
+      + show (out stmt) + ')'
+
+    Asc stmt _ -> '(Asc '
+      + name stmt + ' '
+      + show (ty stmt) + ')'
+
+    Impl  stmt _ -> '(Impl)'
+    Trait stmt _ -> '(Trait)'
+
+    Error _ -> 'Error'
+
+parseStmts :: Parser [Stmt]
+parseStmts =
+  lines0
+  many0 <|
+    let stmt <- recover Error parseStmt
+    lines1
+    pure stmt
+
+parseStmt :: Parser Stmt
+parseStmt = parseDefStmt
+  <|> parseTraitStmt
+  |> named '{statement}'
+
+parseDefStmt = spanned (\f s. f s) <|
+  let name <- ident
+
+  let def =
+    let args <- many0 pat
+
+    symbol '='
+
+    let out <- exprRecover
+
+    pure <| Def (DefStmt {
+      name = name
+      args = args
+      out  = out
+    })
+
+  let asc =
+    symbol '::'
+    let ty <- parseTy
+
+    pure <| Asc (AscStmt {
+      name = name
+      ty   = ty
+    })
+
+  def <|> asc
+
+parseTraitStmt = spanned Trait <|
+  word 'trait'
+
+  let name    <- ident
+  let in      <- ident
+  let kind    <- maybe parseKind
+  let members <- parseTraitMembers
+
+  pure <| TraitStmt {
+    name    = name
+    in      = in
+    kind    = kind
+    members = members
+  }
+
+parseTraitMembers =
+  lines1Recover
+  named '{trait members}' indent
+
+  let members <- many0 <|
+    let method <- parseTraitMethod
+      |> map Some
+      |> recover \_. None
+
+    lines1Recover
+    pure method
+
+  dedent
+
+  members |> flatten |> pure
+
+parseTraitMethod = named '{trait member}' <|
+  let name <- ident
+  symbol '::'
+  let ty <- parseTy
+
+  pure <| TraitMethod {
+    name = name
+    ty   = ty
+  }

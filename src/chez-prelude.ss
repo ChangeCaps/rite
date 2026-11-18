@@ -44,7 +44,10 @@
 
 (define (str-int x) (number->string (force x)))
 (define (str-len x) (string-length (force x)))
-(define (str-concat x y) (string-append (force x) (force y)))
+
+(define (str-concat x y)
+    (string-append (force x) (force y)))
+
 (define (str-char n s)
     (if (< (force n) (string-length (force s)))
         (string (string-ref (force s) (force n)))

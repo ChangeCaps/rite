@@ -1,3 +1,5 @@
+use std::sync::atomic::{AtomicU64, Ordering};
+
 use crate::{
     ir::{Case, Expr, Lit, Prim},
     primitive::{BinPrim, PrimNum, UnPrim},
@@ -95,10 +97,14 @@ fn gen_expr(expr: &Expr) -> String {
         }
 
         Expr::Case(input, case, default) => {
-            let mut output = default
-                .as_deref()
-                .map(gen_expr)
-                .unwrap_or_else(|| String::from("'error"));
+            let mut output = default.as_deref().map(gen_expr).unwrap_or_else(|| {
+                static NEXT: AtomicU64 = AtomicU64::new(0);
+
+                format!(
+                    "(error 'case \"missed{}\" scrutinee)",
+                    NEXT.fetch_add(1, Ordering::SeqCst),
+                )
+            });
 
             match case {
                 Case::Cons(alts) => {
@@ -190,6 +196,6 @@ fn gen_expr(expr: &Expr) -> String {
             }
         },
 
-        Expr::Note(_, expr) => gen_expr(expr),
+        Expr::Note(note, expr) => format!(";{note}\n{}", gen_expr(expr)),
     }
 }

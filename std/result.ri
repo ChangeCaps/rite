@@ -1,5 +1,11 @@
 type Result e a = Ok a | Err e
 
+impl Functor Result e
+  map f x =
+    match x
+      Ok x -> Ok (f x)
+      Err e -> Err e
+
 impl Monad Result e
   (>>=) m f =
     match m

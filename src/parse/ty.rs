@@ -112,7 +112,7 @@ pub fn paren_ty(parser: &mut Parser<'_>) -> ParenTy {
     let start = parser.expect(Token::LParen);
 
     let ty = match parser.peek() {
-        Token::LBracket => {
+        Token::LBracket if parser.peek_nth(1) == Token::RBracket => {
             let start = parser.expect(Token::LBracket);
             let end = parser.expect(Token::RBracket);
             let span = start.join(end);

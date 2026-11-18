@@ -16,9 +16,11 @@ pub enum Operator {
     LtPipe,
     BackGt,
     LtBack,
+    LtPipeGt,
     GtGtEqual,
     GtGt,
     LtLt,
+    LtGt,
     Gt,
     Lt,
     GtEqual,
@@ -43,9 +45,11 @@ impl Operator {
         Self::LtPipe,
         Self::BackGt,
         Self::LtBack,
+        Self::LtPipeGt,
         Self::GtGtEqual,
         Self::GtGt,
         Self::LtLt,
+        Self::LtGt,
         Self::Gt,
         Self::Lt,
         Self::GtEqual,
@@ -70,9 +74,11 @@ impl Operator {
             Self::LtPipe => &Token::LtPipe,
             Self::BackGt => &Token::BackGt,
             Self::LtBack => &Token::LtBack,
+            Self::LtPipeGt => &Token::LtPipeGt,
             Self::GtGtEqual => &Token::GtGtEqual,
             Self::GtGt => &Token::GtGt,
             Self::LtLt => &Token::LtLt,
+            Self::LtGt => &Token::LtGt,
             Self::Gt => &Token::Gt,
             Self::Lt => &Token::Lt,
             Self::GtEqual => &Token::GtEqual,
@@ -102,13 +108,14 @@ impl Operator {
             | Self::Lt
             | Self::GtEqual
             | Self::LtEqual => 2,
-            Self::PipeGt | Self::BackGt | Self::GtGtEqual | Self::GtGt => 3,
+            Self::PipeGt | Self::BackGt | Self::GtGtEqual | Self::GtGt | Self::LtPipeGt => 3,
             Self::LtPipe | Self::LtBack | Self::LtLt => 4,
             Self::Comma => 5,
-            Self::Colon => 6,
-            Self::Pipe | Self::Amp => 7,
-            Self::Plus | Self::Minus => 8,
-            Self::Star | Self::Slash => 9,
+            Self::LtGt => 6,
+            Self::Colon => 7,
+            Self::Pipe | Self::Amp => 8,
+            Self::Plus | Self::Minus => 9,
+            Self::Star | Self::Slash => 10,
         }
     }
 
@@ -118,6 +125,7 @@ impl Operator {
             | Self::LtPipe
             | Self::BackGt
             | Self::LtBack
+            | Self::LtPipeGt
             | Self::GtGtEqual
             | Self::GtGt
             | Self::LtLt
@@ -137,7 +145,7 @@ impl Operator {
             | Self::Star
             | Self::Slash => Assoc::Left,
 
-            Self::Colon => Assoc::Right,
+            Self::Colon | Self::LtGt => Assoc::Right,
         }
     }
 

@@ -1,38 +1,167 @@
-import 'rite:parse/parser'
 import 'rite:diagnostic/diagnostic'
+import 'rite:parse/parser'
+import 'rite:parse/pat'
 
 type Expr =
-  | Var VarEpxr
-  | Error ErrorExpr
+  | Var   VarExpr Span
+  | Let   LetExpr Span
+  | Lam   LamExpr Span
+  | App   AppExpr Span
+  | Seq   SeqExpr Span
+  | Error Span
 
 type VarExpr = VarExpr {
   name :: str
-  span :: Span
 }
 
-type ErrorExpr = ErrorExpr {
-  span :: Span
+type LetExpr = LetExpr {
+  in   :: Expr
+  bind :: bool
+  var  :: Pat
+  out  :: Expr
 }
+
+type LamExpr = LamExpr {
+  args :: [Pat]
+  out  :: Expr
+}
+
+type AppExpr = AppExpr {
+  lam :: Expr
+  arg :: Expr
+}
+
+type SeqExpr = SeqExpr {
+  lhs :: Expr
+  rhs :: Expr
+}
+
+impl Show Expr
+  show expr = match expr
+    Var expr _ -> '(Var '
+      + name expr + ')'
+
+    Let expr _ -> '(Let '
+      + show (in expr) + ' '
+      + show (var expr) + ' '
+      + show (bind expr) + ' '
+      + show (out expr) + ')'
+
+    Lam expr _ -> '(Lam '
+      + show (args expr) + ' '
+      + show (out expr) + ')'
+
+    App expr _ -> '(App '
+      + show (lam expr) + ' '
+      + show (arg expr) + ')'
+
+    Seq expr _ -> '(Seq '
+      + show (lhs expr) + ' '
+      + show (rhs expr) + ')'
+
+    Error _ -> 'Error'
+
+exprSpan :: Expr -> Span
+exprSpan expr = match expr
+  Var _ span -> span
+  Let _ span -> span
+  Lam _ span -> span
+  App _ span -> span
+  Seq _ span -> span
+  Error span -> span
+
+exprRecover :: Parser Expr
+exprRecover = recover Error expr
 
 expr :: Parser Expr
-expr = varExpr
-  |> else errorExpr
+expr = blockExpr
+  <|> appExpr
+  |> named '{expression}'
+
+blockExpr :: Parser Expr
+blockExpr =
+  lines1
+  indent
+
+  let expr <- exprBlock
+
+  lines0
+  dedent
+
+  pure expr
+
+exprBlock :: Parser Expr
+exprBlock = letExpr <|> seqExpr
+
+letExpr :: Parser Expr
+letExpr = spanned Let <|
+  word 'let'
+
+  let var <- pat
+
+  let bind <- (symbol '=' >> pure false)
+    <|> (symbol '<-' >> pure true)
+
+  let in <- recover Error expr
+
+  lines1
+
+  let out <- recover Error exprBlock
+
+  pure <| LetExpr {
+    in   = in
+    bind = bind
+    var  = var
+    out  = out
+  }
+
+seqExpr :: Parser Expr
+seqExpr =
+  let lhs <- expr
+  lines0
+  let rhs <- maybe exprBlock
+
+  rhs
+    |> map \rhs.
+      Seq (SeqExpr {
+        lhs = lhs
+        rhs = rhs
+      }) (exprSpan lhs <> exprSpan rhs)
+    |> or lhs
+    |> pure
+
+appExpr :: Parser Expr
+appExpr =
+  let lam <- termExpr
+  let args <- many0 termExpr
+
+  args
+    |> fold lam \arg lam.
+      App (AppExpr {
+        lam = lam
+        arg  = arg
+      }) (exprSpan lam <> exprSpan arg)
+    |> pure
+
+termExpr :: Parser Expr
+termExpr = varExpr <|> lamExpr
 
 varExpr :: Parser Expr
-varExpr = ident
-  |> spanned
-  |> map \name, span.
-    VarExpr {
-      name = name
-      span = span
-    }
-  |> map Var
+varExpr = spanned Var <|
+  let name <- ident
 
-errorExpr :: Parser Expr
-errorExpr = recovery
-  |> spanned
-  |> map \_, span.
-    ErrorExpr {
-      span = span
-    }
-  |> map Error
+  pure <| VarExpr {
+    name = name
+  }
+
+lamExpr :: Parser Expr
+lamExpr = spanned Lam <|
+  symbol '\\'
+  let args <- many1 pat
+  symbol '.'
+  let out <- recover Error expr
+
+  pure <| LamExpr {
+    args = args
+    out  = out
+  }

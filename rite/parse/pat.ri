@@ -1,0 +1,36 @@
+import 'rite:parse/parser'
+import 'rite:diagnostic/diagnostic'
+
+type Pat =
+  | Var   VarPat Span
+  | Error Span
+
+type VarPat = VarPat {
+  name :: str
+  args :: [Pat]
+}
+
+impl Show Pat
+  show pat = match pat
+    Var pat _ -> '(Var '
+      + name pat + ')'
+
+    Error _ -> 'Error'
+
+patSpan :: Pat -> Span
+patSpan pat = match pat
+  Var _ span -> span
+  Error span -> span
+
+pat :: Parser Pat
+pat = varPat
+
+varPat :: Parser Pat
+varPat = spanned Var <|
+  let name <- ident
+
+  pure <| VarPat {
+    name = name
+    args = []
+  }
+

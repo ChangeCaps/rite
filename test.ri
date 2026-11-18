@@ -1,1 +1,2 @@
--
+trait Foo a
+  a :: Int -> Int

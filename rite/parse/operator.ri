@@ -1,0 +1,10 @@
+import 'rite:diagnostic/diagnostic'
+import 'rite:parse/parser'
+import 'rite:parse/token'
+
+type Operator = Operator {
+  name :: str
+  span :: span
+}
+
+resevedSymbols = ['\\'; '.'; '->'; '='; '::']

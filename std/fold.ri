@@ -1,0 +1,8 @@
+trait Fold t
+  fold :: b -> (a -> b -> b) -> t a -> b
+
+reduce :: (a -> a -> a) -> t a -> Maybe a where t :: Fold
+reduce f xs = xs |> fold None \x acc.
+  match acc
+    Some y -> Some (f x y)
+    None -> Some x

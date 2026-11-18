@@ -13,12 +13,18 @@ not x = match x
 (!=) :: a -> a -> bool where a :: Eq
 (!=) x y = not (x == y)
 
+(>=) :: a -> a -> bool where a :: Eq + Cmp
+(>=) x y = x == y || x > y
+
+(<=) :: a -> a -> bool where a :: Eq + Cmp
+(<=) x y = x == y || x < y
+
 max :: a -> a -> a where a :: Cmp
-max a b = match a > b
-  true  -> a
-  false -> b
+max x y = match x > y
+  true  -> x
+  false -> y
 
 min :: a -> a -> a where a :: Cmp
-min a b = match a < b
-  true  -> a
-  false -> b
+min x y = match x < y
+  true  -> x
+  false -> y

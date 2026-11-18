@@ -29,6 +29,7 @@ pub enum Token {
 
     /* three-character symbols */
     GtGtEqual,
+    LtPipeGt,
 
     /* two-character symbols */
     LRParen,
@@ -105,6 +106,7 @@ impl Token {
 
             /* three-character symbols */
             Self::GtGtEqual => ">>=",
+            Self::LtPipeGt => "<|>",
 
             /* two-character symbols */
             Self::LRParen => "()",

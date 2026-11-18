@@ -159,6 +159,7 @@ impl<'a> State<'a> {
         self.defs.insert(key, var.clone());
 
         let subst = self.subst.clone();
+        self.subst = HashMap::new();
         self.unify(&Ty::Var(def.var.clone()), &ty);
 
         let expr = self.expr(&def.expr);
@@ -225,6 +226,7 @@ impl<'a> State<'a> {
 
         // save the current substitution table and unify method type with the expected type
         let subst = self.subst.clone();
+        self.subst = HashMap::new();
         self.unify(method.expr.ty(), &ty);
 
         // lower the method expression and restore the substitution table
@@ -415,13 +417,27 @@ impl<'a> State<'a> {
         let row = rows.first().unwrap();
         let pat = row.pats.last().unwrap();
 
-        match pat {
-            Pat::Str(..) => self.bind_str(input, inputs, rows),
-            Pat::Int(..) => self.bind_int(input, inputs, rows),
-            Pat::Bind(..) => self.bind_bind(input, inputs, rows),
-            Pat::Cons(..) => self.bind_cons(input, inputs, rows),
+        let mut expr = match pat {
+            Pat::Str(..) => self.bind_str(input.clone(), inputs, rows.clone()),
+            Pat::Int(..) => self.bind_int(input.clone(), inputs, rows.clone()),
+            Pat::Bind(..) => self.bind_bind(input.clone(), inputs, rows.clone()),
+            Pat::Cons(..) => self.bind_cons(input.clone(), inputs, rows.clone()),
             Pat::Error(..) => unreachable!(),
+        };
+
+        for row in &rows {
+            if let Pat::Bind(pat) = row.pats.last().unwrap()
+                && let Some(ref var) = pat.var
+            {
+                expr = Expr::Let(
+                    Box::new(input.clone()),
+                    var.clone(),
+                    Box::new(expr),
+                );
+            }
         }
+
+        expr
     }
 
     fn bind_str(&mut self, input: Expr, inputs: Vec<Expr>, rows: Vec<Row<'_>>) -> Expr {
@@ -510,19 +526,9 @@ impl<'a> State<'a> {
         )
     }
 
-    fn bind_bind(&mut self, input: Expr, inputs: Vec<Expr>, mut rows: Vec<Row<'_>>) -> Expr {
+    fn bind_bind(&mut self, _input: Expr, inputs: Vec<Expr>, mut rows: Vec<Row<'_>>) -> Expr {
         for arm in &mut rows {
-            let pat = arm.pats.pop().unwrap();
-
-            if let Pat::Bind(pat) = pat
-                && let Some(ref var) = pat.var
-            {
-                arm.output = Expr::Let(
-                    Box::new(input.clone()),
-                    var.clone(),
-                    Box::new(arm.output.clone()),
-                );
-            }
+            arm.pats.pop().unwrap();
         }
 
         self.bind(inputs, rows)
@@ -536,8 +542,7 @@ impl<'a> State<'a> {
             let pat = arm.pats.pop().unwrap();
 
             match pat {
-                pat @ Pat::Bind(..) => {
-                    arm.pats.push(pat);
+                Pat::Bind(..) => {
                     defaults.push(arm);
                 }
 
@@ -591,9 +596,6 @@ impl<'a> State<'a> {
         let default = match defaults.is_empty() {
             true => None,
             false => {
-                let mut inputs = inputs.clone();
-                inputs.push(input.clone());
-
                 let expr = self.bind(inputs, defaults);
                 Some(Box::new(expr))
             }
@@ -607,7 +609,7 @@ impl<'a> State<'a> {
     }
 }
 
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 struct Row<'a> {
     pats:   Vec<&'a Pat>,
     output: Expr,

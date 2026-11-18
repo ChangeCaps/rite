@@ -3,12 +3,27 @@ import 'rite:diagnostic/diagnostic'
 formatReport :: Report -> str
 formatReport report =
   diagnostics report
+    |> reverse
     |> map formatDiagnostic
     |> join '\n'
 
 formatDiagnostic :: Diagnostic -> str
 formatDiagnostic diagnostic =
+  let labels = labels diagnostic
+    |> reverse
+    |> map resolveLabel
+
+  let indent = labels
+    |> map (line \> show \> len)
+    |> reduce max
+    |> or 1
+
+  let labels = labels
+    |> map (formatLabel indent)
+    |> join '\n'
+
   formatHeader diagnostic
+    + labels
     + reset
 
 formatHeader :: Diagnostic -> str
@@ -21,26 +36,94 @@ formatHeader diagnostic =
     Error   -> red
     Warning -> yellow
 
-  color + bold + prefix + white + ': ' + message diagnostic
+  color + bold + prefix + white + ': ' + message diagnostic + '\n'
+
+formatLabel :: int -> ResolvedLabel -> str
+formatLabel indent label =
+  let lineNumber = show (line label)
+  let line, highlightStart, highlightEnd =
+    head (lines label) |> or ('', 0, 0)
+
+  replicate indent ' '
+    + blue + bold + '--> '
+    + reset + formatSpan label + '\n'
+
+    # top line
+    + replicate indent ' '
+    + blue + bold + ' |\n'
+
+    # line number and subject
+    + lineNumber
+    + replicate (indent - len lineNumber) ' ' + ' | '
+    + reset + line + '\n'
+
+    # highlight and label
+    + replicate indent ' '
+    + blue + bold + ' |'
+    + replicate (column label) ' '
+    + replicate (max (highlightEnd - highlightStart) 1) '^'
+    + ' ' + message label
+
+formatSpan :: ResolvedLabel -> str
+formatSpan label =
+  path label + ':'
+    + show (line label) + ':'
+    + show (column label)
 
 resolveLabel :: Label -> ResolvedLabel
 resolveLabel label =
-  label
-    |> span
-    |> source
-    |> contents
+  let span = span label
+  let source = source span
+
+  let label = ResolvedLabel {
+    path    = path source
+    message = message label
+    line    = 1
+    column  = 0
+    lines   = []
+  }
+
+  contents source
     |> split '\n'
+    |> fold (0, label) \s lineStart, label.
+      let lineEnd = lineStart + len s
+
+      let label = match lineEnd >= start span
+        true ->
+          label {
+            column = match column label
+              0 -> start span - lineStart + 1
+              _ -> column label
+
+            lines = match lineStart < end span
+              false -> lines label
+              true  ->
+                let highlightStart = max lineStart (start span)
+                let highlightEnd = min lineEnd (end span)
+                (s, highlightStart, highlightEnd) : lines label
+          }
+
+        false ->
+          label {
+            line = line label + 1
+          }
+
+      lineEnd + len '\n', label
+    |> right
+
 
 type ResolvedLabel = ResolvedLabel {
   path    :: str
   message :: str
   line    :: int
   column  :: int
-  lines   :: [str]
+  lines   :: [str, int, int]
 }
 
 red    = '\e[31m'
+green  = '\e[32m'
 yellow = '\e[33m'
+blue   = '\e[34m'
 white  = '\e[37m'
 bold   = '\e[1m'
 reset  = '\e[0m'
