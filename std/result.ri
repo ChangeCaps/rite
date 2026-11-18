@@ -19,18 +19,24 @@ impl Show Result e a where e :: Show where a :: Show
     Ok x  -> 'Ok ' + show x
     Err e -> 'Err ' + show e
 
-type Try m e a = Try (m (Result e a))
+type Try e m a = Try (m (Result e a))
 
-try :: m (Result e a) -> Try m e a
+try :: m (Result e a) -> Try e m a
 try m = Try m
 
-lift :: m a -> Try m e a where m :: Monad
+lift :: m a -> Try e m a where m :: Monad
 lift m = m >>= (Ok \> pure) |> try
 
-unwrap :: Try m e a -> m (Result e a)
+fail :: e -> Try e m a where m :: Monad
+fail err = pure (Err err) |> try
+
+unwrap :: Try e m a -> m (Result e a)
 unwrap (Try m) = m
 
-impl Monad Try m e where m :: Monad
+impl Functor Try e m where m :: Functor
+  map f m = m |> unwrap |> map (map f) |> try
+
+impl Monad Try e m where m :: Monad
   (>>=) m f = try <|
     let x <- unwrap m
     match x

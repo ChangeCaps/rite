@@ -24,6 +24,14 @@ startsWith prefix s = take (len prefix) s == prefix
 char :: int -> str -> str
 char n s = intrinsic.strChar n s
 
+chars :: str -> [str]
+chars s =
+  let c = char 0 s
+
+  match len c
+    0 -> []
+    len -> take len s : chars (skip len s)
+
 has :: str -> str -> bool
 has x s = isSome (find x s)
 

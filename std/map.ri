@@ -1,0 +1,48 @@
+type Map k v = Empty | Node (MapNode k v)
+
+type MapNode k v = MapNode {
+  keyHash :: int
+  key     :: k
+  value   :: v
+  left    :: Map k v
+  right   :: Map k v
+}
+
+impl Default Map k v
+  default = Empty
+
+trait Hash a
+  hash :: a -> int
+
+set :: k -> v -> Map k v -> Map k v where k :: Eq + Hash
+set key value map = setHashed (hash key) key value map
+
+get :: k -> Map k v -> Maybe v where k :: Eq + Hash
+get key map = getHashed (hash key) key map
+
+newMapNode :: int -> k -> v -> MapNode k v
+newMapNode hash key value = MapNode {
+  keyHash = hash
+  key     = key
+  value   = value
+  left    = Empty
+  right   = Empty
+}
+
+setHashed :: int -> k -> v -> Map k v -> Map k v where k :: Eq
+setHashed h k v map = match map
+  Empty -> Node (newMapNode h k v)
+  Node node -> match keyHash node == h && key node == k
+    true -> Node (node { value = v })
+    false -> match h < keyHash node
+      true  -> Node (node { left  = setHashed h k v (left  node) })
+      false -> Node (node { right = setHashed h k v (right node) })
+
+getHashed :: int -> k -> Map k v -> Maybe v where k :: Eq
+getHashed h k map = match map
+  Empty -> None
+  Node node -> match keyHash node == h && key node == k
+    true -> Some (value node)
+    false -> match h < keyHash node
+      true  -> getHashed h k (left  node)
+      false -> getHashed h k (right node)

@@ -1,0 +1,42 @@
+import 'std:state'
+
+import 'rite:diagnostic/diagnostic'
+import 'rite:parse/expr' as parseExpr
+import 'rite:rename/rename'
+import 'rite:rename/env'
+
+type Expr =
+  | ExprVar VarExpr Span
+  | Error Span
+
+type Var = Var {
+  unique :: int
+  name   :: str
+  span   :: Span
+}
+
+type VarExpr = VarExpr {
+  var :: Var
+}
+
+renameExpr :: parseExpr.Expr -> Env -> Try str (State Rename) Expr
+renameExpr expr env =
+  match expr
+    parseExpr.Var expr span -> renameVarExpr expr span env
+    _ -> panic ('unimplemented expr: ' + show expr)
+
+renameVarExpr parse span env =
+  let val <- resolveVal
+    <| name parse
+    <| span
+    <| env
+
+  match val
+    Some val -> match val
+      ValVar var ->
+        pure <| ExprVar (VarExpr {
+          var = var
+        }) span
+
+    None ->
+      pure (Error span)

@@ -18,6 +18,7 @@ pub enum Ty {
 
 #[derive(Debug)]
 pub struct VarTy {
+    pub path: Vec<Ident>,
     pub var:  Ident,
     pub span: Span,
 }

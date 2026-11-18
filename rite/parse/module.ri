@@ -1,0 +1,23 @@
+import 'rite:diagnostic/diagnostic'
+import 'rite:parse/parser'
+import 'rite:parse/token'
+import 'rite:parse/stmt'
+
+type Module = Module {
+  path  :: str
+  stmts :: [Stmt]
+}
+
+impl Show Module
+  show module = show (stmts module)
+
+parseModule :: str -> Tokens -> Module, Report
+parseModule path tokens =
+  let stmts, report = runParser parseStmts tokens
+
+  let module = Module {
+    path  = path
+    stmts = or [] stmts
+  }
+
+  module, report

@@ -14,8 +14,18 @@ type ArityKind = ArityKind {
   arity :: int
 }
 
+kindSpan :: Kind -> Span
+kindSpan kind = match kind
+  Var   _ span -> span
+  Arity _ span -> span
+  Error   span -> span
+
+parseKindRecover :: Parser Kind
+parseKindRecover = recover Error parseKind
+
 parseKind :: Parser Kind
 parseKind = parseVarKind
+  |> named '{kind}'
 
 parseVarKind :: Parser Kind
 parseVarKind = spanned Var <|

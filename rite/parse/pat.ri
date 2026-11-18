@@ -22,11 +22,11 @@ patSpan pat = match pat
   Var _ span -> span
   Error span -> span
 
-pat :: Parser Pat
-pat = varPat
+parsePat :: Parser Pat
+parsePat = parseVarPat
 
-varPat :: Parser Pat
-varPat = spanned Var <|
+parseVarPat :: Parser Pat
+parseVarPat = spanned Var <|
   let name <- ident
 
   pure <| VarPat {

@@ -3,16 +3,15 @@ import 'std:fs'
 import 'rite:diagnostic/diagnostic'
 import 'rite:diagnostic/format'
 import 'rite:parse/lex'
-import 'rite:parse/parser'
-import 'rite:parse/token'
-import 'rite:parse/stmt'
+import 'rite:parse/module'
+import 'rite:rename/rename'
 
 main :: io ()
 main =
   let result <- unwrap read
   print (show result)
 
-read :: Try io IoError ()
+read :: Try IoError io ()
 read =
   let contents <- try <| readFile 'test.ri'
 
@@ -22,16 +21,17 @@ read =
   }
 
   let ts, lexReport = lex source
-  let expr, parseReport = runParser parseStmts ts
+  let module, parseReport = parseModule 'test.ri' ts
 
-  lexReport <> parseReport
-    |> formatReport
-    |> println
-    |> lift
+  match rename [module]
+    Err err -> lift <| println ('internal error: ' + err)
+    Ok (unit, renameReport) ->
+      lexReport <> parseReport <> renameReport
+        |> formatReport
+        |> println
+        |> lift
 
-  expr
-    |> show
-    |> println
-    |> lift
-
-  pure ()
+      module
+        |> show
+        |> println
+        |> lift

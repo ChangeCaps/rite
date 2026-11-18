@@ -34,7 +34,6 @@ pub const PRELUDE: &[&str] = &[
     "std:result",
     "std:semigroup",
     "std:show",
-    "std:state",
     "std:str",
     "std:system",
     "std:tuple",

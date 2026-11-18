@@ -104,9 +104,26 @@ pub fn int_pat(parser: &mut Parser<'_>, int: i64) -> Pat {
 pub fn cons_pat(parser: &mut Parser<'_>, allow_cons: bool) -> Pat {
     let span = parser.span();
 
-    let Some(var) = parser.expect_ident() else {
+    let Some(mut var) = parser.expect_ident() else {
         return Pat::Error(ErrorPat { span });
     };
+
+    let mut path = Vec::new();
+
+    while parser.peek() == Token::Dot && allow_cons {
+        parser.expect(Token::Dot);
+
+        match parser.expect_ident() {
+            Some(ident) => {
+                path.push(var);
+                var = ident;
+            }
+
+            None => {
+                return Pat::Error(ErrorPat { span });
+            }
+        }
+    }
 
     let mut args = Vec::new();
 
@@ -114,7 +131,12 @@ pub fn cons_pat(parser: &mut Parser<'_>, allow_cons: bool) -> Pat {
         args.push(term_pat(parser, false));
     }
 
-    Pat::Cons(ConsPat { var, args, span })
+    Pat::Cons(ConsPat {
+        path,
+        var,
+        args,
+        span,
+    })
 }
 
 pub fn wild_pat(parser: &mut Parser<'_>) -> Pat {

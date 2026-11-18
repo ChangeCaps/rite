@@ -57,6 +57,11 @@ impl<'a> State<'a> {
         }
 
         match (lhs, rhs) {
+            (ty, Ty::Var(var)) => panic!(
+                "ambiguous type during lowering: {ty:?} {var:?} {:?}",
+                var.span(),
+            ),
+
             (Ty::Var(var), ty) => {
                 self.subst.insert(var.unique(), ty.clone());
             }

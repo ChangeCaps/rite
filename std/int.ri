@@ -1,3 +1,5 @@
+import 'std:map'
+
 import 'intrinsic' as intrinsic
 
 impl Add int
@@ -31,6 +33,9 @@ impl Cmp int
   (<) a b = match intrinsic.intLt a b
     0 -> false
     _ -> true
+
+impl Hash int
+  hash x = x
 
 impl Show int
   show x = intrinsic.intStr x

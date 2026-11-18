@@ -1,0 +1,105 @@
+import 'std:state'
+
+import 'rite:diagnostic/diagnostic'
+import 'rite:parse/module' as parseModule
+import 'rite:parse/stmt' as parseStmt
+import 'rite:parse/expr' as parseExpr
+import 'rite:rename/rename'
+import 'rite:rename/expr'
+import 'rite:rename/env'
+import 'rite:rename/ty'
+
+type RegStmts = RegStmts {
+  defs :: [RegDefStmt]
+}
+
+type RegDefStmt = RegDefStmt {
+  module :: int
+  unique :: int
+  expr   :: parseExpr.Expr
+  span   :: Span
+}
+
+type Def = Def {
+  unique :: int
+  ty     :: Maybe Ty
+  expr   :: Expr
+  span   :: Span
+}
+
+renameModules :: [parseModule.Module] -> Try str (State Rename) ()
+renameModules modules =
+  let env = default
+
+  let regStmts = RegStmts {
+    defs = []
+  }
+
+  let regStmts <- modules
+    |> reverse
+    |> mfold regStmts \module regStmts.
+      let mod <- addUnique
+
+      let regStmts, env <- stmts module
+        |> reverse
+        |> mfold (regStmts, env) \stmt regStmts, env.
+          match stmt
+            Def stmt span ->
+              let def, env <- registerDefStmt stmt span mod env
+
+              let regStmts = regStmts {
+                defs = def : defs regStmts
+              }
+
+              pure (regStmts, env)
+            _ -> panic 'unimplemented stmt'
+
+      addModule mod (Module {
+        path = path module
+        env  = env
+      })
+
+      pure regStmts
+
+  defs regStmts
+    |> map renameDefStmt
+    |> sequence
+
+  pure ()
+
+registerDefStmt parse span mod env =
+  checkDuplicateValue (name parse) span env
+
+  let unique <- addUnique
+
+  let var = Var {
+    unique = unique
+    name   = name parse
+    span   = span
+  }
+
+  let env = addVal (ValVar var) env
+
+  let reg = RegDefStmt {
+    module = mod
+    unique = unique
+    expr   = expr parse
+    span   = span
+  }
+
+  pure (reg, env)
+
+renameDefStmt reg =
+  let env <- getEnv (module reg)
+  let expr <- renameExpr (expr reg) env
+
+  pure ()
+
+checkDuplicateValue name span env =
+  match findVal name env
+    None -> pure ()
+    Some prev -> 'duplicate definition'
+      |> error
+      |> label span ('`' + name + '` defined here')
+      |> label (valSpan prev) 'previously define here'
+      |> fail

@@ -28,7 +28,7 @@ type BinTy = BinTy {
 
 type AppTy = AppTy {
   lam :: Ty
-  in  :: Ty
+  arg :: Ty
 }
 
 type ListTy = ListTy {
@@ -57,7 +57,7 @@ impl Show Ty
 
     App ty _ -> '(App '
       + show (lam ty) + ' '
-      + show (in ty) + ')'
+      + show (arg ty) + ')'
 
     List ty _ -> '(List '
       + show (item ty) + ')'
@@ -68,13 +68,77 @@ impl Show Ty
 
     Error _ -> 'Error'
 
+tySpan :: Ty -> Span
+tySpan ty  = match ty
+  Var   _ span -> span
+  Lam   _ span -> span
+  Bin   _ span -> span
+  App   _ span -> span
+  List  _ span -> span
+  Where _ span -> span
+  Error   span -> span
+
 parseTy :: Parser Ty
-parseTy = parseVarTy
+parseTy = parseWhereTy
   |> named '{type}'
+
+parseWhereTy =
+  let for <- parseLamTy
+
+  let clauses <- many0 <|
+    word 'where'
+    let in <- recover Error parseLamTy
+    symbol '::'
+    let kind <- parseKindRecover
+    pure (in, kind)
+
+  clauses
+    |> fold for \in, kind for.
+      Where (WhereTy {
+        for  = for
+        in   = in
+        kind = kind
+      }) (tySpan for <> kindSpan kind)
+    |> pure
+
+parseLamTy =
+  let in <- parseAppTy
+
+  let lam =
+    symbol '->'
+    let out <- recover Error parseLamTy
+
+    pure <| Lam (LamTy {
+      in  = in
+      out = out
+    }) (tySpan in <> tySpan out)
+
+  lam <|> pure in
+
+parseAppTy =
+  let lam <- parseTermTy
+  let args <- many0  parseTermTy
+
+  args
+    |> fold lam \arg lam.
+      App (AppTy {
+        lam = lam
+        arg = arg
+      }) (tySpan lam <>  tySpan arg)
+    |> pure
+
+parseTermTy = parseVarTy
 
 parseVarTy = spanned Var <|
   let name <- ident
 
   pure <| VarTy {
     name = name
+  }
+
+parseListTy =  spanned List <|
+  let item <- recover Error parseTy
+
+  pure <| ListTy {
+    item = item
   }

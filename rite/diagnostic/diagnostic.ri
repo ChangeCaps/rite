@@ -95,10 +95,7 @@ report diagnostic = mapReport \report.
 
 fail :: Diagnostic -> a where a :: Reporter
 fail diagnostic = mapReport \report.
-  report {
-    isFailure = true
-    diagnostics = diagnostic : diagnostics report
-  }
+  report <> failure diagnostic
 
 impl Show Span
   show span =

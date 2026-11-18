@@ -92,10 +92,35 @@ impl State<'_> {
     }
 
     fn var_ty(&self, scope: &mut Scope, ty: ast::VarTy) -> Ty {
+        if !ty.path.is_empty() {
+            if let Some(scope) = self.find_module(scope, &ty.path) {
+                if let Some(found) = scope.find_ty(&ty.var) {
+                    return self.scope_ty(found, ty.span);
+                } else {
+                    let diagnostic =
+                        Diagnostic::error("undefined type").label(ty.span, "found here");
+                    self.reporter.report(diagnostic);
+                }
+            }
+
+            return Ty::Error(ErrorTy { span: ty.span });
+        }
+
         match self.find_ty(scope, &ty.var) {
             Some(found) => self.scope_ty(found, ty.span),
 
             None => {
+                if let Some(c) = ty.var.as_str().chars().next()
+                    && c.is_uppercase()
+                {
+                    let diagnostic = Diagnostic::warn("PascalCase type variable").label(
+                        ty.span,
+                        "type variables should use camelCase",
+                    );
+
+                    self.reporter.report(diagnostic);
+                }
+
                 let var = Var::new(ty.var);
 
                 scope.tys.push(var.clone().into());

@@ -1,0 +1,6 @@
+import 'rite:diagnostic/diagnostic'
+import 'rite:rename/rename'
+import 'rite:parse/ty' as parseTy
+
+type Ty =
+  | Error Span

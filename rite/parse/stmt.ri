@@ -15,7 +15,7 @@ type Stmt =
 type DefStmt = DefStmt {
   name :: str
   args :: [Pat]
-  out  :: Expr
+  expr :: Expr
 }
 
 type AscStmt = AscStmt {
@@ -62,7 +62,7 @@ impl Show Stmt
     Def stmt _ -> '(Def '
       + name stmt + ' '
       + show (args stmt) + ' '
-      + show (out stmt) + ')'
+      + show (expr stmt) + ')'
 
     Asc stmt _ -> '(Asc '
       + name stmt + ' '
@@ -90,16 +90,16 @@ parseDefStmt = spanned (\f s. f s) <|
   let name <- ident
 
   let def =
-    let args <- many0 pat
+    let args <- many0 parsePat
 
     symbol '='
 
-    let out <- exprRecover
+    let expr <- parseExprRecover
 
     pure <| Def (DefStmt {
       name = name
       args = args
-      out  = out
+      expr = expr
     })
 
   let asc =

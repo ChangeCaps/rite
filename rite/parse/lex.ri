@@ -1,3 +1,5 @@
+import 'std:state'
+
 import 'rite:diagnostic/diagnostic'
 import 'rite:parse/token'
 
@@ -90,6 +92,7 @@ lineTokens =
 token :: State Lexer ()
 token =
   let result <- ident
+    | number
     | symbol
     | delimiter
 
@@ -124,6 +127,18 @@ ident =
       match start span == end span
         true -> pure None
         false -> pure (Some (Ident, span))
+
+number ::State Lexer (Maybe (Token, Span))
+number =
+  let c <- peek
+  match isNumeric c
+    false -> pure None
+    true ->
+      let span <- consumeWhile isNumeric
+
+      match start span == end span
+        true -> pure None
+        false -> pure (Some (Int, span))
 
 # Lex a symbol
 symbol :: State Lexer (Maybe (Token, Span))

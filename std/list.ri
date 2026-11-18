@@ -74,6 +74,13 @@ join sep ss = match ss
   s : [] -> s
   s : ss -> s + sep + join sep ss
 
+firstWhere :: (a -> bool) -> [a] -> Maybe a
+firstWhere f xs = match xs
+  [] -> None
+  x : xs -> match f x
+    true  -> Some x
+    false -> firstWhere f xs
+
 any :: (a -> bool) -> [a] -> bool
 any f xs = match xs
   x : xs -> match f x

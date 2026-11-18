@@ -36,6 +36,7 @@ pub struct WildPat {
 }
 
 pub struct ConsPat {
+    pub path: Vec<Ident>,
     pub var:  Ident,
     pub args: Vec<Pat>,
     pub span: Span,

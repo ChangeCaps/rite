@@ -1,0 +1,89 @@
+import 'std:result' as result
+import 'std:map' as map
+import 'std:state'
+
+import 'rite:diagnostic/diagnostic'
+import 'rite:parse/module' as parseModule
+import 'rite:rename/stmt'
+import 'rite:rename/env'
+
+type Rename = Rename {
+  report  :: Report
+  unique  :: int
+  modules :: Map int Module
+  defs    :: Map int Def
+}
+
+type Module = Module {
+  path :: str
+  env  :: Env
+}
+
+impl Reporter Try str (State Rename) ()
+  mapReport f =
+    let rename <- lift get
+
+    set (rename {
+      report = f (report rename)
+    }) |> lift
+
+    pure ()
+
+addUnique :: Try str (State Rename) int
+addUnique =
+  let rename <- lift get
+  let value = unique rename
+
+  set (rename {
+    unique = unique rename + 1
+  }) |> lift
+
+  pure value
+
+addModule :: int -> Module -> Try str (State Rename) ()
+addModule unique module =
+  let rename <- lift get
+
+  set (rename {
+    modules = modules rename
+      |> map.set unique module
+  }) |> lift
+
+getModule :: int -> Try str (State Rename) Module
+getModule module =
+  let rename <- lift get
+  modules rename
+    |> map.get module
+    |> assertMaybe 
+
+getEnv :: int -> Try str (State Rename) Env
+getEnv module = getModule module |> map env
+
+assertMaybe :: Maybe a -> Try str (State Rename) a
+assertMaybe x = match x
+  Some x -> pure x
+  None   -> panic 'Maybe was None'
+
+type Unit = Unit {}
+
+panic :: str -> Try str (State Rename) a
+panic = result.fail
+
+rename :: [parseModule.Module] -> Result str (Unit, Report)
+rename modules =
+  let rename =  Rename {
+    report  = default
+    unique  = 0
+    modules = default
+    defs    = default
+  }
+
+  let result, rename = with
+    <| unwrap (renameModules modules)
+    <| rename
+
+  result
+
+  let unit = Unit {}
+
+  Ok (unit, report rename)

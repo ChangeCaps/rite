@@ -6,3 +6,6 @@ reduce f xs = xs |> fold None \x acc.
   match acc
     Some y -> Some (f x y)
     None -> Some x
+
+mfold :: b -> (a -> b -> m b) -> t a -> m b where t :: Fold where m :: Monad
+mfold acc f xs = xs |> fold (pure acc) \x acc. acc >>= f x

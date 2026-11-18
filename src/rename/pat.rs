@@ -116,6 +116,28 @@ impl State<'_> {
             .map(|arg| self.pat(scope, arg))
             .collect::<Vec<_>>();
 
+        if !pat.path.is_empty() {
+            if let Some(scope) = self.find_module(scope, &pat.path) {
+                if let Some(cons) = scope.find_cons(&pat.var).cloned() {
+                    return Pat::Cons(ConsPat {
+                        var: cons.var,
+                        type_: cons.type_,
+                        args,
+                        span: pat.span,
+                    });
+                } else {
+                    let diagnostic =
+                        Diagnostic::error("undefined constructor").label(pat.span, "here");
+                    self.reporter.report(diagnostic);
+                }
+            }
+
+            let diagnostic = Diagnostic::error("undefined constructor").label(pat.span, "here");
+            self.reporter.report(diagnostic);
+
+            return Pat::Error(ErrorPat { span: pat.span });
+        }
+
         if let Some(cons) = self.find_cons(scope, &pat.var).cloned() {
             return Pat::Cons(ConsPat {
                 var: cons.var,

@@ -257,7 +257,7 @@ impl TyCx {
         }
 
         for trait_ in &kind.traits {
-            if self.find_impl(kinds, trait_, ty).is_none() {
+            let Some(impl_) = self.find_impl(kinds, trait_, ty) else {
                 let diagnostic = Diagnostic::error("kind mismatch").label(
                     span,
                     format!(
@@ -268,7 +268,17 @@ impl TyCx {
                 );
 
                 return Err(diagnostic);
-            }
+            };
+
+            let mut input = impl_.input.clone();
+
+            self.instantiate(
+                kinds,
+                &mut Default::default(),
+                &mut input,
+            );
+
+            self.unify(kinds, ty, &input, span)?;
         }
 
         let (ty, args) = ty.reduce();

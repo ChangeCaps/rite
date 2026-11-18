@@ -3,12 +3,19 @@ import 'rite:parse/parser'
 import 'rite:parse/pat'
 
 type Expr =
+  | Lit   LitExpr Span
   | Var   VarExpr Span
   | Let   LetExpr Span
   | Lam   LamExpr Span
   | App   AppExpr Span
   | Seq   SeqExpr Span
   | Error Span
+
+type LitExpr = LitExpr {
+  lit :: Lit
+}
+
+type Lit = Int int
 
 type VarExpr = VarExpr {
   name :: str
@@ -36,8 +43,15 @@ type SeqExpr = SeqExpr {
   rhs :: Expr
 }
 
+impl Show Lit
+  show lit = match lit
+    Int x -> show x
+
 impl Show Expr
   show expr = match expr
+    Lit expr _ -> '(Lit '
+      + show (lit expr) + ')'
+
     Var expr _ -> '(Var '
       + name expr + ')'
 
@@ -63,6 +77,7 @@ impl Show Expr
 
 exprSpan :: Expr -> Span
 exprSpan expr = match expr
+  Lit _ span -> span
   Var _ span -> span
   Let _ span -> span
   Lam _ span -> span
@@ -70,43 +85,43 @@ exprSpan expr = match expr
   Seq _ span -> span
   Error span -> span
 
-exprRecover :: Parser Expr
-exprRecover = recover Error expr
+parseExprRecover :: Parser Expr
+parseExprRecover = recover Error parseExpr
 
-expr :: Parser Expr
-expr = blockExpr
-  <|> appExpr
+parseExpr :: Parser Expr
+parseExpr = parseBlockExpr
+  <|> parseAppExpr
   |> named '{expression}'
 
-blockExpr :: Parser Expr
-blockExpr =
+parseBlockExpr :: Parser Expr
+parseBlockExpr =
   lines1
   indent
 
-  let expr <- exprBlock
+  let expr <- parseBlock
 
   lines0
   dedent
 
   pure expr
 
-exprBlock :: Parser Expr
-exprBlock = letExpr <|> seqExpr
+parseBlock :: Parser Expr
+parseBlock = parseLetExpr <|> parseSeqExpr
 
-letExpr :: Parser Expr
-letExpr = spanned Let <|
+parseLetExpr :: Parser Expr
+parseLetExpr = spanned Let <|
   word 'let'
 
-  let var <- pat
+  let var <- parsePat
 
   let bind <- (symbol '=' >> pure false)
     <|> (symbol '<-' >> pure true)
 
-  let in <- recover Error expr
+  let in <- recover Error parseExpr
 
   lines1
 
-  let out <- recover Error exprBlock
+  let out <- recover Error parseBlock
 
   pure <| LetExpr {
     in   = in
@@ -115,11 +130,11 @@ letExpr = spanned Let <|
     out  = out
   }
 
-seqExpr :: Parser Expr
-seqExpr =
-  let lhs <- expr
+parseSeqExpr :: Parser Expr
+parseSeqExpr =
+  let lhs <- parseExpr
   lines0
-  let rhs <- maybe exprBlock
+  let rhs <- maybe parseBlock
 
   rhs
     |> map \rhs.
@@ -130,36 +145,46 @@ seqExpr =
     |> or lhs
     |> pure
 
-appExpr :: Parser Expr
-appExpr =
-  let lam <- termExpr
-  let args <- many0 termExpr
+parseAppExpr :: Parser Expr
+parseAppExpr =
+  let lam <- parseTermExpr
+  let args <- many0 parseTermExpr
 
   args
     |> fold lam \arg lam.
       App (AppExpr {
         lam = lam
-        arg  = arg
+        arg = arg
       }) (exprSpan lam <> exprSpan arg)
     |> pure
 
-termExpr :: Parser Expr
-termExpr = varExpr <|> lamExpr
+parseTermExpr :: Parser Expr
+parseTermExpr = parseIntExpr
+  <|> parseVarExpr
+  <|> parseLamExpr
 
-varExpr :: Parser Expr
-varExpr = spanned Var <|
+parseIntExpr :: Parser Expr
+parseIntExpr = spanned Lit <|
+  let x <- int
+
+  pure <| LitExpr {
+    lit = Int x
+  }
+
+parseVarExpr :: Parser Expr
+parseVarExpr = spanned Var <|
   let name <- ident
 
   pure <| VarExpr {
     name = name
   }
 
-lamExpr :: Parser Expr
-lamExpr = spanned Lam <|
+parseLamExpr :: Parser Expr
+parseLamExpr = spanned Lam <|
   symbol '\\'
-  let args <- many1 pat
+  let args <- many1 parsePat
   symbol '.'
-  let out <- recover Error expr
+  let out <- recover Error parseExpr
 
   pure <| LamExpr {
     args = args

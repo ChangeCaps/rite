@@ -118,12 +118,14 @@ pub fn paren_ty(parser: &mut Parser<'_>) -> ParenTy {
             let span = start.join(end);
 
             Ty::Var(VarTy {
+                path: Vec::new(),
                 var: Ident::new("[]", span),
                 span,
             })
         }
 
         _ if let Some((operator, span)) = operator(parser) => Ty::Var(VarTy {
+            path: Vec::new(),
             span,
             var: Ident::operator(operator, span),
         }),
@@ -142,17 +144,35 @@ pub fn paren_ty(parser: &mut Parser<'_>) -> ParenTy {
 pub fn var_ty(parser: &mut Parser<'_>) -> Ty {
     let span = parser.span();
 
-    let Some(var) = parser.expect_ident() else {
+    let Some(mut var) = parser.expect_ident() else {
         return Ty::Error(ErrorTy { span });
     };
 
-    Ty::Var(VarTy { var, span })
+    let mut path = Vec::new();
+
+    while parser.peek() == Token::Dot {
+        parser.expect(Token::Dot);
+
+        match parser.expect_ident() {
+            Some(ident) => {
+                path.push(var);
+                var = ident;
+            }
+
+            None => {
+                return Ty::Error(ErrorTy { span });
+            }
+        }
+    }
+
+    Ty::Var(VarTy { path, var, span })
 }
 
 pub fn unit_ty(parser: &mut Parser<'_>) -> VarTy {
     let span = parser.expect(Token::LRParen);
 
     VarTy {
+        path: Vec::new(),
         var: Ident::new("()", span),
         span,
     }
